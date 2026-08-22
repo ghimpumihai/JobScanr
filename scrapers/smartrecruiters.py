@@ -41,7 +41,6 @@ class SmartRecruitersClient(BaseClient):
                     "department": department,
                     "url": f"https://jobs.smartrecruiters.com/{ats_identifier}/{posting['id']}",
                     "description": None,
-                    "updated_at_raw": posting.get("releasedDate"),
                 }
             total = body.get("totalFound", len(content))
             if len(jobs) >= total or len(content) < PAGE_SIZE:

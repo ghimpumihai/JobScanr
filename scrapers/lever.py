@@ -32,6 +32,5 @@ class LeverClient(BaseClient):
                 "department": categories.get("department"),
                 "url": posting.get("hostedUrl") or posting.get("applyUrl"),
                 "description": description,
-                "updated_at_raw": posting.get("updatedAt"),
             })
         return jobs

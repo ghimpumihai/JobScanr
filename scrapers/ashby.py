@@ -57,6 +57,5 @@ class AshbyClient(BaseClient):
                 "department": team_names.get(posting.get("teamId")),
                 "url": f"https://jobs.ashbyhq.com/{ats_identifier}/{posting['id']}",
                 "description": None,
-                "updated_at_raw": None,
             })
         return jobs

@@ -4,8 +4,6 @@ GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true
 Returns all jobs in one response (no pagination). `content` is base64 HTML.
 """
 
-import base64
-
 from scrapers.base import BaseClient, decode_html_field, strip_html
 
 
@@ -32,6 +30,5 @@ class GreenhouseClient(BaseClient):
                 "department": _first_department(job),
                 "url": job.get("absolute_url"),
                 "description": strip_html(decode_html_field(job.get("content"))),
-                "updated_at_raw": job.get("updated_at"),
             })
         return jobs
