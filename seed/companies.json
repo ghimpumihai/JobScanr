@@ -1,0 +1,446 @@
+[
+  {
+    "company_name": "Stripe",
+    "career_url": "https://boards.greenhouse.io/stripe",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "stripe"
+  },
+  {
+    "company_name": "Figma",
+    "career_url": "https://boards.greenhouse.io/figma",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "figma"
+  },
+  {
+    "company_name": "Airbnb",
+    "career_url": "https://boards.greenhouse.io/airbnb",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "airbnb"
+  },
+  {
+    "company_name": "Datadog",
+    "career_url": "https://boards.greenhouse.io/datadog",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "datadog"
+  },
+  {
+    "company_name": "Cloudflare",
+    "career_url": "https://job-boards.greenhouse.io/cloudflare",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "cloudflare"
+  },
+  {
+    "company_name": "GitLab",
+    "career_url": "https://job-boards.greenhouse.io/gitlab",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "gitlab"
+  },
+  {
+    "company_name": "Databricks",
+    "career_url": "https://boards.greenhouse.io/databricks",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "databricks"
+  },
+  {
+    "company_name": "Coinbase",
+    "career_url": "https://boards.greenhouse.io/coinbase",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "coinbase"
+  },
+  {
+    "company_name": "HubSpot",
+    "career_url": "https://boards.greenhouse.io/hubspot",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "hubspot"
+  },
+  {
+    "company_name": "Notion",
+    "career_url": "https://jobs.ashbyhq.com/notion",
+    "ats_platform": "ashby",
+    "ats_identifier": "notion"
+  },
+  {
+    "company_name": "Ramp",
+    "career_url": "https://jobs.ashbyhq.com/ramp",
+    "ats_platform": "ashby",
+    "ats_identifier": "ramp"
+  },
+  {
+    "company_name": "Supabase",
+    "career_url": "https://jobs.ashbyhq.com/supabase",
+    "ats_platform": "ashby",
+    "ats_identifier": "supabase"
+  },
+  {
+    "company_name": "Linear",
+    "career_url": "https://jobs.ashbyhq.com/linear",
+    "ats_platform": "ashby",
+    "ats_identifier": "linear"
+  },
+  {
+    "company_name": "Vercel",
+    "career_url": "https://job-boards.greenhouse.io/vercel",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "vercel"
+  },
+  {
+    "company_name": "Palantir",
+    "career_url": "https://jobs.lever.co/palantir",
+    "ats_platform": "lever",
+    "ats_identifier": "palantir"
+  },
+  {
+    "company_name": "Twitch",
+    "career_url": "https://job-boards.greenhouse.io/twitch",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "twitch"
+  },
+  {
+    "company_name": "Pinterest",
+    "career_url": "https://job-boards.greenhouse.io/pinterest",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "pinterest"
+  },
+  {
+    "company_name": "Reddit",
+    "career_url": "https://job-boards.greenhouse.io/reddit",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "reddit"
+  },
+  {
+    "company_name": "Roblox",
+    "career_url": "https://job-boards.greenhouse.io/roblox",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "roblox"
+  },
+  {
+    "company_name": "Discord",
+    "career_url": "https://job-boards.greenhouse.io/discord",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "discord"
+  },
+  {
+    "company_name": "Shopify",
+    "career_url": "https://careers.smartrecruiters.com/shopify",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "shopify"
+  },
+  {
+    "company_name": "Twilio",
+    "career_url": "https://job-boards.greenhouse.io/twilio",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "twilio"
+  },
+  {
+    "company_name": "Elastic",
+    "career_url": "https://job-boards.greenhouse.io/elastic",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "elastic"
+  },
+  {
+    "company_name": "MongoDB",
+    "career_url": "https://job-boards.greenhouse.io/mongodb",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "mongodb"
+  },
+  {
+    "company_name": "Okta",
+    "career_url": "https://job-boards.greenhouse.io/okta",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "okta"
+  },
+  {
+    "company_name": "Affirm",
+    "career_url": "https://job-boards.greenhouse.io/affirm",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "affirm"
+  },
+  {
+    "company_name": "Postman",
+    "career_url": "https://job-boards.greenhouse.io/postman",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "postman"
+  },
+  {
+    "company_name": "Deel",
+    "career_url": "https://jobs.ashbyhq.com/deel",
+    "ats_platform": "ashby",
+    "ats_identifier": "deel"
+  },
+  {
+    "company_name": "Remote",
+    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "remotecom"
+  },
+  {
+    "company_name": "Samsara",
+    "career_url": "https://job-boards.greenhouse.io/samsara",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "samsara"
+  },
+  {
+    "company_name": "Brex",
+    "career_url": "https://job-boards.greenhouse.io/brex",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "brex"
+  },
+  {
+    "company_name": "Canonical",
+    "career_url": "https://job-boards.greenhouse.io/canonical",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "canonical"
+  },
+  {
+    "company_name": "Cockroach Labs",
+    "career_url": "https://job-boards.greenhouse.io/cockroachlabs",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "cockroachlabs"
+  },
+  {
+    "company_name": "Grafana Labs",
+    "career_url": "https://job-boards.greenhouse.io/grafanalabs",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "grafanalabs"
+  },
+  {
+    "company_name": "Braze",
+    "career_url": "https://job-boards.greenhouse.io/braze",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "braze"
+  },
+  {
+    "company_name": "Gong",
+    "career_url": "https://job-boards.greenhouse.io/gongio",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "gongio"
+  },
+  {
+    "company_name": "Contentful",
+    "career_url": "https://job-boards.greenhouse.io/contentful",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "contentful"
+  },
+  {
+    "company_name": "Asana",
+    "career_url": "https://boards.greenhouse.io/asana",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "asana"
+  },
+  {
+    "company_name": "Toast",
+    "career_url": "https://job-boards.greenhouse.io/toast",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "toast"
+  },
+  {
+    "company_name": "Qualtrics",
+    "career_url": "https://job-boards.greenhouse.io/qualtrics",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "qualtrics"
+  },
+  {
+    "company_name": "PagerDuty",
+    "career_url": "https://job-boards.greenhouse.io/pagerduty",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "pagerduty"
+  },
+  {
+    "company_name": "Dynatrace",
+    "career_url": "https://careers.smartrecruiters.com/dynatrace",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "dynatrace"
+  },
+  {
+    "company_name": "Box",
+    "career_url": "https://job-boards.greenhouse.io/boxinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "boxinc"
+  },
+  {
+    "company_name": "Smartsheet",
+    "career_url": "https://job-boards.greenhouse.io/smartsheet",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "smartsheet"
+  },
+  {
+    "company_name": "Fastly",
+    "career_url": "https://job-boards.greenhouse.io/fastly",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "fastly"
+  },
+  {
+    "company_name": "Klaviyo",
+    "career_url": "https://job-boards.greenhouse.io/klaviyo",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "klaviyo"
+  },
+  {
+    "company_name": "Chime",
+    "career_url": "https://job-boards.greenhouse.io/chime",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "chime"
+  },
+  {
+    "company_name": "Carta",
+    "career_url": "https://job-boards.greenhouse.io/carta",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "carta"
+  },
+  {
+    "company_name": "Gusto",
+    "career_url": "https://job-boards.greenhouse.io/gusto",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "gusto"
+  },
+  {
+    "company_name": "Intercom",
+    "career_url": "https://job-boards.greenhouse.io/intercom",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "intercom"
+  },
+  {
+    "company_name": "Webflow",
+    "career_url": "https://job-boards.greenhouse.io/webflow",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "webflow"
+  },
+  {
+    "company_name": "Airtable",
+    "career_url": "https://job-boards.greenhouse.io/airtable",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "airtable"
+  },
+  {
+    "company_name": "LaunchDarkly",
+    "career_url": "https://job-boards.greenhouse.io/launchdarkly",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "launchdarkly"
+  },
+  {
+    "company_name": "Scale AI",
+    "career_url": "https://job-boards.greenhouse.io/scaleai",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "scaleai"
+  },
+  {
+    "company_name": "Perplexity AI",
+    "career_url": "https://jobs.ashbyhq.com/perplexity",
+    "ats_platform": "ashby",
+    "ats_identifier": "perplexity"
+  },
+  {
+    "company_name": "PostHog",
+    "career_url": "https://jobs.ashbyhq.com/posthog",
+    "ats_platform": "ashby",
+    "ats_identifier": "posthog"
+  },
+  {
+    "company_name": "Tailscale",
+    "career_url": "https://job-boards.greenhouse.io/tailscale",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "tailscale"
+  },
+  {
+    "company_name": "CircleCI",
+    "career_url": "https://job-boards.greenhouse.io/circleci",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "circleci"
+  },
+  {
+    "company_name": "New Relic",
+    "career_url": "https://job-boards.greenhouse.io/newrelic",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "newrelic"
+  },
+  {
+    "company_name": "Resend",
+    "career_url": "https://jobs.ashbyhq.com/resend",
+    "ats_platform": "ashby",
+    "ats_identifier": "resend"
+  },
+  {
+    "company_name": "Algolia",
+    "career_url": "https://job-boards.greenhouse.io/algolia",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "algolia"
+  },
+  {
+    "company_name": "Bitwarden",
+    "career_url": "https://job-boards.greenhouse.io/bitwarden",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "bitwarden"
+  },
+  {
+    "company_name": "Staffbase",
+    "career_url": "https://job-boards.greenhouse.io/staffbase",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "staffbase"
+  },
+  {
+    "company_name": "Turing",
+    "career_url": "https://jobs.ashbyhq.com/turing",
+    "ats_platform": "ashby",
+    "ats_identifier": "turing"
+  },
+  {
+    "company_name": "Cursor",
+    "career_url": "https://jobs.ashbyhq.com/cursor",
+    "ats_platform": "ashby",
+    "ats_identifier": "cursor"
+  },
+  {
+    "company_name": "Replit",
+    "career_url": "https://jobs.ashbyhq.com/replit",
+    "ats_platform": "ashby",
+    "ats_identifier": "replit"
+  },
+  {
+    "company_name": "Warp",
+    "career_url": "https://jobs.ashbyhq.com/warp",
+    "ats_platform": "ashby",
+    "ats_identifier": "warp"
+  },
+  {
+    "company_name": "Railway",
+    "career_url": "https://jobs.ashbyhq.com/railway",
+    "ats_platform": "ashby",
+    "ats_identifier": "railway"
+  },
+  {
+    "company_name": "Tinybird",
+    "career_url": "https://jobs.lever.co/tinybird",
+    "ats_platform": "lever",
+    "ats_identifier": "tinybird"
+  },
+  {
+    "company_name": "ClickHouse",
+    "career_url": "https://job-boards.greenhouse.io/clickhouse",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "clickhouse"
+  },
+  {
+    "company_name": "Weaviate",
+    "career_url": "https://jobs.ashbyhq.com/weaviate",
+    "ats_platform": "ashby",
+    "ats_identifier": "weaviate"
+  },
+  {
+    "company_name": "Aleph Alpha",
+    "career_url": "https://jobs.ashbyhq.com/alephalpha",
+    "ats_platform": "ashby",
+    "ats_identifier": "alephalpha"
+  },
+  {
+    "company_name": "Synthesia",
+    "career_url": "https://jobs.ashbyhq.com/synthesia",
+    "ats_platform": "ashby",
+    "ats_identifier": "synthesia"
+  },
+  {
+    "company_name": "Spotify",
+    "career_url": "https://jobs.lever.co/spotify",
+    "ats_platform": "lever",
+    "ats_identifier": "spotify"
+  }
+]

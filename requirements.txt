@@ -1,0 +1,4 @@
+httpx
+psycopg[binary]
+firebase-admin
+python-dotenv

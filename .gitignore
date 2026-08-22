@@ -6,10 +6,13 @@
 *.key
 secrets/
 firebase-service-account*.json
+fcm*-service-account*.json
+fcm-credentials*.json
 serviceAccountKey.json
 *credentials*.json
 *fcm*.json
 supabase/.temp/
+fcm-service-account.json
 
 # ─── Python ───────────────────────────────────────────────────────
 __pycache__/
