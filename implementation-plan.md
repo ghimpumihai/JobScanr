@@ -33,16 +33,18 @@ A personal job alert tool: once a day it scrapes the career pages of 150 top tec
 
 | Platform | Companies | Share | Client priority |
 |----------|----------:|------:|-----------------|
-| Greenhouse | 102 | 68% | P0 — build first |
-| Ashby | 32 | 21% | P0 — build first |
-| Lever | 11 | 7% | P1 |
-| Workable | 3 | 2% | P2 — undocumented API; drop companies if it breaks |
-| SmartRecruiters | 2 | 1% | P2 |
+| Greenhouse | 53 | 72% | P0 — built ✅ |
+| Ashby | 16 | 22% | P0 — built ✅ |
+| Lever | 3 | 4% | P1 — built ✅ |
+| SmartRecruiters | 2 | 3% | P2 — built ✅ (Shopify/Dynatrace expose 0 jobs publicly) |
 | ~~Teamtailor~~ | 0 | 0% | Cut from MVP |
+| ~~Workable~~ | 0 | 0% | Cut — undocumented API, all known variants dead |
 
-Greenhouse + Ashby cover 89% of the list — those two clients alone make the system useful.
+> Phase 0 validation cut the original 150-company list to **74 verified-live feeds**:
+> most losses were companies that migrated off public ATS APIs or privatized boards.
+> Re-run `python -m scripts.validate_companies` any time the list changes.
 
-> Skip any company using Workday or a custom portal.
+Greenhouse + Ashby cover 94% of the surviving list.
 
 ---
 
@@ -149,14 +151,19 @@ Every client **must**:
 
 ```
 greenhouse       GET https://boards-api.greenhouse.io/v1/boards/{id}/jobs?content=true
-ashby            POST https://api.ashbyhq.com/jobPosting.list
-                     body: {"organizationHostedJobsPageName": "{id}"}
+                     one response, no pagination; content = escaped HTML (NOT base64)
+ashby            POST https://jobs.ashbyhq.com/api/non-user-graphql   ← NOT api.ashbyhq.com!
+                     body: {operationName: "ApiJobBoardWithTeams",
+                            variables: {organizationHostedJobsPageName: "{id}"},
+                            query: <board query>}
+                     listing has NO descriptions — match on title+location,
+                     enrich shortlisted jobs later if needed
 lever            GET https://api.lever.co/v0/postings/{id}?mode=json
-workable         GET https://www.workable.com/api/accounts/{id}/jobs   (undocumented — P2 risk)
+                     single response; `state` field is not populated
 smartrecruiters  GET https://api.smartrecruiters.com/v1/companies/{id}/postings?limit=100&offset=...
 ```
 
-Shared behavior in `base.py`: per-request timeout, exponential backoff on 429/5xx (max 3 tries), one reused `httpx.AsyncClient`.
+Shared behavior in `base.py`: per-request timeout, exponential backoff on 429/5xx (max 3 tries), fail-fast on 404, one reused `httpx.AsyncClient`.
 
 ---
 
@@ -285,6 +292,10 @@ jobs:
 ```
 
 Secrets live only in Actions/Supabase/Firebase consoles — never in the repo. Supabase's free tier pauses projects after 7 days idle; daily writes prevent that.
+
+> ⚠️ **Supabase connection**: use the **session pooler** URL (`aws-0-*.pooler.supabase.com`).
+> The direct `db.<ref>.supabase.co` host is IPv6-only — unreachable from GitHub Actions
+> runners (IPv4-only) and from any IPv4-only local network.
 
 ---
 
