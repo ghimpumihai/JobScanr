@@ -8,9 +8,10 @@ Usage:
 
 import argparse
 import asyncio
+import os
 import sys
 
-from config import PROFILE
+from config import DATABASE_URL, PROFILE
 from db import queries
 from jobs.match import matches_profile
 from scrapers import get_client
@@ -51,6 +52,11 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="no DB writes, no push")
     args = parser.parse_args()
+
+    # Never log the secret itself — only enough shape to debug paste errors.
+    sha = os.environ.get("GITHUB_SHA", "local")
+    print(f"commit={sha[:7]} DATABASE_URL len={len(DATABASE_URL)} "
+          f"tail='...{DATABASE_URL[-12:]}' whitespace={'YES' if DATABASE_URL != DATABASE_URL.strip() else 'no'}")
 
     companies = queries.get_all_companies()
     print(f"Scraping {len(companies)} companies...")
