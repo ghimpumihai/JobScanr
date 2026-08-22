@@ -10,6 +10,8 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
 def get_connection() -> psycopg.Connection:
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set — check .env or GitHub secrets")
     return psycopg.connect(DATABASE_URL, autocommit=False)
 
 
