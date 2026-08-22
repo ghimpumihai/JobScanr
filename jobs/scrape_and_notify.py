@@ -91,10 +91,16 @@ def main() -> int:
         print("Nothing to notify.")
         return 0
 
+    from config import NTFY_TOPIC_URL
     from jobs.notify import send_digest
-    message_id = send_digest(matches)
+
+    fcm_id = send_digest(matches)
     queries.mark_notified([j["id"] for j in matches])
-    print(f"Digest sent ({message_id}) for {len(matches)} jobs.")
+    print(f"FCM digest sent ({fcm_id}) for {len(matches)} jobs.")
+    if NTFY_TOPIC_URL:
+        from jobs.notify import send_ntfy_digest
+        ntfy_id = send_ntfy_digest(matches)
+        print(f"ntfy digest sent ({ntfy_id}).")
     return 0
 
 

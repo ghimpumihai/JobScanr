@@ -24,3 +24,4 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FCM_CREDENTIALS_PATH: fcm-service-account.json
           FCM_CREDENTIALS_JSON: ${{ secrets.FCM_CREDENTIALS }}
+          NTFY_TOPIC_URL: ${{ secrets.NTFY_TOPIC_URL }}

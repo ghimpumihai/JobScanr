@@ -9,8 +9,14 @@ load_dotenv(Path(__file__).parent / ".env")
 
 # Tolerate import in contexts that don't touch the DB (tests); the DB layer
 # raises a clear error if these are empty when actually connecting.
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# strip(): GitHub secrets are easy to save with a stray trailing newline,
+# which psycopg happily turns into dbname="postgres\n".
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 FCM_CREDENTIALS_PATH = os.environ.get("FCM_CREDENTIALS_PATH", "fcm-service-account.json")
+
+# Secondary delivery channel until the mobile app subscribes to FCM's
+# job_alerts topic. Set to e.g. https://ntfy.sh/<unguessable-topic-name>.
+NTFY_TOPIC_URL = os.environ.get("NTFY_TOPIC_URL") or None
 
 # Start noisy, tune later from digest logs (plan Phase 6).
 PROFILE = {

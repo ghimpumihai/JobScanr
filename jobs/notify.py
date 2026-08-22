@@ -45,3 +45,20 @@ def send_digest(jobs: list[dict]) -> str:
         topic="job_alerts",
     )
     return messaging.send(message)
+
+
+def send_ntfy_digest(jobs: list[dict]) -> str:
+    """Deliver the digest via ntfy.sh (phone app subscribes to the topic).
+
+    Uses ntfy's JSON publish format so UTF-8 titles survive without
+    header encoding tricks.
+    """
+    import httpx
+
+    from config import NTFY_TOPIC_URL
+
+    title, body = build_digest(jobs)
+    r = httpx.post(NTFY_TOPIC_URL, json={"topic": NTFY_TOPIC_URL.rsplit("/", 1)[1],
+                                         "title": title, "message": body}, timeout=15)
+    r.raise_for_status()
+    return r.json().get("id", "ok")
