@@ -1,0 +1,52 @@
+# ─── Secrets & environment ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+firebase-service-account*.json
+serviceAccountKey.json
+*credentials*.json
+*fcm*.json
+supabase/.temp/
+
+# ─── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ─── AI assistants & agent tooling ────────────────────────────────
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+.mcp.json
+.aider*
+.claude/
+.codex/
+.clinerules/
+.codeium/
+.continue/
+.agents/
+.opencode/
+opencode.json
+opencode.jsonc
+.github/copilot-instructions.md
+
+# ─── Editors & OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
