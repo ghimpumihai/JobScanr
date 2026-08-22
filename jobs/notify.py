@@ -1,56 +1,15 @@
-"""Delivery channels (plan Phase 7).
+"""Digest delivery via email (plan Phase 7).
 
-FCM: one daily message to topic "job_alerts" — inert until the mobile app
-subscribes, kept so the future app works unchanged.
-Email: the human-facing channel; phone buzzes, laptop gets clickable links.
+Phone buzzes from the mail app; the laptop gets an HTML table with a
+clickable link per role for applying.
 """
 
 import os
 import smtplib
 from email.message import EmailMessage
 
-import firebase_admin
-from firebase_admin import credentials, messaging
-
 from jobs.digest import build_digest
 
-_app = None
-
-
-def _credentials_path() -> str:
-    """Local: FCM_CREDENTIALS_PATH points at the key file.
-    CI: FCM_CREDENTIALS_JSON holds the key contents; materialize a tempfile."""
-    inline = os.environ.get("FCM_CREDENTIALS_JSON")
-    if inline:
-        import json
-        import tempfile
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False, prefix="fcm-"
-        )
-        json.dump(json.loads(inline), tmp)
-        tmp.close()
-        return tmp.name
-    return os.environ.get("FCM_CREDENTIALS_PATH", "fcm-service-account.json")
-
-
-def _init():
-    global _app
-    if _app is None:
-        _app = firebase_admin.initialize_app(credentials.Certificate(_credentials_path()))
-    return _app
-
-
-def send_digest(jobs: list[dict]) -> str:
-    _init()
-    title, body = build_digest(jobs)
-    message = messaging.Message(
-        notification=messaging.Notification(title=title, body=body),
-        topic="job_alerts",
-    )
-    return messaging.send(message)
-
-
-# ── Email ────────────────────────────────────────────────────────────────
 
 def build_html_digest(jobs: list[dict]) -> str:
     rows = "".join(
@@ -83,7 +42,7 @@ def send_email_digest(jobs: list[dict]) -> str:
     msg["Subject"] = f"JobScanr: {summary_title}"
     msg["From"] = user
     msg["To"] = to_addr
-    msg.set_content(plain_body + "\n\n(open on laptop; links are in the HTML version)")
+    msg.set_content(plain_body)
     msg.add_alternative(
         f"<html><body>{build_html_digest(jobs)}</body></html>", subtype="html"
     )

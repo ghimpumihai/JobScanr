@@ -91,14 +91,16 @@ def main() -> int:
         print("Nothing to notify.")
         return 0
 
-    from jobs.notify import email_configured, send_digest, send_email_digest
+    from jobs.notify import email_configured, send_email_digest
 
-    fcm_id = send_digest(matches)
+    if not email_configured():
+        # Leave notified_at NULL so the next configured run retries these.
+        print("Matches found but no delivery channel — they will be retried.")
+        return 1
+
+    message_id = send_email_digest(matches)
     queries.mark_notified([j["id"] for j in matches])
-    print(f"FCM digest sent ({fcm_id}) for {len(matches)} jobs.")
-    if email_configured():
-        message_id = send_email_digest(matches)
-        print(f"Email digest sent ({message_id}).")
+    print(f"Email digest sent ({message_id}) for {len(matches)} jobs.")
     return 0
 
 

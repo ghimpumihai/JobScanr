@@ -22,8 +22,6 @@ jobs:
       - run: python -m jobs.scrape_and_notify
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          FCM_CREDENTIALS_PATH: fcm-service-account.json
-          FCM_CREDENTIALS_JSON: ${{ secrets.FCM_CREDENTIALS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
