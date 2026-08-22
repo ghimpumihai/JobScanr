@@ -16,15 +16,19 @@ from config import PROFILE
 US_RESTRICTED_RE = re.compile(r"\b(united states|usa|u\.s\.|us|canada)\b")
 
 # Countries that, when combined with a restriction phrase, disqualify a
-# posting (non-EU: the user can't simply relocate/work there).
+# posting (outside the user's eligible regions: UK and Switzerland are
+# eligible hubs, so they are deliberately absent here).
 FOREIGN_COUNTRY_RE = re.compile(
     r"\b(united states|usa|u\.s\.|canada|mexico|brazil|argentina|chile|colombia|"
-    r"united kingdom|uk|england|scotland|wales|india|pakistan|bangladesh|"
+    r"india|pakistan|bangladesh|"
     r"singapore|japan|china|hong kong|taiwan|south korea|korea|israel|"
     r"dubai|uae|saudi arabia|qatar|australia|new zealand|south africa|"
     r"turkey|russia|ukraine|philippines|vietnam|indonesia|malaysia|thailand|"
     r"nigeria|egypt|kenya)\b"
 )
+
+# Seniority-by-experience patterns live in descriptions, not titles.
+YEARS_EXPERIENCE_RE = re.compile(r"\b(?:[5-9]|1[0-9])\+\s*years?\b")
 
 # Sentence-level phrases that turn a nearby country name into a hard
 # eligibility constraint ("must be based in...", "work authorization in...").
@@ -101,7 +105,9 @@ def matches_profile(job: dict, profile: dict | None = None) -> bool:
     required = p.get("required_keywords")
     if required and not any(k in text for k in map(_normalize, required)):
         return False
-    if _any_word(p["excluded_keywords"], text):
+    if p.get("excluded_keywords") and _any_word(p["excluded_keywords"], text):
+        return False
+    if YEARS_EXPERIENCE_RE.search(text):
         return False
     if _foreign_country_restriction(job, p):
         return False

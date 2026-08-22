@@ -16,42 +16,55 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 # job_alerts topic. Set to e.g. https://ntfy.sh/<unguessable-topic-name>.
 NTFY_TOPIC_URL = os.environ.get("NTFY_TOPIC_URL") or None
 
-# Target: early-career software engineering roles (intern / new grad / junior)
-# in regions the user can legally work. Tune from digest logs (plan Phase 6).
+# Target: early-career software engineering roles (intern / junior / graduate)
+# across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
 PROFILE = {
-    # Substring-matched against the TITLE: role must be a software flavor.
+    # Substring-matched against the title.
     "titles": [
-        "software engineer", "software developer",
-        "software engineering", "software development",
-        "backend", "python",
+        "software engineer",
+        "software developer",
+        "software engineering intern",
+        "junior software engineer",
+        "junior developer",
+        "graduate software engineer",
+        "new grad software engineer",
+        "entry level software engineer",
+        "associate software engineer",
     ],
-    # At least one of these must appear in the TITLE: the career-level gate.
+    # At least one of these must appear in the title (career-level gate).
     "levels": [
-        "intern", "internship", "working student", "student",
-        "new grad", "new-grad", "graduate", "junior", "associate",
-        "entry level", "entry-level", "trainee",
+        "intern", "internship", "junior", "graduate", "new grad", "new-grad",
+        "entry level", "entry-level", "associate", "trainee", "apprentice",
     ],
-    # Checked against the title — kills whole role families regardless of
-    # description wording (non-SWE flavors).
+    # Title-scoped: seniority markers plus non-SWE role families
+    # (hybrids like "Software Engineer - Frontend").
     "excluded_title_keywords": [
+        "senior", "sr.", "staff", "principal", "lead", "manager", "director",
+        "head of", "vp", "vice president", "architect",
         "frontend", "front-end", "mobile", "android", "ios",
         "data scientist", "machine learning", "security",
         "sales engineer", "solutions", "recruiter",
         "site reliability", "devops", "qa", "test engineer",
         "embedded", "hardware",
     ],
-    # Scanned across title + description.
-    "excluded_keywords": ["senior", "sr.", "lead", "manager", "principal", "staff"],
-    "locations": ["berlin", "amsterdam", "remote", "netherlands", "germany"],
-    # Regions whose country-specific requirements count as compatible.
-    # A posting restricting to any OTHER country is rejected.
+    "locations": [
+        "remote", "europe",
+        "berlin", "amsterdam", "london", "paris", "barcelona", "stockholm",
+        "dublin", "lisbon", "warsaw", "prague", "vienna", "zurich", "munich",
+        "brussels", "milan", "bucharest", "budapest",
+        "germany", "netherlands",
+    ],
+    # Countries whose requirements count as compatible with the user.
+    # A posting restricting eligibility to anything else is rejected.
     "eligible_regions": [
-        "germany", "netherlands", "berlin", "amsterdam",
         "europe", "european union", "eu",
-        "austria", "belgium", "bulgaria", "croatia", "cyprus", "czech republic",
-        "czechia", "denmark", "estonia", "finland", "france", "greece",
-        "hungary", "ireland", "italy", "latvia", "lithuania", "luxembourg",
-        "malta", "poland", "portugal", "romania", "slovakia", "slovenia",
-        "spain", "sweden",
+        "germany", "berlin", "munich", "netherlands", "amsterdam",
+        "united kingdom", "uk", "england", "london",
+        "switzerland", "zurich",
+        "france", "paris", "spain", "barcelona", "sweden", "stockholm",
+        "ireland", "dublin", "portugal", "lisbon", "poland", "warsaw",
+        "czech republic", "czechia", "prague", "austria", "vienna",
+        "belgium", "brussels", "italy", "milan", "romania", "bucharest",
+        "hungary", "budapest",
     ],
 }
