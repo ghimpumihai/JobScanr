@@ -12,9 +12,6 @@ load_dotenv(Path(__file__).parent / ".env")
 # strip(): GitHub secrets are easy to save with a stray trailing newline,
 # which psycopg happily turns into dbname="postgres\n".
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-# Secondary delivery channel until the mobile app subscribes to FCM's
-# job_alerts topic. Set to e.g. https://ntfy.sh/<unguessable-topic-name>.
-NTFY_TOPIC_URL = os.environ.get("NTFY_TOPIC_URL") or None
 
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).

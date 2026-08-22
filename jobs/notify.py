@@ -1,12 +1,13 @@
-"""Firebase Cloud Messaging push (plan Phase 7).
+"""Delivery channels (plan Phase 7).
 
-One topic ("job_alerts"), one message per day. Test delivery from the
-Firebase console before trusting this path.
+FCM: one daily message to topic "job_alerts" — inert until the mobile app
+subscribes, kept so the future app works unchanged.
+Email: the human-facing channel; phone buzzes, laptop gets clickable links.
 """
 
-import json
 import os
-import tempfile
+import smtplib
+from email.message import EmailMessage
 
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -21,6 +22,8 @@ def _credentials_path() -> str:
     CI: FCM_CREDENTIALS_JSON holds the key contents; materialize a tempfile."""
     inline = os.environ.get("FCM_CREDENTIALS_JSON")
     if inline:
+        import json
+        import tempfile
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, prefix="fcm-"
         )
@@ -47,18 +50,57 @@ def send_digest(jobs: list[dict]) -> str:
     return messaging.send(message)
 
 
-def send_ntfy_digest(jobs: list[dict]) -> str:
-    """Deliver the digest via ntfy.sh (phone app subscribes to the topic).
+# ── Email ────────────────────────────────────────────────────────────────
 
-    Uses ntfy's JSON publish format so UTF-8 titles survive without
-    header encoding tricks.
-    """
-    import httpx
+def build_html_digest(jobs: list[dict]) -> str:
+    rows = "".join(
+        f'<tr>'
+        f'<td><a href="{j["url"]}">{j["title"]}</a></td>'
+        f'<td>{j["company_name"]}</td>'
+        f'<td>{j.get("location") or ""}</td>'
+        f'</tr>'
+        for j in jobs
+    )
+    return (
+        f'<p><strong>{len(jobs)}</strong> new matching job'
+        f'{"s" if len(jobs) != 1 else ""}:</p>'
+        f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
+        f'<tr><th>Role</th><th>Company</th><th>Location</th></tr>'
+        f'{rows}</table>'
+    )
 
-    from config import NTFY_TOPIC_URL
 
-    title, body = build_digest(jobs)
-    r = httpx.post(NTFY_TOPIC_URL, json={"topic": NTFY_TOPIC_URL.rsplit("/", 1)[1],
-                                         "title": title, "message": body}, timeout=15)
-    r.raise_for_status()
-    return r.json().get("id", "ok")
+def send_email_digest(jobs: list[dict]) -> str:
+    """Send the digest as HTML mail. Returns the Message-ID header."""
+    host = os.environ["SMTP_HOST"]
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    user = os.environ["SMTP_USER"]
+    password = os.environ["SMTP_PASS"]
+    to_addr = os.environ["DIGEST_EMAIL"]
+
+    summary_title, plain_body = build_digest(jobs)
+    msg = EmailMessage()
+    msg["Subject"] = f"JobScanr: {summary_title}"
+    msg["From"] = user
+    msg["To"] = to_addr
+    msg.set_content(plain_body + "\n\n(open on laptop; links are in the HTML version)")
+    msg.add_alternative(
+        f"<html><body>{build_html_digest(jobs)}</body></html>", subtype="html"
+    )
+
+    with smtplib.SMTP(host, port) as smtp:
+        smtp.starttls()
+        smtp.login(user, password)
+        smtp.send_message(msg)
+    return msg["Message-ID"] or "sent"
+
+
+def email_configured() -> bool:
+    """True when all SMTP settings are present; logs what's missing otherwise."""
+    required = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "DIGEST_EMAIL")
+    missing = [k for k in required if not os.environ.get(k)]
+    if missing:
+        print(f"Email not configured, skipping (missing: {', '.join(missing)}). "
+              f"Set them in .env / Actions secrets to receive digests.")
+        return False
+    return True

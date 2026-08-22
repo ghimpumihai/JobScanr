@@ -24,4 +24,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FCM_CREDENTIALS_PATH: fcm-service-account.json
           FCM_CREDENTIALS_JSON: ${{ secrets.FCM_CREDENTIALS }}
-          NTFY_TOPIC_URL: ${{ secrets.NTFY_TOPIC_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
