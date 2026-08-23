@@ -50,25 +50,28 @@ def upsert_companies(companies: list[dict]) -> int:
 def upsert_jobs(jobs: list[dict]) -> list[dict]:
     """Insert jobs for known company_ids.
 
+    Descriptions are deliberately NOT persisted — they're used in memory
+    during matching (country restrictions, experience gates) but nothing
+    ever reads them back, and they'd dominate storage (~6 KB/row).
+
     Returns the subset that is genuinely new (first insert), including id.
     """
     if not jobs:
         return []
-    cols = ["external_id", "company_id", "title", "location", "department", "url", "description"]
+    cols = ["external_id", "company_id", "title", "location", "department", "url"]
     arrays = {c: [j[c] for j in jobs] for c in cols}
     sql = """
-        INSERT INTO job_postings AS jp (external_id, company_id, title, location, department, url, description)
+        INSERT INTO job_postings AS jp (external_id, company_id, title, location, department, url)
         SELECT * FROM unnest(
             %(external_id)s::text[], %(company_id)s::int[], %(title)s::text[],
-            %(location)s::text[], %(department)s::text[], %(url)s::text[], %(description)s::text[]
+            %(location)s::text[], %(department)s::text[], %(url)s::text[]
         )
         ON CONFLICT (external_id, company_id) DO UPDATE
             SET last_seen_at = NOW(),
                 title = EXCLUDED.title,
                 location = EXCLUDED.location,
                 department = EXCLUDED.department,
-                url = EXCLUDED.url,
-                description = EXCLUDED.description
+                url = EXCLUDED.url
         RETURNING jp.id, jp.external_id, jp.company_id, (xmax = 0) AS is_new
     """
     out: list[dict] = []

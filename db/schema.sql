@@ -18,10 +18,10 @@ CREATE TABLE IF NOT EXISTS job_postings (
     location        TEXT,
     department      TEXT,
     url             TEXT,
-    description     TEXT,
+    -- description intentionally not stored: used only in-memory during matching
     first_seen_at   TIMESTAMPTZ DEFAULT NOW(),
     last_seen_at    TIMESTAMPTZ DEFAULT NOW(),
-    notified_at     TIMESTAMPTZ,
+    notified_at     TIMESTAMPTZ,     -- NULL = not yet included in a digest
     UNIQUE (external_id, company_id)
 );
 
