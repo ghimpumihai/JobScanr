@@ -61,6 +61,18 @@ def main() -> int:
 
     print(f"Fetched {len(jobs)} live job postings.")
 
+    # Ashby/SmartRecruiters-style listings ship without descriptions; fetch
+    # details only for candidates passing the cheap title/location gate so
+    # country-restriction and experience checks see full text.
+    from jobs.enrich import enrich_jobs, passes_prefilter
+    candidates = [j for j in jobs if passes_prefilter(j)]
+    if candidates:
+        async def _enrich():
+            async with make_http_client() as http:
+                return await enrich_jobs(candidates, http)
+        asyncio.run(_enrich())
+        print(f"Enriched {len(candidates)} description-less candidates.")
+
     # Filter BEFORE persisting: the DB is an archive of matches only.
     # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
     # and failed sends stay unnotified for retry on the next run.

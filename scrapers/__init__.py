@@ -4,13 +4,11 @@ from scrapers.base import BaseClient
 from scrapers.ashby import AshbyClient
 from scrapers.greenhouse import GreenhouseClient
 from scrapers.lever import LeverClient
-from scrapers.smartrecruiters import SmartRecruitersClient
 
 CLIENTS: dict[str, type[BaseClient]] = {
     "greenhouse": GreenhouseClient,
     "ashby": AshbyClient,
     "lever": LeverClient,
-    "smartrecruiters": SmartRecruitersClient,
 }
 
 

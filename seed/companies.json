@@ -120,12 +120,6 @@
     "ats_identifier": "discord"
   },
   {
-    "company_name": "Shopify",
-    "career_url": "https://careers.smartrecruiters.com/shopify",
-    "ats_platform": "smartrecruiters",
-    "ats_identifier": "shopify"
-  },
-  {
     "company_name": "Twilio",
     "career_url": "https://job-boards.greenhouse.io/twilio",
     "ats_platform": "greenhouse",
@@ -244,12 +238,6 @@
     "career_url": "https://job-boards.greenhouse.io/pagerduty",
     "ats_platform": "greenhouse",
     "ats_identifier": "pagerduty"
-  },
-  {
-    "company_name": "Dynatrace",
-    "career_url": "https://careers.smartrecruiters.com/dynatrace",
-    "ats_platform": "smartrecruiters",
-    "ats_identifier": "dynatrace"
   },
   {
     "company_name": "Box",
