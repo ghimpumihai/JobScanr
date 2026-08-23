@@ -62,22 +62,24 @@ async def check_smartrecruiters(client: httpx.AsyncClient, ident: str) -> tuple[
 
 
 async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
-    r = await client.post(
-        "https://jobs.ashbyhq.com/api/non-user-graphql",
-        json={
-            "operationName": "ApiJobBoardWithTeams",
-            "variables": {"organizationHostedJobsPageName": ident},
-            "query": ASHBY_QUERY,
-        },
-    )
-    if r.status_code != 200:
-        return False, f"HTTP {r.status_code}"
-    body = r.json()
-    board = (body.get("data") or {}).get("jobBoard")
-    if board is None:
-        errs = body.get("errors") or [{"message": "unknown"}]
-        return False, f"graphql error: {errs[0]['message'][:80]}"
-    return True, f"{len(board['jobPostings'])} jobs"
+    # Ashby soft-throttles bursts with HTTP 200 + null data, so retry.
+    for attempt in range(3):
+        r = await client.post(
+            "https://jobs.ashbyhq.com/api/non-user-graphql",
+            json={
+                "operationName": "ApiJobBoardWithTeams",
+                "variables": {"organizationHostedJobsPageName": ident},
+                "query": ASHBY_QUERY,
+            },
+        )
+        if r.status_code != 200:
+            return False, f"HTTP {r.status_code}"
+        body = r.json()
+        board = (body.get("data") or {}).get("jobBoard")
+        if board is not None:
+            return True, f"{len(board['jobPostings'])} jobs"
+        await asyncio.sleep(1.0 + attempt)
+    return False, "throttled after retries"
 
 
 CHECKS = {
@@ -103,9 +105,11 @@ async def main() -> int:
     print(f"Validating {len(companies)} companies...\n")
 
     sem = asyncio.Semaphore(CONCURRENCY)
+    ashby_sem = asyncio.Semaphore(4)  # Ashby throttles harder than the rest
 
     async def bounded(client, c):
-        async with sem:
+        gate = ashby_sem if c["ats_platform"] == "ashby" else sem
+        async with gate:
             return await validate_company(client, c)
 
     async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True) as client:

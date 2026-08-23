@@ -16,14 +16,6 @@ from config import PROFILE
 from jobs.match import _any_word, _normalize
 from scrapers.base import strip_html
 
-DETAIL_QUERY = """query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
-  jobPosting(organizationHostedJobsPageName: $organizationHostedJobsPageName, jobPostingId: $jobPostingId) {
-    descriptionHtml
-    applicationDeadline
-    compensationTiers { tierSummary }
-  }
-}"""
-
 CONCURRENCY = 8
 
 
@@ -51,17 +43,12 @@ def _needs_enrichment(job: dict) -> bool:
 
 async def _fetch_ashby_detail(client: httpx.AsyncClient, org: str, posting_id: str,
                               timeout: float = 15.0) -> dict | None:
+    """Thin seam over AshbyClient.get_job_detail (kept for testability).
+    Retries live inside the client; returns None on any failure."""
+    from scrapers.ashby import AshbyClient
+
     try:
-        r = await client.post(
-            "https://jobs.ashbyhq.com/api/non-user-graphql",
-            json={"operationName": "ApiJobPosting",
-                  "variables": {"organizationHostedJobsPageName": org,
-                                "jobPostingId": posting_id},
-                  "query": DETAIL_QUERY},
-        )
-        if r.status_code != 200:
-            return None
-        return ((r.json().get("data") or {}).get("jobPosting")) or None
+        return await AshbyClient(client).get_job_detail(org, posting_id)
     except Exception:
         return None
 

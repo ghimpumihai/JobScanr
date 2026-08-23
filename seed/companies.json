@@ -430,5 +430,341 @@
     "career_url": "https://jobs.lever.co/spotify",
     "ats_platform": "lever",
     "ats_identifier": "spotify"
+  },
+  {
+    "company_name": "Wolt",
+    "career_url": "https://job-boards.greenhouse.io/wolt",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "wolt"
+  },
+  {
+    "company_name": "Pleo",
+    "career_url": "https://jobs.ashbyhq.com/pleo",
+    "ats_platform": "ashby",
+    "ats_identifier": "pleo"
+  },
+  {
+    "company_name": "Celonis",
+    "career_url": "https://job-boards.greenhouse.io/celonis",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "celonis"
+  },
+  {
+    "company_name": "Camunda",
+    "career_url": "https://jobs.ashbyhq.com/camunda",
+    "ats_platform": "ashby",
+    "ats_identifier": "camunda"
+  },
+  {
+    "company_name": "Trade Republic",
+    "career_url": "https://job-boards.greenhouse.io/traderepublic",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "traderepublic"
+  },
+  {
+    "company_name": "N26",
+    "career_url": "https://job-boards.greenhouse.io/n26",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "n26"
+  },
+  {
+    "company_name": "Raisin",
+    "career_url": "https://job-boards.greenhouse.io/raisin",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "raisin"
+  },
+  {
+    "company_name": "GetYourGuide",
+    "career_url": "https://job-boards.greenhouse.io/getyourguide",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "getyourguide"
+  },
+  {
+    "company_name": "Choco",
+    "career_url": "https://jobs.ashbyhq.com/choco",
+    "ats_platform": "ashby",
+    "ats_identifier": "choco"
+  },
+  {
+    "company_name": "Enpal",
+    "career_url": "https://jobs.ashbyhq.com/enpal",
+    "ats_platform": "ashby",
+    "ats_identifier": "enpal"
+  },
+  {
+    "company_name": "Forto",
+    "career_url": "https://jobs.ashbyhq.com/forto",
+    "ats_platform": "ashby",
+    "ats_identifier": "forto"
+  },
+  {
+    "company_name": "Moss",
+    "career_url": "https://jobs.ashbyhq.com/moss",
+    "ats_platform": "ashby",
+    "ats_identifier": "moss"
+  },
+  {
+    "company_name": "Pennylane",
+    "career_url": "https://jobs.ashbyhq.com/pennylane",
+    "ats_platform": "ashby",
+    "ats_identifier": "pennylane"
+  },
+  {
+    "company_name": "UiPath",
+    "career_url": "https://jobs.ashbyhq.com/uipath",
+    "ats_platform": "ashby",
+    "ats_identifier": "uipath"
+  },
+  {
+    "company_name": "Satispay",
+    "career_url": "https://jobs.ashbyhq.com/satispay",
+    "ats_platform": "ashby",
+    "ats_identifier": "satispay"
+  },
+  {
+    "company_name": "Duolingo",
+    "career_url": "https://job-boards.greenhouse.io/duolingo",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "duolingo"
+  },
+  {
+    "company_name": "Dropbox",
+    "career_url": "https://job-boards.greenhouse.io/dropbox",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "dropbox"
+  },
+  {
+    "company_name": "HelloFresh",
+    "career_url": "https://job-boards.greenhouse.io/hellofresh",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "hellofresh"
+  },
+  {
+    "company_name": "Grover",
+    "career_url": "https://job-boards.greenhouse.io/grover",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "grover"
+  },
+  {
+    "company_name": "SumUp",
+    "career_url": "https://job-boards.greenhouse.io/sumup",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "sumup"
+  },
+  {
+    "company_name": "Mollie",
+    "career_url": "https://jobs.ashbyhq.com/mollie",
+    "ats_platform": "ashby",
+    "ats_identifier": "mollie"
+  },
+  {
+    "company_name": "Contentsquare",
+    "career_url": "https://jobs.lever.co/contentsquare",
+    "ats_platform": "lever",
+    "ats_identifier": "contentsquare"
+  },
+  {
+    "company_name": "Vestiaire Collective",
+    "career_url": "https://jobs.lever.co/vestiairecollective",
+    "ats_platform": "lever",
+    "ats_identifier": "vestiairecollective"
+  },
+  {
+    "company_name": "Dataiku",
+    "career_url": "https://job-boards.greenhouse.io/dataiku",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "dataiku"
+  },
+  {
+    "company_name": "Mirakl",
+    "career_url": "https://job-boards.greenhouse.io/mirakl",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "mirakl"
+  },
+  {
+    "company_name": "Aircall",
+    "career_url": "https://jobs.lever.co/aircall",
+    "ats_platform": "lever",
+    "ats_identifier": "aircall"
+  },
+  {
+    "company_name": "360Learning",
+    "career_url": "https://jobs.lever.co/360learning",
+    "ats_platform": "lever",
+    "ats_identifier": "360learning"
+  },
+  {
+    "company_name": "BlaBlaCar",
+    "career_url": "https://jobs.lever.co/blablacar",
+    "ats_platform": "lever",
+    "ats_identifier": "blablacar"
+  },
+  {
+    "company_name": "Ankorstore",
+    "career_url": "https://jobs.ashbyhq.com/ankorstore",
+    "ats_platform": "ashby",
+    "ats_identifier": "ankorstore"
+  },
+  {
+    "company_name": "Back Market",
+    "career_url": "https://jobs.ashbyhq.com/backmarket",
+    "ats_platform": "ashby",
+    "ats_identifier": "backmarket"
+  },
+  {
+    "company_name": "Qonto",
+    "career_url": "https://jobs.ashbyhq.com/qonto",
+    "ats_platform": "ashby",
+    "ats_identifier": "qonto"
+  },
+  {
+    "company_name": "Spendesk",
+    "career_url": "https://jobs.ashbyhq.com/spendesk",
+    "ats_platform": "ashby",
+    "ats_identifier": "spendesk"
+  },
+  {
+    "company_name": "Ledger",
+    "career_url": "https://jobs.ashbyhq.com/ledger",
+    "ats_platform": "ashby",
+    "ats_identifier": "ledger"
+  },
+  {
+    "company_name": "Sorare",
+    "career_url": "https://jobs.ashbyhq.com/sorare",
+    "ats_platform": "ashby",
+    "ats_identifier": "sorare"
+  },
+  {
+    "company_name": "Alan",
+    "career_url": "https://jobs.ashbyhq.com/alan",
+    "ats_platform": "ashby",
+    "ats_identifier": "alan"
+  },
+  {
+    "company_name": "PhotoRoom",
+    "career_url": "https://jobs.ashbyhq.com/photoroom",
+    "ats_platform": "ashby",
+    "ats_identifier": "photoroom"
+  },
+  {
+    "company_name": "Swile",
+    "career_url": "https://jobs.lever.co/swile",
+    "ats_platform": "lever",
+    "ats_identifier": "swile"
+  },
+  {
+    "company_name": "Shift Technology",
+    "career_url": "https://job-boards.greenhouse.io/shifttechnology",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "shifttechnology"
+  },
+  {
+    "company_name": "Mentimeter",
+    "career_url": "https://job-boards.greenhouse.io/mentimeter",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "mentimeter"
+  },
+  {
+    "company_name": "Veriff",
+    "career_url": "https://job-boards.greenhouse.io/veriff",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "veriff"
+  },
+  {
+    "company_name": "Monzo",
+    "career_url": "https://job-boards.greenhouse.io/monzo",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "monzo"
+  },
+  {
+    "company_name": "Deliveroo",
+    "career_url": "https://jobs.ashbyhq.com/deliveroo",
+    "ats_platform": "ashby",
+    "ats_identifier": "deliveroo"
+  },
+  {
+    "company_name": "Improbable",
+    "career_url": "https://jobs.ashbyhq.com/improbable",
+    "ats_platform": "ashby",
+    "ats_identifier": "improbable"
+  },
+  {
+    "company_name": "Beamery",
+    "career_url": "https://jobs.ashbyhq.com/beamery",
+    "ats_platform": "ashby",
+    "ats_identifier": "beamery"
+  },
+  {
+    "company_name": "Multiverse",
+    "career_url": "https://jobs.ashbyhq.com/multiverse",
+    "ats_platform": "ashby",
+    "ats_identifier": "multiverse"
+  },
+  {
+    "company_name": "Cleo",
+    "career_url": "https://job-boards.greenhouse.io/cleo",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "cleo"
+  },
+  {
+    "company_name": "Paddle",
+    "career_url": "https://jobs.ashbyhq.com/paddle",
+    "ats_platform": "ashby",
+    "ats_identifier": "paddle"
+  },
+  {
+    "company_name": "Zilch",
+    "career_url": "https://jobs.ashbyhq.com/zilch",
+    "ats_platform": "ashby",
+    "ats_identifier": "zilch"
+  },
+  {
+    "company_name": "Wise",
+    "career_url": "https://job-boards.greenhouse.io/wise",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "wise"
+  },
+  {
+    "company_name": "ElevenLabs",
+    "career_url": "https://jobs.ashbyhq.com/elevenlabs",
+    "ats_platform": "ashby",
+    "ats_identifier": "elevenlabs"
+  },
+  {
+    "company_name": "Stability AI",
+    "career_url": "https://job-boards.greenhouse.io/stabilityai",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "stabilityai"
+  },
+  {
+    "company_name": "Runway",
+    "career_url": "https://jobs.ashbyhq.com/runway",
+    "ats_platform": "ashby",
+    "ats_identifier": "runway"
+  },
+  {
+    "company_name": "Miro",
+    "career_url": "https://jobs.ashbyhq.com/miro",
+    "ats_platform": "ashby",
+    "ats_identifier": "miro"
+  },
+  {
+    "company_name": "Doctolib",
+    "career_url": "https://job-boards.greenhouse.io/doctolib",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "doctolib"
+  },
+  {
+    "company_name": "Graphcore",
+    "career_url": "https://job-boards.greenhouse.io/graphcore",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "graphcore"
+  },
+  {
+    "company_name": "Adyen",
+    "career_url": "https://job-boards.greenhouse.io/adyen",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "adyen"
   }
 ]
