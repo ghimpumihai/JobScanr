@@ -7,11 +7,18 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-# Tolerate import in contexts that don't touch the DB (tests); the DB layer
-# raises a clear error if these are empty when actually connecting.
+# DB routing: experiments and smoke tests should never write into the
+# production archive. Set DB_ENV=staging (plus DATABASE_URL_STAGING in
+# .env) to point every query at the staging project instead.
+DB_ENV = os.environ.get("DB_ENV", "production").strip().lower()
+if DB_ENV not in ("production", "staging"):
+    DB_ENV = "production"
 # strip(): GitHub secrets are easy to save with a stray trailing newline,
 # which psycopg happily turns into dbname="postgres\n".
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DB_ENV == "staging":
+    DATABASE_URL = os.environ.get("DATABASE_URL_STAGING", "").strip()
+else:
+    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
