@@ -1,9 +1,8 @@
-"""Daily cycle entry point (plan Phase 5): scrape -> upsert -> match -> digest.
+"""Daily cycle entry point (plan Phase 5): scrape -> match -> store -> digest.
 
 Usage:
   python -m jobs.scrape_and_notify             # normal daily run
-  python -m jobs.scrape_and_notify --baseline  # insert current jobs, notify nobody
-  python -m jobs.scrape_and_notify --dry-run   # fetch + match, no DB writes, no push
+  python -m jobs.scrape_and_notify --dry-run   # fetch + match, no DB writes, no email
 """
 
 import argparse
@@ -46,10 +45,8 @@ async def scrape_all(companies: list[dict]) -> tuple[list[dict], list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", action="store_true",
-                        help="insert everything but send no notifications")
     parser.add_argument("--dry-run", action="store_true",
-                        help="no DB writes, no push")
+                        help="fetch + match, no DB writes, no email")
     args = parser.parse_args()
 
     companies = queries.get_all_companies()
@@ -64,30 +61,23 @@ def main() -> int:
 
     print(f"Fetched {len(jobs)} live job postings.")
 
-    if args.dry_run:
-        matches = [j for j in jobs if matches_profile(j)]
-        print(f"[dry-run] would upsert {len(jobs)}; {len(matches)} match profile:")
-        for j in matches[:15]:
-            print(f"  - {j['title']} @ {j['company_name']} ({j['location']})")
-        return 0
-
-    new_jobs = queries.upsert_jobs(jobs)
-    stale = queries.delete_stale_jobs(days=3)
-    print(f"Upserted: {len(new_jobs)} new / {len(jobs)} live; pruned {stale} stale.")
-
-    matches = [j for j in new_jobs if matches_profile(j)]
-    print(f"{len(matches)} new jobs match profile:")
+    # Filter BEFORE persisting: the DB is an archive of matches only.
+    # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
+    # and failed sends stay unnotified for retry on the next run.
+    matches = [j for j in jobs if matches_profile(j)]
+    print(f"{len(matches)} jobs match profile:")
     for j in matches[:20]:
         print(f"  - {j['title']} @ {j['company_name']} ({j['location']})")
 
-    if args.baseline:
-        # First run: record everything as already-seen so tomorrow's first
-        # real digest only contains genuinely fresh postings.
-        queries.mark_notified([j["id"] for j in new_jobs])
-        print("Baseline run: marked all as notified, sent nothing.")
+    if args.dry_run:
+        print("[dry-run] no DB writes, no email.")
         return 0
 
-    if not matches:
+    new_matches = queries.upsert_jobs(matches)
+    stale = queries.delete_stale_jobs(days=3)
+    print(f"Stored {len(new_matches)} new / {len(matches)} matched; pruned {stale} stale.")
+
+    if not new_matches:
         print("Nothing to notify.")
         return 0
 
@@ -98,9 +88,9 @@ def main() -> int:
         print("Matches found but no delivery channel — they will be retried.")
         return 1
 
-    message_id = send_email_digest(matches)
-    queries.mark_notified([j["id"] for j in matches])
-    print(f"Email digest sent ({message_id}) for {len(matches)} jobs.")
+    message_id = send_email_digest(new_matches)
+    queries.mark_notified([j["id"] for j in new_matches])
+    print(f"Email digest sent ({message_id}) for {len(new_matches)} jobs.")
     return 0
 
 
