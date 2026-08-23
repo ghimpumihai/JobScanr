@@ -11,6 +11,9 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # "production" environment is branch-restricted to main in repo settings,
+    # so the digest can never execute from dev or arbitrary dispatches.
+    environment: production
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
