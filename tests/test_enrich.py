@@ -89,9 +89,28 @@ def test_extract_compensation_formats():
     assert x("Salary: €48k – €55k per year") == "€48k–€55k"
     assert x("paying $120,000-$140,000 annually") == "$120,000-$140,000"
     assert x("£40 - 45k depending on experience") == "£40-45k"
-    assert x("EUR 50,000 to 60,000") == "EUR50,000to60,000" or x("EUR 50,000 to 60,000") == "EUR50,000to60,000"
+    assert x("EUR 50,000 to 60,000") is not None
     assert x("no comp info here") is None
     assert x(None) is None
+
+
+def test_extract_compensation_rejects_company_metrics():
+    from jobs.enrich import extract_compensation as x
+    # the Alan false positive that motivated this rule:
+    alan = ("We already partner with 40K+ companies of all sizes, serving more "
+            "than 1M+ members, and have reached €800M+ in ARR. As an intern "
+            "you will write python.")
+    assert x(alan) is None
+    assert x("raised $2B+ to build robots") is None
+    assert x("tutoring role, €15-20/hour") is None
+    assert x("stipend of €800 per month") is None
+
+
+def test_extract_compensation_accepts_real_salaries():
+    from jobs.enrich import extract_compensation as x
+    assert x("annual salary £67,575 plus benefits") == "£67,575"
+    assert x("€48k starting salary") == "€48k"
+    assert x("compensation: $120,000-$140,000") == "$120,000-$140,000"
 
 
 def test_match_pipeline_extracts_salary_into_matches(monkeypatch):

@@ -29,14 +29,49 @@ SALARY_RE = re.compile(
 )
 
 
+def _parse_amount(s: str) -> int | None:
+    """'48k' -> 48000 · '120,000' -> 120000 · 'x' -> None"""
+    s = s.strip()
+    mult = 1000 if s[-1:] in ("k", "K") else 1
+    digits = re.sub(r"[^\d]", "", s)
+    return int(digits) * mult if digits else None
+
+
 def extract_compensation(text: str | None) -> str | None:
-    """First plausible salary range found in free text, whitespace-normalized."""
+    """First plausible ANNUAL salary range found in free text.
+
+    Deliberately rejects the classic false positives: company-metric
+    numbers ('€800M+ in ARR', '40K+ customers'), hourly rates, and any
+    figure too small to be an annual salary."""
     if not text:
         return None
-    m = SALARY_RE.search(text)
-    if not m:
-        return None
-    return re.sub(r"\s+", "", m.group(0)) or None
+    t = re.sub(r"\s+", " ", text)
+
+    for m in SALARY_RE.finditer(t):
+        token = m.group(0)
+        # '€800M+', '$2B+' — company metrics, not salaries
+        rest = t[m.end():m.end() + 3].lstrip()
+        if rest[:1] in ("M", "B"):
+            continue
+        values = [_parse_amount(x) for x in re.findall(r"\d[\d,.]*\s?[kK]?", token)]
+        values = [v for v in values if v]
+        if not values:
+            continue
+        if max(values) >= 1_000_000:
+            continue
+        # bare '€800' is a monthly stipend at best; '€48k' or '£67,575' is real
+        if max(values) < 10_000 and not re.search(r"[kK]\s?$", token):
+            continue
+        # hourly gigs
+        if re.match(r"\s*/?\s*h(\.|our)?", t[m.end():], re.IGNORECASE):
+            continue
+        # revenue/funding marketing copy
+        context = t[max(0, m.start() - 45):m.end() + 45]
+        if re.search(r"\b(ARR|MRR|revenue|funding|raised|valuation)\b",
+                     context, re.IGNORECASE):
+            continue
+        return re.sub(r"\s+", "", token) or None
+    return None
 
 
 def passes_prefilter(job: dict, p: dict | None = None) -> bool:
