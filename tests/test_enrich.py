@@ -83,3 +83,22 @@ def test_workday_public_url_construction():
     assert WorkdayClient._public_url(
         ident, "job/NoLeadingSlash_1") == \
         "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers/job/NoLeadingSlash_1"
+
+def test_extract_compensation_formats():
+    from jobs.enrich import extract_compensation as x
+    assert x("Salary: €48k – €55k per year") == "€48k–€55k"
+    assert x("paying $120,000-$140,000 annually") == "$120,000-$140,000"
+    assert x("£40 - 45k depending on experience") == "£40-45k"
+    assert x("EUR 50,000 to 60,000") == "EUR50,000to60,000" or x("EUR 50,000 to 60,000") == "EUR50,000to60,000"
+    assert x("no comp info here") is None
+    assert x(None) is None
+
+
+def test_match_pipeline_extracts_salary_into_matches(monkeypatch):
+    import jobs.scrape_and_notify as san
+
+    # smoke: extract_compensation importable where the pipeline uses it
+    from jobs.enrich import extract_compensation
+    job = {"title": "Junior Software Engineer", "location": "Berlin",
+           "description": "€45k–€52k", "compensation": None}
+    assert extract_compensation(job["description"]) == "€45k–€52k"

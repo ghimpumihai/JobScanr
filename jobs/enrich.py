@@ -9,6 +9,7 @@ one extra request per plausible candidate, not per listing.
 """
 
 import asyncio
+import re
 
 import httpx
 
@@ -17,6 +18,25 @@ from jobs.match import _any_word, _normalize
 from scrapers.base import strip_html
 
 CONCURRENCY = 8
+
+# Salary ranges embedded in description text ("€48k – €55k",
+# "$120,000-$140,000", "£40-45k"). Employers rarely fill structured
+# salary fields, but many paste ranges into the description.
+SALARY_RE = re.compile(
+    r"(?:€|\$|£|EUR|USD|GBP)\s?\d{1,3}(?:[.,]\d{3})*(?:\s?[kK])?"
+    r"(?:\s?[–\-—to]{1,3}\s?"
+    r"(?:€|\$|£|EUR|USD|GBP)?\s?\d{1,3}(?:[.,]\d{3})*(?:\s?[kK])?)?"
+)
+
+
+def extract_compensation(text: str | None) -> str | None:
+    """First plausible salary range found in free text, whitespace-normalized."""
+    if not text:
+        return None
+    m = SALARY_RE.search(text)
+    if not m:
+        return None
+    return re.sub(r"\s+", "", m.group(0)) or None
 
 
 def passes_prefilter(job: dict, p: dict | None = None) -> bool:

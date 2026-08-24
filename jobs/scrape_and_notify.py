@@ -93,6 +93,13 @@ def main() -> int:
     # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
     # and failed sends stay unnotified for retry on the next run.
     matches = [j for j in jobs if matches_profile(j)]
+
+    # Employers rarely fill structured salary fields but often paste ranges
+    # into descriptions — extract for anything missing one.
+    from jobs.enrich import extract_compensation
+    for j in matches:
+        if not j.get("compensation"):
+            j["compensation"] = extract_compensation(j.get("description"))
     print(f"{len(matches)} jobs match profile:")
     for j in matches[:20]:
         print(f"  - {j['title']} @ {j['company_name']} ({j['location']})")
