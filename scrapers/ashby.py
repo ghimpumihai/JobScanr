@@ -16,8 +16,8 @@ import asyncio
 from scrapers.base import BaseClient, strip_html
 
 GRAPHQL_URL = "https://jobs.ashbyhq.com/api/non-user-graphql"
-RETRIES = 3
-RETRY_DELAY = 1.0
+RETRIES = 4
+RETRY_DELAY = 1.5
 
 BOARD_QUERY = """query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) {
   jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) {

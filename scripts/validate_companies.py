@@ -105,11 +105,13 @@ async def main() -> int:
     print(f"Validating {len(companies)} companies...\n")
 
     sem = asyncio.Semaphore(CONCURRENCY)
-    ashby_sem = asyncio.Semaphore(4)  # Ashby throttles harder than the rest
+    ashby_sem = asyncio.Semaphore(2)  # Ashby throttles harder than the rest
 
     async def bounded(client, c):
         gate = ashby_sem if c["ats_platform"] == "ashby" else sem
         async with gate:
+            if c["ats_platform"] == "ashby":
+                await asyncio.sleep(0.3)
             return await validate_company(client, c)
 
     async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True) as client:

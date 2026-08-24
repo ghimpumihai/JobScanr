@@ -766,5 +766,239 @@
     "career_url": "https://job-boards.greenhouse.io/adyen",
     "ats_platform": "greenhouse",
     "ats_identifier": "adyen"
+  },
+  {
+    "company_name": "GoCardless",
+    "career_url": "https://job-boards.greenhouse.io/gocardless",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "gocardless"
+  },
+  {
+    "company_name": "Form3",
+    "career_url": "https://job-boards.greenhouse.io/form3",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "form3"
+  },
+  {
+    "company_name": "Tide",
+    "career_url": "https://job-boards.greenhouse.io/tide",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "tide"
+  },
+  {
+    "company_name": "Zopa",
+    "career_url": "https://jobs.lever.co/zopa",
+    "ats_platform": "lever",
+    "ats_identifier": "zopa"
+  },
+  {
+    "company_name": "FINN",
+    "career_url": "https://jobs.lever.co/finn",
+    "ats_platform": "lever",
+    "ats_identifier": "finn"
+  },
+  {
+    "company_name": "GitBook",
+    "career_url": "https://jobs.ashbyhq.com/gitbook",
+    "ats_platform": "ashby",
+    "ats_identifier": "gitbook"
+  },
+  {
+    "company_name": "Front",
+    "career_url": "https://jobs.ashbyhq.com/frontapp",
+    "ats_platform": "ashby",
+    "ats_identifier": "frontapp"
+  },
+  {
+    "company_name": "n8n",
+    "career_url": "https://jobs.ashbyhq.com/n8n",
+    "ats_platform": "ashby",
+    "ats_identifier": "n8n"
+  },
+  {
+    "company_name": "JetBrains",
+    "career_url": "https://job-boards.greenhouse.io/jetbrains",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "jetbrains"
+  },
+  {
+    "company_name": "Smartly.io",
+    "career_url": "https://job-boards.greenhouse.io/smartlyio",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "smartlyio"
+  },
+  {
+    "company_name": "Oura",
+    "career_url": "https://job-boards.greenhouse.io/oura",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "oura"
+  },
+  {
+    "company_name": "Ada Health",
+    "career_url": "https://job-boards.greenhouse.io/adahealth",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "adahealth"
+  },
+  {
+    "company_name": "Refurbed",
+    "career_url": "https://job-boards.greenhouse.io/refurbed",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "refurbed"
+  },
+  {
+    "company_name": "Allegro",
+    "career_url": "https://job-boards.greenhouse.io/allegro",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "allegro"
+  },
+  {
+    "company_name": "Black Forest Labs",
+    "career_url": "https://job-boards.greenhouse.io/blackforestlabs",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "blackforestlabs"
+  },
+  {
+    "company_name": "Dust",
+    "career_url": "https://jobs.ashbyhq.com/dust",
+    "ats_platform": "ashby",
+    "ats_identifier": "dust"
+  },
+  {
+    "company_name": "Poolside",
+    "career_url": "https://jobs.ashbyhq.com/poolside",
+    "ats_platform": "ashby",
+    "ats_identifier": "poolside"
+  },
+  {
+    "company_name": "Bitpanda",
+    "career_url": "https://job-boards.greenhouse.io/bitpanda",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "bitpanda"
+  },
+  {
+    "company_name": "Bitvavo",
+    "career_url": "https://jobs.ashbyhq.com/bitvavo",
+    "ats_platform": "ashby",
+    "ats_identifier": "bitvavo"
+  },
+  {
+    "company_name": "DeepL",
+    "career_url": "https://jobs.ashbyhq.com/deepl",
+    "ats_platform": "ashby",
+    "ats_identifier": "deepl"
+  },
+  {
+    "company_name": "Kraken",
+    "career_url": "https://jobs.lever.co/kraken",
+    "ats_platform": "lever",
+    "ats_identifier": "kraken"
+  },
+  {
+    "company_name": "Neon",
+    "career_url": "https://jobs.ashbyhq.com/neon",
+    "ats_platform": "ashby",
+    "ats_identifier": "neon"
+  },
+  {
+    "company_name": "Bolt",
+    "career_url": "https://jobs.ashbyhq.com/bolt",
+    "ats_platform": "ashby",
+    "ats_identifier": "bolt"
+  },
+  {
+    "company_name": "Robinhood",
+    "career_url": "https://job-boards.greenhouse.io/robinhood",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "robinhood"
+  },
+  {
+    "company_name": "Personio",
+    "career_url": "https://jobs.ashbyhq.com/personio",
+    "ats_platform": "ashby",
+    "ats_identifier": "personio"
+  },
+  {
+    "company_name": "Snyk",
+    "career_url": "https://jobs.ashbyhq.com/snyk",
+    "ats_platform": "ashby",
+    "ats_identifier": "snyk"
+  },
+  {
+    "company_name": "Zapier",
+    "career_url": "https://jobs.ashbyhq.com/zapier",
+    "ats_platform": "ashby",
+    "ats_identifier": "zapier"
+  },
+  {
+    "company_name": "Docker",
+    "career_url": "https://jobs.ashbyhq.com/docker",
+    "ats_platform": "ashby",
+    "ats_identifier": "docker"
+  },
+  {
+    "company_name": "Sentry",
+    "career_url": "https://jobs.ashbyhq.com/sentry",
+    "ats_platform": "ashby",
+    "ats_identifier": "sentry"
+  },
+  {
+    "company_name": "Confluent",
+    "career_url": "https://jobs.ashbyhq.com/confluent",
+    "ats_platform": "ashby",
+    "ats_identifier": "confluent"
+  },
+  {
+    "company_name": "Plaid",
+    "career_url": "https://jobs.ashbyhq.com/plaid",
+    "ats_platform": "ashby",
+    "ats_identifier": "plaid"
+  },
+  {
+    "company_name": "ClickUp",
+    "career_url": "https://jobs.ashbyhq.com/clickup",
+    "ats_platform": "ashby",
+    "ats_identifier": "clickup"
+  },
+  {
+    "company_name": "Render",
+    "career_url": "https://jobs.ashbyhq.com/render",
+    "ats_platform": "ashby",
+    "ats_identifier": "render"
+  },
+  {
+    "company_name": "Temporal",
+    "career_url": "https://jobs.ashbyhq.com/temporal",
+    "ats_platform": "ashby",
+    "ats_identifier": "temporal"
+  },
+  {
+    "company_name": "Pinecone",
+    "career_url": "https://jobs.ashbyhq.com/pinecone",
+    "ats_platform": "ashby",
+    "ats_identifier": "pinecone"
+  },
+  {
+    "company_name": "Writer",
+    "career_url": "https://jobs.ashbyhq.com/writer",
+    "ats_platform": "ashby",
+    "ats_identifier": "writer"
+  },
+  {
+    "company_name": "Oyster",
+    "career_url": "https://jobs.ashbyhq.com/oyster",
+    "ats_platform": "ashby",
+    "ats_identifier": "oyster"
+  },
+  {
+    "company_name": "Andela",
+    "career_url": "https://jobs.ashbyhq.com/andela",
+    "ats_platform": "ashby",
+    "ats_identifier": "andela"
+  },
+  {
+    "company_name": "SonarSource",
+    "career_url": "https://jobs.lever.co/sonarsource",
+    "ats_platform": "lever",
+    "ats_identifier": "sonarsource"
   }
 ]
