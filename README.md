@@ -122,13 +122,12 @@ Things we learned the hard way, now encoded as tests:
 - **Ashby soft-throttles** with HTTP 200 + null payloads instead of 429s. Every GraphQL call retries with backoff; Ashby gets its own slow concurrency lane.
 - **Workday's `limit` silently caps at 20.** Ask for more and it returns an *empty array* — indistinguishable from end-of-results. Pagination trusts nothing.
 - **Links must be deterministic.** Workday's API path returns raw JSON in a browser, and its detail endpoint intermittently blips — so human-facing URLs are constructed from listing data, never from a network response.
-- **`intern` ≠ `internal`.** All keyword gates match on word boundaries.
 - **Filter before persistence.** The database is an archive of matches only (~15 rows/day, not ~20,000), which keeps it tiny and makes dedup semantics obvious.
 - **Descriptions are scraped but never stored** — they're consumed in-memory during matching and discarded.
 
 ## Not doing (yet)
 
-- Workday tenant auto-discovery at scale · salary columns in digests · twice-daily runs · LLM relevance scoring · a mobile app (the FCM-shaped hole in `notify.py` history is intentional)
+- Workday tenant auto-discovery at scale · salary columns in digests ·  LLM relevance scoring · a mobile app
 
 ---
 
