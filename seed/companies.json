@@ -1024,5 +1024,77 @@
     "career_url": "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers",
     "ats_platform": "workday",
     "ats_identifier": "cisco|wd5|Cisco_Careers"
+  },
+  {
+    "company_name": "Visa",
+    "career_url": "https://visa.wd5.myworkdayjobs.com/Visa",
+    "ats_platform": "workday",
+    "ats_identifier": "visa|wd5|Visa"
+  },
+  {
+    "company_name": "Mastercard",
+    "career_url": "https://mastercard.wd1.myworkdayjobs.com/CorporateCareers",
+    "ats_platform": "workday",
+    "ats_identifier": "mastercard|wd1|CorporateCareers"
+  },
+  {
+    "company_name": "PayPal",
+    "career_url": "https://paypal.wd1.myworkdayjobs.com/jobs",
+    "ats_platform": "workday",
+    "ats_identifier": "paypal|wd1|jobs"
+  },
+  {
+    "company_name": "Depop",
+    "career_url": "https://etsy.wd5.myworkdayjobs.com/Depop_Careers",
+    "ats_platform": "workday",
+    "ats_identifier": "etsy|wd5|Depop_Careers"
+  },
+  {
+    "company_name": "Cloudera",
+    "career_url": "https://cloudera.wd5.myworkdayjobs.com/External_Career",
+    "ats_platform": "workday",
+    "ats_identifier": "cloudera|wd5|External_Career"
+  },
+  {
+    "company_name": "CrowdStrike",
+    "career_url": "https://crowdstrike.wd5.myworkdayjobs.com/crowdstrikecareers",
+    "ats_platform": "workday",
+    "ats_identifier": "crowdstrike|wd5|crowdstrikecareers"
+  },
+  {
+    "company_name": "Broadcom",
+    "career_url": "https://broadcom.wd1.myworkdayjobs.com/External_Career",
+    "ats_platform": "workday",
+    "ats_identifier": "broadcom|wd1|External_Career"
+  },
+  {
+    "company_name": "Micron",
+    "career_url": "https://micron.wd1.myworkdayjobs.com/External",
+    "ats_platform": "workday",
+    "ats_identifier": "micron|wd1|External"
+  },
+  {
+    "company_name": "Cadence",
+    "career_url": "https://cadence.wd1.myworkdayjobs.com/External_Careers",
+    "ats_platform": "workday",
+    "ats_identifier": "cadence|wd1|External_Careers"
+  },
+  {
+    "company_name": "HPE",
+    "career_url": "https://hpe.wd5.myworkdayjobs.com/Jobsathpe",
+    "ats_platform": "workday",
+    "ats_identifier": "hpe|wd5|Jobsathpe"
+  },
+  {
+    "company_name": "Logitech",
+    "career_url": "https://logitech.wd5.myworkdayjobs.com/Logitech",
+    "ats_platform": "workday",
+    "ats_identifier": "logitech|wd5|Logitech"
+  },
+  {
+    "company_name": "Sonos",
+    "career_url": "https://sonos.wd1.myworkdayjobs.com/Sonos",
+    "ats_platform": "workday",
+    "ats_identifier": "sonos|wd1|Sonos"
   }
 ]
