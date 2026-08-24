@@ -97,4 +97,8 @@ async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
             job["compensation"] = "; ".join(summaries)
         if detail.get("locationText"):
             job["location"] = detail["locationText"]
+        if detail.get("externalUrl"):
+            # Workday's API path returns raw JSON in a browser; swap in the
+            # human-facing careers URL the detail response provides.
+            job["url"] = detail["externalUrl"]
     return jobs

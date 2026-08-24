@@ -59,12 +59,16 @@ def test_workday_detail_updates_vague_location(monkeypatch):
     jobs = [{"title": "Junior Software Engineer", "location": "3 Locations",
              "description": None, "ats_identifier": "acme|wd5|AcmeCareers",
              "external_id": "slug_1", "external_path": "slug_1",
+             "url": "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/AcmeCareers/job/slug_1",
              "company_name": "Acme"}]
 
     async def fake_fetch(job, client):
         return {"descriptionHtml": "<p>python</p>",
-                "locationText": "Munich, Germany"}
+                "locationText": "Munich, Germany",
+                "externalUrl": "https://acme.wd5.myworkdayjobs.com/AcmeCareers/job/Munich-Germany/slug_1"}
 
     monkeypatch.setattr(enrich, "_fetch_detail", fake_fetch)
     asyncio.run(enrich.enrich_jobs(jobs, client=None))
     assert jobs[0]["location"] == "Munich, Germany"
+    # API link must be replaced by the human-facing page
+    assert jobs[0]["url"] == "https://acme.wd5.myworkdayjobs.com/AcmeCareers/job/Munich-Germany/slug_1"

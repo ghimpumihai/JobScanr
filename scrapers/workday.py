@@ -75,19 +75,24 @@ class WorkdayClient(BaseClient):
         return list(jobs.values())
 
     async def get_job_detail(self, ats_identifier: str, slug: str) -> dict | None:
-        """Full HTML description for one posting (enrichment path)."""
+        """Full HTML description + human-facing URL for one posting."""
         base, _ = self._base(ats_identifier)
         try:
             r = await self.request_with_retry(
                 "GET", f"{base}/job/{slug}", headers={"Accept": "application/json"})
             r.raise_for_status()
-            info = r.json().get("jobPostingInfo") or {}
+            body = r.json()
+            info = body.get("jobPostingInfo") or {}
             desc = info.get("jobDescription")
             location = info.get("location") or {}
-            country = info.get("additionalLocations") or []
+            additional = info.get("additionalLocations") or []
             out = {"descriptionHtml": desc}
+            # The CXS /job/ path returns raw JSON; only externalUrl is the
+            # human-facing page people can actually apply through.
+            if info.get("externalUrl"):
+                out["externalUrl"] = info["externalUrl"]
             loc_parts = [location.get("descriptor")] + [
-                l.get("descriptor") for l in country if isinstance(l, dict)]
+                l.get("descriptor") for l in additional if isinstance(l, dict)]
             named = [x for x in loc_parts if x]
             if named:
                 out["locationText"] = ", ".join(named)
