@@ -48,18 +48,27 @@ def _needs_enrichment(job: dict) -> bool:
 
 async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
     ident = job["ats_identifier"]
-    try:
-        if "|" in ident:  # workday: "tenant|wdN|Site"
-            from scrapers.workday import WorkdayClient
+    # Detail endpoints throttle intermittently right after big scrapes;
+    # back off patiently — candidates are few and links no longer depend
+    # on this succeeding (workday builds those from the listing itself).
+    for attempt in range(3):
+        try:
+            if "|" in ident:  # workday: "tenant|wdN|Site"
+                from scrapers.workday import WorkdayClient
 
-            return await WorkdayClient(client).get_job_detail(
-                ident, job["external_path"])
-        from scrapers.ashby import AshbyClient
+                detail = await WorkdayClient(client).get_job_detail(
+                    ident, job["external_path"])
+            else:
+                from scrapers.ashby import AshbyClient
 
-        return await AshbyClient(client).get_job_detail(
-            ident, job["external_id"])
-    except Exception:
-        return None
+                detail = await AshbyClient(client).get_job_detail(
+                    ident, job["external_id"])
+            if detail is not None and detail.get("descriptionHtml"):
+                return detail
+        except Exception:
+            pass
+        await asyncio.sleep(3.0 * (attempt + 1))
+    return None
 
 
 async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
@@ -78,8 +87,14 @@ async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
 
     results = await asyncio.gather(*(one(t) for t in targets))
     lookup: dict[tuple[str, str], dict | None] = {}
+    failures = 0
     for job, detail in results:
         lookup[(job["ats_identifier"], job["external_id"])] = detail
+        if detail is None or not detail.get("descriptionHtml"):
+            failures += 1
+    if failures:
+        print(f"  enrichment: {failures}/{len(targets)} detail fetches incomplete "
+              f"(links/descriptions may be stale)")
 
     for job in jobs:
         key = (job.get("ats_identifier"), job.get("external_id"))

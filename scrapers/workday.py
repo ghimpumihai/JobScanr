@@ -33,6 +33,14 @@ class WorkdayClient(BaseClient):
         tenant, wd, site = identifier.split("|")
         return f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}", tenant
 
+    @staticmethod
+    def _public_url(identifier: str, external_path: str) -> str:
+        """Human-facing careers page, constructible straight from the listing —
+        never depend on the flaky detail fetch for links."""
+        tenant, wd, site = identifier.split("|")
+        path = external_path if external_path.startswith("/") else f"/{external_path}"
+        return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}"
+
     async def get_jobs(self, ats_identifier: str) -> list[dict]:
         base, _ = self._base(ats_identifier)
         headers = {"Accept": "application/json"}
@@ -63,7 +71,7 @@ class WorkdayClient(BaseClient):
                     # the detail fetch fills the real location later
                     "location": p.get("locationsText"),
                     "department": None,
-                    "url": f"{base}/job/{slug}",
+                    "url": self._public_url(ats_identifier, external_path),
                     "description": None,
                     "ats_identifier": ats_identifier,
                     "external_path": slug,

@@ -72,3 +72,14 @@ def test_workday_detail_updates_vague_location(monkeypatch):
     assert jobs[0]["location"] == "Munich, Germany"
     # API link must be replaced by the human-facing page
     assert jobs[0]["url"] == "https://acme.wd5.myworkdayjobs.com/AcmeCareers/job/Munich-Germany/slug_1"
+
+def test_workday_public_url_construction():
+    from scrapers.workday import WorkdayClient
+
+    ident = "cisco|wd5|Cisco_Careers"
+    assert WorkdayClient._public_url(
+        ident, "/job/Stockholm-Sweden/Foo_123") == \
+        "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers/job/Stockholm-Sweden/Foo_123"
+    assert WorkdayClient._public_url(
+        ident, "job/NoLeadingSlash_1") == \
+        "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers/job/NoLeadingSlash_1"
