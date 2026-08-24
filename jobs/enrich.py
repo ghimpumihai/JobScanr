@@ -21,16 +21,21 @@ CONCURRENCY = 8
 
 def passes_prefilter(job: dict, p: dict | None = None) -> bool:
     """Cheap gate mirroring matches_profile's first three checks: whether a
-    description-less listing is worth an enrichment request."""
+    description-less listing is worth an enrichment request.
+
+    Workday listings often carry vague locations ("2 Locations") that only
+    the detail fetch resolves — so the location gate is waived there."""
     p = p or PROFILE
     title = _normalize(job.get("title"))
     headline = f"{title} {_normalize(job.get('location'))}"
+    is_workday = "|" in (job.get("ats_identifier") or "")
 
     if not _any_word(p["titles"], title):
         return False
     if not _any_word(p.get("levels", []), title):
         return False
-    if not any(loc in headline for loc in map(_normalize, p["locations"])):
+    if not is_workday and not any(
+            loc in headline for loc in map(_normalize, p["locations"])):
         return False
     if _any_word(p.get("excluded_title_keywords", []), title):
         return False
@@ -41,14 +46,18 @@ def _needs_enrichment(job: dict) -> bool:
     return job.get("description") is None and job.get("ats_identifier") is not None
 
 
-async def _fetch_ashby_detail(client: httpx.AsyncClient, org: str, posting_id: str,
-                              timeout: float = 15.0) -> dict | None:
-    """Thin seam over AshbyClient.get_job_detail (kept for testability).
-    Retries live inside the client; returns None on any failure."""
-    from scrapers.ashby import AshbyClient
-
+async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
+    ident = job["ats_identifier"]
     try:
-        return await AshbyClient(client).get_job_detail(org, posting_id)
+        if "|" in ident:  # workday: "tenant|wdN|Site"
+            from scrapers.workday import WorkdayClient
+
+            return await WorkdayClient(client).get_job_detail(
+                ident, job["external_path"])
+        from scrapers.ashby import AshbyClient
+
+        return await AshbyClient(client).get_job_detail(
+            ident, job["external_id"])
     except Exception:
         return None
 
@@ -65,9 +74,7 @@ async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
 
     async def one(job: dict):
         async with sem:
-            return job, await _fetch_ashby_detail(
-                client, job["ats_identifier"], job["external_id"]
-            )
+            return job, await _fetch_detail(job, client)
 
     results = await asyncio.gather(*(one(t) for t in targets))
     lookup: dict[tuple[str, str], dict | None] = {}
@@ -76,15 +83,18 @@ async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
 
     for job in jobs:
         key = (job.get("ats_identifier"), job.get("external_id"))
-        if key in lookup and lookup[key]:
-            detail = lookup[key]
-            desc = detail.get("descriptionHtml")
-            if desc:
-                job["description"] = strip_html(desc)
-            if detail.get("applicationDeadline"):
-                job["application_deadline"] = detail["applicationDeadline"]
-            tiers = detail.get("compensationTiers") or []
-            summaries = [t.get("tierSummary") for t in tiers if t.get("tierSummary")]
-            if summaries:
-                job["compensation"] = "; ".join(summaries)
+        if key not in lookup or not lookup[key]:
+            continue
+        detail = lookup[key]
+        desc = detail.get("descriptionHtml")
+        if desc:
+            job["description"] = strip_html(desc)
+        if detail.get("applicationDeadline"):
+            job["application_deadline"] = detail["applicationDeadline"]
+        tiers = detail.get("compensationTiers") or []
+        summaries = [t.get("tierSummary") for t in tiers if t.get("tierSummary")]
+        if summaries:
+            job["compensation"] = "; ".join(summaries)
+        if detail.get("locationText"):
+            job["location"] = detail["locationText"]
     return jobs

@@ -1000,5 +1000,29 @@
     "career_url": "https://jobs.lever.co/sonarsource",
     "ats_platform": "lever",
     "ats_identifier": "sonarsource"
+  },
+  {
+    "company_name": "Zalando",
+    "career_url": "https://zalando.wd3.myworkdayjobs.com/ZalandoSiteWD",
+    "ats_platform": "workday",
+    "ats_identifier": "zalando|wd3|ZalandoSiteWD"
+  },
+  {
+    "company_name": "Adobe",
+    "career_url": "https://adobe.wd5.myworkdayjobs.com/external_experienced",
+    "ats_platform": "workday",
+    "ats_identifier": "adobe|wd5|external_experienced"
+  },
+  {
+    "company_name": "Intel",
+    "career_url": "https://intel.wd1.myworkdayjobs.com/External",
+    "ats_platform": "workday",
+    "ats_identifier": "intel|wd1|External"
+  },
+  {
+    "company_name": "Cisco",
+    "career_url": "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers",
+    "ats_platform": "workday",
+    "ats_identifier": "cisco|wd5|Cisco_Careers"
   }
 ]

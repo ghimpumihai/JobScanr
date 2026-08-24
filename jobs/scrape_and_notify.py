@@ -24,6 +24,7 @@ async def fetch_company(http, company: dict) -> list[dict]:
     for job in jobs:
         job["company_id"] = company["id"]
         job["company_name"] = company["name"]
+        job["ats_platform"] = company["ats_platform"]
     return jobs
 
 

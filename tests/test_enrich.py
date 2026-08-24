@@ -28,13 +28,13 @@ def test_enrich_fills_description_and_metadata(monkeypatch):
              "description": None, "ats_identifier": "acme",
              "external_id": "abc-123", "company_name": "Acme"}]
 
-    async def fake_fetch(client, org, posting_id, timeout=15.0):
-        assert (org, posting_id) == ("acme", "abc-123")
+    async def fake_fetch(job, client):
+        assert (job["ats_identifier"], job["external_id"]) == ("acme", "abc-123")
         return {"descriptionHtml": "<p>Great python team. Must be based in the US.</p>",
                 "applicationDeadline": "2026-09-30",
                 "compensationTiers": [{"tierSummary": "€50k–€60k"}]}
 
-    monkeypatch.setattr(enrich, "_fetch_ashby_detail", fake_fetch)
+    monkeypatch.setattr(enrich, "_fetch_detail", fake_fetch)
     asyncio.run(enrich.enrich_jobs(jobs, client=None))
 
     assert jobs[0]["description"] == "Great python team. Must be based in the US."
@@ -47,9 +47,24 @@ def test_enrich_silent_on_failure(monkeypatch):
              "description": None, "ats_identifier": "acme",
              "external_id": "x", "company_name": "Acme"}]
 
-    async def fake_fetch(client, org, posting_id, timeout=15.0):
+    async def fake_fetch(job, client):
         return None
 
-    monkeypatch.setattr(enrich, "_fetch_ashby_detail", fake_fetch)
+    monkeypatch.setattr(enrich, "_fetch_detail", fake_fetch)
     asyncio.run(enrich.enrich_jobs(jobs, client=None))
     assert jobs[0]["description"] is None
+
+
+def test_workday_detail_updates_vague_location(monkeypatch):
+    jobs = [{"title": "Junior Software Engineer", "location": "3 Locations",
+             "description": None, "ats_identifier": "acme|wd5|AcmeCareers",
+             "external_id": "slug_1", "external_path": "slug_1",
+             "company_name": "Acme"}]
+
+    async def fake_fetch(job, client):
+        return {"descriptionHtml": "<p>python</p>",
+                "locationText": "Munich, Germany"}
+
+    monkeypatch.setattr(enrich, "_fetch_detail", fake_fetch)
+    asyncio.run(enrich.enrich_jobs(jobs, client=None))
+    assert jobs[0]["location"] == "Munich, Germany"

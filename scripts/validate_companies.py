@@ -82,7 +82,21 @@ async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]
     return False, "throttled after retries"
 
 
+async def check_workday(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
+    tenant, wd, site = ident.split("|")
+    url = f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+    r = await client.post(url, json={"appliedFacets": {}, "limit": 20,
+                                     "offset": 0, "searchText": ""})
+    if r.status_code != 200:
+        return False, f"HTTP {r.status_code}"
+    total = r.json().get("total")
+    if total is None:
+        return False, "no total in response"
+    return True, f"{total} jobs"
+
+
 CHECKS = {
+    "workday": check_workday,
     "greenhouse": check_greenhouse,
     "lever": check_lever,
     "smartrecruiters": check_smartrecruiters,
