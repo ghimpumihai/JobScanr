@@ -20,6 +20,13 @@ if DB_ENV == "staging":
 else:
     DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
+# Staging runs deliver to the test inbox so experiments never spam the
+# real reader; falls back to the main address when unset.
+if DB_ENV == "staging":
+    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL", "")
+else:
+    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "")
+
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
 PROFILE = {

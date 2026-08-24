@@ -8,6 +8,7 @@ import os
 import smtplib
 from email.message import EmailMessage
 
+from config import DIGEST_EMAIL
 from jobs.digest import build_digest
 
 
@@ -35,13 +36,12 @@ def send_email_digest(jobs: list[dict]) -> str:
     port = int(os.environ.get("SMTP_PORT", "587"))
     user = os.environ["SMTP_USER"]
     password = os.environ["SMTP_PASS"]
-    to_addr = os.environ["DIGEST_EMAIL"]
 
     summary_title, plain_body = build_digest(jobs)
     msg = EmailMessage()
     msg["Subject"] = f"JobScanr: {summary_title}"
     msg["From"] = user
-    msg["To"] = to_addr
+    msg["To"] = DIGEST_EMAIL
     msg.set_content(plain_body)
     msg.add_alternative(
         f"<html><body>{build_html_digest(jobs)}</body></html>", subtype="html"
@@ -57,7 +57,9 @@ def send_email_digest(jobs: list[dict]) -> str:
 def email_configured() -> bool:
     """True when all SMTP settings are present; logs what's missing otherwise."""
     required = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "DIGEST_EMAIL")
-    missing = [k for k in required if not os.environ.get(k)]
+    missing = [k for k in required if not os.environ.get(k) and k != "DIGEST_EMAIL"]
+    if not DIGEST_EMAIL:
+        missing.append("DIGEST_EMAIL (or DIGEST_EMAIL_TEST for staging)")
     if missing:
         print(f"Email not configured, skipping (missing: {', '.join(missing)}). "
               f"Set them in .env / Actions secrets to receive digests.")
