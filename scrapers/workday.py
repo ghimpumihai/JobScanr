@@ -92,16 +92,23 @@ class WorkdayClient(BaseClient):
             body = r.json()
             info = body.get("jobPostingInfo") or {}
             desc = info.get("jobDescription")
-            location = info.get("location") or {}
-            additional = info.get("additionalLocations") or []
+
+            # Workday tenants serve inconsistent shapes: locations may be
+            # dicts with a descriptor or bare strings.
+            def descriptor(x):
+                if isinstance(x, dict):
+                    return x.get("descriptor")
+                return x if isinstance(x, str) else None
+
+            loc_parts = [descriptor(info.get("location"))] + [
+                descriptor(l) for l in (info.get("additionalLocations") or [])]
+            named = [x for x in loc_parts if x]
+
             out = {"descriptionHtml": desc}
             # The CXS /job/ path returns raw JSON; only externalUrl is the
             # human-facing page people can actually apply through.
             if info.get("externalUrl"):
                 out["externalUrl"] = info["externalUrl"]
-            loc_parts = [location.get("descriptor")] + [
-                l.get("descriptor") for l in additional if isinstance(l, dict)]
-            named = [x for x in loc_parts if x]
             if named:
                 out["locationText"] = ", ".join(named)
             return out

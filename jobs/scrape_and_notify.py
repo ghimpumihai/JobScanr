@@ -8,6 +8,7 @@ Usage:
 import argparse
 import asyncio
 import sys
+import time
 
 from config import PROFILE
 from db import queries
@@ -78,6 +79,10 @@ def main() -> int:
     from jobs.enrich import enrich_jobs, passes_prefilter
     candidates = [j for j in jobs if passes_prefilter(j)]
     if candidates:
+        # Detail endpoints throttle hardest right after a full scrape;
+        # let the window cool before enriching.
+        time.sleep(15)
+
         async def _enrich():
             async with make_http_client() as http:
                 return await enrich_jobs(candidates, http)

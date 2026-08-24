@@ -190,3 +190,16 @@ def test_compatible_descriptions_pass(profile, description):
 def test_none_fields_do_not_crash(profile):
     job = {"title": None, "location": None, "description": None}
     assert not matches_profile(job, profile)
+
+def test_evergreen_ghost_listings_rejected(profile):
+    profile = {**profile, "excluded_description_patterns": [
+        r"this (exact )?(role|posting|requisition) may not be",
+        r"advertis\w+ (a )?potential",
+    ]}
+    ghost = {"title": "Junior Software Engineer", "location": "Stockholm",
+             "description": "This posting is to advertise potential job opportunities. "
+                            "This exact role may not be open today."}
+    assert not matches_profile(ghost, profile)
+    real = {"title": "Junior Software Engineer", "location": "Stockholm",
+            "description": "Great growth potential in a real team. Start immediately."}
+    assert matches_profile(real, profile)
