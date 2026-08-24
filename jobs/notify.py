@@ -13,20 +13,25 @@ from jobs.digest import build_digest
 
 
 def build_html_digest(jobs: list[dict]) -> str:
-    rows = "".join(
-        f'<tr>'
-        f'<td><a href="{j["url"]}">{j["title"]}</a></td>'
-        f'<td>{j["company_name"]}</td>'
-        f'<td>{j.get("location") or ""}</td>'
-        f'</tr>'
-        for j in jobs
-    )
+    rows = ""
+    for j in jobs:
+        comp = f'<td>{j["compensation"]}</td>' if j.get("compensation") else "<td></td>"
+        deadline = (f'<td>⏳ {j["application_deadline"]}</td>'
+                    if j.get("application_deadline") else "<td></td>")
+        rows += (
+            f'<tr>'
+            f'<td><a href="{j["url"]}">{j["title"]}</a></td>'
+            f'<td>{j["company_name"]}</td>'
+            f'<td>{j.get("location") or ""}</td>'
+            f'{comp}{deadline}'
+            f'</tr>'
+        )
+    header = "<tr><th>Role</th><th>Company</th><th>Location</th><th>Salary</th><th>Deadline</th></tr>"
     return (
         f'<p><strong>{len(jobs)}</strong> new matching job'
         f'{"s" if len(jobs) != 1 else ""}:</p>'
         f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
-        f'<tr><th>Role</th><th>Company</th><th>Location</th></tr>'
-        f'{rows}</table>'
+        f'{header}{rows}</table>'
     )
 
 

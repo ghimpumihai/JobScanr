@@ -58,20 +58,25 @@ def upsert_jobs(jobs: list[dict]) -> list[dict]:
     """
     if not jobs:
         return []
-    cols = ["external_id", "company_id", "title", "location", "department", "url"]
-    arrays = {c: [j[c] for j in jobs] for c in cols}
+    cols = ["external_id", "company_id", "title", "location", "department", "url",
+            "compensation", "application_deadline"]
+    arrays = {c: [j.get(c) for j in jobs] for c in cols}
     sql = """
-        INSERT INTO job_postings AS jp (external_id, company_id, title, location, department, url)
+        INSERT INTO job_postings AS jp (external_id, company_id, title, location, department, url,
+                                        compensation, application_deadline)
         SELECT * FROM unnest(
             %(external_id)s::text[], %(company_id)s::int[], %(title)s::text[],
-            %(location)s::text[], %(department)s::text[], %(url)s::text[]
+            %(location)s::text[], %(department)s::text[], %(url)s::text[],
+            %(compensation)s::text[], %(application_deadline)s::text[]
         )
         ON CONFLICT (external_id, company_id) DO UPDATE
             SET last_seen_at = NOW(),
                 title = EXCLUDED.title,
                 location = EXCLUDED.location,
                 department = EXCLUDED.department,
-                url = EXCLUDED.url
+                url = EXCLUDED.url,
+                compensation = EXCLUDED.compensation,
+                application_deadline = EXCLUDED.application_deadline
         RETURNING jp.id, jp.external_id, jp.company_id, (xmax = 0) AS is_new
     """
     out: list[dict] = []

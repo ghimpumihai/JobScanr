@@ -58,6 +58,14 @@ PROFILE = {
         "site reliability", "devops", "qa", "test engineer",
         "embedded", "hardware",
     ],
+    # Ghost listings that advertise future possibilities instead of real
+    # jobs. Matched case-insensitively anywhere in the posting text.
+    "excluded_description_patterns": [
+        r"this (exact )?(role|posting|requisition) may not be",
+        r"advertis\w+ (a )?potential",
+        r"evergreen requisition",
+        r"pipeline requisition",
+    ],
     "locations": [
         "remote", "europe",
         "berlin", "amsterdam", "london", "paris", "barcelona", "stockholm",

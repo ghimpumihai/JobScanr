@@ -107,6 +107,9 @@ def matches_profile(job: dict, profile: dict | None = None) -> bool:
         return False
     if p.get("excluded_keywords") and _any_word(p["excluded_keywords"], text):
         return False
+    if any(re.search(pat, text, re.IGNORECASE)
+           for pat in p.get("excluded_description_patterns", [])):
+        return False
     if YEARS_EXPERIENCE_RE.search(text):
         return False
     if _foreign_country_restriction(job, p):

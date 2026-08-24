@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS job_postings (
     first_seen_at   TIMESTAMPTZ DEFAULT NOW(),
     last_seen_at    TIMESTAMPTZ DEFAULT NOW(),
     notified_at     TIMESTAMPTZ,     -- NULL = not yet included in a digest
+    compensation    TEXT,            -- e.g. "€50k–€60k" (Ashby provides it)
+    application_deadline TEXT,      -- raw string from the ATS when present
     UNIQUE (external_id, company_id)
 );
 

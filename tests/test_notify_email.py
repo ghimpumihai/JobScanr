@@ -26,3 +26,16 @@ def test_none_location_renders_empty():
     job["location"] = None
     html = build_html_digest([job])
     assert "<td></td>" in html
+
+def test_salary_and_deadline_columns_render_when_present():
+    job = {"title": "A", "company_name": "C", "location": "Berlin",
+           "url": "https://x/1", "compensation": "€50k–€60k",
+           "application_deadline": "2026-09-30"}
+    html = build_html_digest([job])
+    assert "<th>Salary</th>" in html and "<th>Deadline</th>" in html
+    assert "€50k–€60k" in html and "⏳ 2026-09-30" in html
+
+
+def test_missing_salary_renders_empty_cells():
+    html = build_html_digest([_job("B")])
+    assert "<td></td><td></td></tr>" in html
