@@ -53,3 +53,4 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+fixtures/google.html

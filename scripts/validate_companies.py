@@ -6,6 +6,7 @@ Exits 1 if more than 5% of companies fail.
 
 import asyncio
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -95,8 +96,21 @@ async def check_workday(client: httpx.AsyncClient, ident: str) -> tuple[bool, st
     return True, f"{total} jobs"
 
 
+async def check_google(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
+    first = ident.split("|")[0]
+    r = await client.get("https://www.google.com/about/careers/applications/jobs/results/",
+                         params={"location": first})
+    if r.status_code != 200:
+        return False, f"HTTP {r.status_code}"
+    n = len(re.findall(r"jobs/results/[0-9A-Za-z_-]+\?", r.text))
+    if n == 0:
+        return False, "no job cards in page"
+    return True, f"{n} cards on first page"
+
+
 CHECKS = {
     "workday": check_workday,
+    "google": check_google,
     "greenhouse": check_greenhouse,
     "lever": check_lever,
     "smartrecruiters": check_smartrecruiters,

@@ -10,6 +10,7 @@ Checks, in order of cheapness:
 """
 
 import re
+import unicodedata
 
 from config import PROFILE
 
@@ -47,7 +48,9 @@ _SENTENCE_SPLIT_RE = re.compile(r"[.!?\n]")
 
 
 def _normalize(text: str | None) -> str:
-    return re.sub(r"\s+", " ", (text or "")).lower()
+    """Lowercase, collapse whitespace, strip diacritics ('Zürich'->'zurich')."""
+    text = re.sub(r"\s+", " ", (text or "")).lower()
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
 def _any_word(tokens: list[str], text: str) -> bool:

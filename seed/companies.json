@@ -1096,5 +1096,11 @@
     "career_url": "https://sonos.wd1.myworkdayjobs.com/Sonos",
     "ats_platform": "workday",
     "ats_identifier": "sonos|wd1|Sonos"
+  },
+  {
+    "company_name": "Google",
+    "career_url": "https://www.google.com/about/careers/applications/jobs/results/",
+    "ats_platform": "google",
+    "ats_identifier": "Germany|Netherlands|United Kingdom|Ireland|Poland|Spain|Sweden|France"
   }
 ]
