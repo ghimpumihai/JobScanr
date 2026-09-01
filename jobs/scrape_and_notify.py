@@ -3,6 +3,7 @@
 Usage:
   python -m jobs.scrape_and_notify             # normal daily run
   python -m jobs.scrape_and_notify --dry-run   # fetch + match, no DB writes, no email
+  python -m jobs.scrape_and_notify --staging   # run against staging environment (.env.stage)
 """
 
 import argparse

@@ -4,8 +4,8 @@ Purely read-only: selects recent postings and emails them. Never inserts,
 updates, or deletes anything.
 
 Usage:
-  DB_ENV=staging python -m scripts.test_email --limit 3   # safe preview
-  python -m scripts.test_email                            # production rows
+  python -m scripts.test_email --staging --limit 3   # safe preview in staging
+  python -m scripts.test_email                       # production rows
 """
 
 import argparse

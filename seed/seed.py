@@ -1,6 +1,8 @@
 """Load seed/companies.json into the companies table (idempotent).
 
-Usage: python -m seed.seed
+Usage:
+  python -m seed.seed            # sync production database
+  python -m seed.seed --staging  # sync staging database (.env.stage)
 """
 
 import argparse
