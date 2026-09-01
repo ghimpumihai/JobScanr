@@ -35,10 +35,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Preview digest email.")
     parser.add_argument("--limit", type=int, default=5,
                         help="how many recent postings to include")
-    parser.add_argument("--env", "-e", type=str, default=None,
-                        help="environment name or file (e.g. stage, prod, .env.stage)")
-    parser.add_argument("--env-file", type=str, default=None,
-                        help="path to custom .env file")
+    parser.add_argument("--staging", action="store_true",
+                        help="use staging environment (.env.stage)")
     args = parser.parse_args()
 
     jobs = fetch_sample(args.limit)
