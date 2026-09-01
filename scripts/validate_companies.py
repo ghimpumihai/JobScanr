@@ -63,8 +63,9 @@ async def check_smartrecruiters(client: httpx.AsyncClient, ident: str) -> tuple[
 
 
 async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
-    # Ashby soft-throttles bursts with HTTP 200 + null data, so retry.
-    for attempt in range(3):
+    # Ashby soft-throttles bursts with HTTP 200 + null data or 429s, so retry.
+    delay = 1.0
+    for attempt in range(4):
         r = await client.post(
             "https://jobs.ashbyhq.com/api/non-user-graphql",
             json={
@@ -73,13 +74,18 @@ async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]
                 "query": ASHBY_QUERY,
             },
         )
+        if r.status_code == 429:
+            await asyncio.sleep(delay)
+            delay *= 2
+            continue
         if r.status_code != 200:
             return False, f"HTTP {r.status_code}"
         body = r.json()
         board = (body.get("data") or {}).get("jobBoard")
         if board is not None:
             return True, f"{len(board['jobPostings'])} jobs"
-        await asyncio.sleep(1.0 + attempt)
+        await asyncio.sleep(delay)
+        delay *= 2
     return False, "throttled after retries"
 
 

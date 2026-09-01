@@ -2,7 +2,7 @@
 
 # 🔭 JobScanr
 
-**A personal radar that watches 180+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
+**A personal radar that watches 350+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
 
 ![python](https://img.shields.io/badge/python-3.12-blue)
 ![platforms](https://img.shields.io/badge/ATS-Greenhouse%20%C2%B7%20Ashby%20%C2%B7%20Lever%20%C2%B7%20Workday-purple)
@@ -22,8 +22,8 @@ Once a day, a GitHub Actions cron wakes up and:
             ▼
 ┌───────────────────────┐      ┌──────────────────────────┐
 │ 1 · SCRAPE            │      │ 2 · ENRICH               │
-│ 183 career boards     │ ───► │ listings without         │
-│ across 4 ATS platforms│      │ descriptions get fetched │
+│ 357 career boards     │ ───► │ listings without         │
+│ across 5 ATS platforms│      │ descriptions get fetched │
 └───────────────────────┘      │ individually             │
                                └────────────┬─────────────┘
                                             ▼
@@ -59,12 +59,13 @@ Everything is one editable dict in [`config.py`](config.py). Start noisy, tune f
 
 | Platform | Companies | Notes |
 |----------|----------:|-------|
-| Greenhouse | 88 | clean public API |
-| Ashby | 66 | unauthenticated GraphQL, reverse-engineered from their SPA bundle |
-| Workday | 16 | the CXS API: POST-only, `limit` capped at exactly 20, throttles with silent empty pages |
-| Lever | 13 | simplest API of the four |
+| Greenhouse | 185 | clean public API |
+| Ashby | 108 | unauthenticated GraphQL, reverse-engineered from their SPA bundle |
+| Lever | 39 | simplest API of the four |
+| Workday | 24 | the CXS API: POST-only, `limit` capped at exactly 20, throttles with silent empty pages |
+| Google | 1 | custom HTML scraper |
 
-**~20,000 live postings scanned per run.** Companies are onboarded probe-first — nothing enters the list until its feed is verified alive. Dead feeds (companies migrate ATS constantly) are dropped or re-discovered automatically.
+**~40,000+ live postings scanned per run.** Companies are onboarded probe-first — nothing enters the list until its feed is verified alive. Dead feeds (companies migrate ATS constantly) are dropped or re-discovered automatically.
 
 ---
 
@@ -92,10 +93,18 @@ python -m jobs.scrape_and_notify --dry-run
 | | production | staging |
 |--|-----------|---------|
 | trigger | cron + dispatches from `main` | you, locally |
-| database | `DATABASE_URL` | `DB_ENV=staging` + `DATABASE_URL_STAGING` |
+| CLI flag | *(default)* | `--staging` |
+| env file | `.env` | `.env.stage` |
 | inbox | `DIGEST_EMAIL` | `DIGEST_EMAIL_TEST` |
 
 Experiments can never pollute production state or spam the real reader.
+
+```bash
+# Example staging runs:
+python -m seed.seed --staging
+python -m jobs.scrape_and_notify --staging --dry-run
+python -m scripts.test_email --staging --limit 3
+```
 
 ---
 

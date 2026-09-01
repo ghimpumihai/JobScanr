@@ -1,31 +1,25 @@
 """Central config: hardcoded user profile + env-driven secrets."""
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+BASE_DIR = Path(__file__).parent
 
-# DB routing: experiments and smoke tests should never write into the
-# production archive. Set DB_ENV=staging (plus DATABASE_URL_STAGING in
-# .env) to point every query at the staging project instead.
-DB_ENV = os.environ.get("DB_ENV", "production").strip().lower()
-if DB_ENV not in ("production", "staging"):
+# If '--staging' flag is passed (or DB_ENV=staging), use staging (.env.stage); otherwise prod (.env)
+if "--staging" in sys.argv or os.environ.get("DB_ENV") == "staging":
+    DB_ENV = "staging"
+    env_file = BASE_DIR / ".env.stage" if (BASE_DIR / ".env.stage").is_file() else BASE_DIR / ".env"
+    load_dotenv(env_file, override=True)
+    DATABASE_URL = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_STAGING") or "").strip()
+    DIGEST_EMAIL = (os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL") or "").strip()
+else:
     DB_ENV = "production"
-# strip(): GitHub secrets are easy to save with a stray trailing newline,
-# which psycopg happily turns into dbname="postgres\n".
-if DB_ENV == "staging":
-    DATABASE_URL = os.environ.get("DATABASE_URL_STAGING", "").strip()
-else:
+    load_dotenv(BASE_DIR / ".env", override=True)
     DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-
-# Staging runs deliver to the test inbox so experiments never spam the
-# real reader; falls back to the main address when unset.
-if DB_ENV == "staging":
-    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL", "")
-else:
-    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "")
+    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
 
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
