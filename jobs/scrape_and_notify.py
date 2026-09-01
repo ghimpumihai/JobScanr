@@ -31,16 +31,20 @@ async def fetch_company(http, company: dict) -> list[dict]:
 
 
 async def scrape_all(companies: list[dict]) -> tuple[list[dict], list[str]]:
-    # Ashby soft-throttles concurrent bursts, so it gets its own slow lane.
+    # Ashby throttles concurrent bursts, so it gets a dedicated paced lane.
     ashby_ids = {c["id"] for c in companies if c["ats_platform"] == "ashby"}
     async with make_http_client() as http:
         sem = asyncio.Semaphore(10)
-        ashby_sem = asyncio.Semaphore(3)
+        ashby_lock = asyncio.Lock()
 
         async def fetch(c):
-            gate = ashby_sem if c["id"] in ashby_ids else sem
-            async with gate:
-                return await fetch_company(http, c)
+            if c["id"] in ashby_ids:
+                async with ashby_lock:
+                    await asyncio.sleep(0.5)
+                    return await fetch_company(http, c)
+            else:
+                async with sem:
+                    return await fetch_company(http, c)
 
         results = await asyncio.gather(
             *(fetch(c) for c in companies),

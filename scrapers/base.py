@@ -54,18 +54,24 @@ class BaseClient(ABC):
         """
 
     async def request_with_retry(self, method: str, url: str, **kwargs):
-        delay = 0.5
+        delay = 1.0
         last_exc: Exception | None = None
-        for _ in range(MAX_RETRIES):
+        for attempt in range(5):
             try:
                 r = await self.http.request(method, url, **kwargs)
                 if r.status_code < 400:
                     return r
                 if r.status_code == 404:
                     r.raise_for_status()  # dead board: fail fast, no retry
-                if r.status_code != 429 and r.status_code < 500:
+                if r.status_code == 429:
+                    retry_after = r.headers.get("Retry-After")
+                    sleep_time = float(retry_after) if retry_after and retry_after.isdigit() else (delay * (attempt + 1))
+                    await asyncio.sleep(sleep_time)
+                    delay *= 1.5
+                    continue
+                if r.status_code < 500:
                     r.raise_for_status()
-            except httpx.HTTPStatusError as exc:
+            except httpx.HTTPStatusError:
                 raise
             except httpx.HTTPError as exc:  # network-level
                 last_exc = exc
