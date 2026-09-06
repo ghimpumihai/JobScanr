@@ -11,18 +11,27 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # "production" environment is branch-restricted to main in repo settings,
     # so the digest can never execute from dev or arbitrary dispatches.
     environment: production
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m jobs.scrape_and_notify
+      - name: Sync companies to database
+        run: python -m seed.seed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Scrape careers and notify
+        run: python -m jobs.scrape_and_notify --failures-file failures.json 2>&1 | tee scrape.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -30,3 +39,28 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
+
+      - name: Scan logs, verify replacement links, and push to main
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --sync-db
+          if [ -f fix_report.md ]; then
+            cat fix_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$(git status --porcelain seed/companies.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add seed/companies.json
+            {
+              echo "fix(seed): auto-recover broken ATS career links"
+              echo ""
+              cat fix_report.md
+            } > /tmp/commit_msg.txt
+            git commit -F /tmp/commit_msg.txt
+            git pull --rebase origin main
+            git push origin main
+          fi
+

@@ -30,7 +30,8 @@ async def fetch_company(http, company: dict) -> list[dict]:
     return jobs
 
 
-async def scrape_all(companies: list[dict]) -> tuple[list[dict], list[str]]:
+async def scrape_all(companies: list[dict],
+                       failure_details: list[dict] | None = None) -> tuple[list[dict], list[str]]:
     # Ashby throttles concurrent bursts, so it gets a dedicated paced lane.
     ashby_ids = {c["id"] for c in companies if c["ats_platform"] == "ashby"}
     async with make_http_client() as http:
@@ -55,6 +56,18 @@ async def scrape_all(companies: list[dict]) -> tuple[list[dict], list[str]]:
     for company, result in zip(companies, results):
         if isinstance(result, Exception):
             failures.append(f"{company['name']} ({company['ats_platform']}): {result}")
+            if failure_details is not None:
+                resp = getattr(result, "response", None)
+                status_code = getattr(resp, "status_code", None)
+                failure_details.append({
+                    "company_id": company.get("id"),
+                    "company_name": company.get("name"),
+                    "ats_platform": company.get("ats_platform"),
+                    "ats_identifier": company.get("ats_identifier"),
+                    "career_url": company.get("career_url"),
+                    "error": str(result),
+                    "status_code": status_code,
+                })
         else:
             all_jobs.extend(result)
     return all_jobs, failures
@@ -66,14 +79,24 @@ def main() -> int:
                         help="fetch + match, no DB writes, no email")
     parser.add_argument("--staging", action="store_true",
                         help="use staging environment (.env.stage)")
+    parser.add_argument("--failures-file", type=str, default=None,
+                        help="path to write structured failures JSON")
     args = parser.parse_args()
 
     companies = queries.get_all_companies()
     print(f"Scraping {len(companies)} companies...")
-    jobs, failures = asyncio.run(scrape_all(companies))
+    failure_details: list[dict] = []
+    jobs, failures = asyncio.run(scrape_all(companies, failure_details=failure_details))
 
     for failure in failures:
         print(f"  FAIL {failure}")
+
+    if args.failures_file and failure_details:
+        import json
+        from pathlib import Path
+        Path(args.failures_file).write_text(json.dumps(failure_details, indent=2))
+        print(f"Wrote {len(failure_details)} failure details to {args.failures_file}.")
+
     if len(failures) > len(companies) * FAILURE_RATE_LIMIT:
         print("Failure rate too high — aborting.")
         return 1
