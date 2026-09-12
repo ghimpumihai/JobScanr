@@ -1608,12 +1608,6 @@
     "ats_identifier": "singlestore"
   },
   {
-    "company_name": "Skyscanner",
-    "career_url": "https://boards.greenhouse.io/skyscanner",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "skyscanner"
-  },
-  {
     "company_name": "Smartly.io",
     "career_url": "https://job-boards.greenhouse.io/smartlyio",
     "ats_platform": "greenhouse",
