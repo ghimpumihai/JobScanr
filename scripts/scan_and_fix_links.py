@@ -205,6 +205,26 @@ def generate_candidate_identifiers(company: dict) -> list[str]:
     return list(dict.fromkeys(v for v in variants if v))
 
 
+def construct_career_url(platform: str, identifier: str) -> str:
+    """Construct canonical career board URL for a given ATS platform and identifier."""
+    if not platform or not identifier:
+        return ""
+    if platform == "ashby":
+        return f"https://jobs.ashbyhq.com/{identifier}"
+    if platform == "greenhouse":
+        return f"https://job-boards.greenhouse.io/{identifier}"
+    if platform == "lever":
+        return f"https://jobs.lever.co/{identifier}"
+    if platform == "workday" and "|" in identifier:
+        parts = identifier.split("|")
+        if len(parts) == 3:
+            tenant, wd, site = parts
+            return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}"
+    if platform == "smartrecruiters":
+        return f"https://careers.smartrecruiters.com/{identifier}"
+    return ""
+
+
 async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
     """Attempt recovery for a failed company. Returns resolution dict."""
     name = company.get("company_name") or company.get("name") or ""
@@ -267,6 +287,7 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
                 res["status"] = "recovered"
                 res["new_platform"] = plat
                 res["new_ident"] = ident
+                res["new_career_url"] = construct_career_url(plat, ident)
                 res["verification_detail"] = detail
                 res["reason"] = f"verified candidate {plat}/{ident}"
                 return res
@@ -281,6 +302,7 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
                 res["status"] = "recovered"
                 res["new_platform"] = "workday"
                 res["new_ident"] = wd_ident
+                res["new_career_url"] = construct_career_url("workday", wd_ident)
                 res["verification_detail"] = detail
                 res["reason"] = f"verified workday cluster ({wd_ident})"
                 return res
@@ -304,8 +326,9 @@ def apply_fixes_to_companies(companies: list[dict],
         if comp:
             comp["ats_platform"] = r["new_platform"]
             comp["ats_identifier"] = r["new_ident"]
-            if r.get("new_career_url"):
-                comp["career_url"] = r["new_career_url"]
+            new_url = r.get("new_career_url") or construct_career_url(r["new_platform"], r["new_ident"])
+            if new_url:
+                comp["career_url"] = new_url
             fixed_count += 1
     return companies, fixed_count
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from scripts.scan_and_fix_links import (
     apply_fixes_to_companies,
+    construct_career_url,
     fingerprint_url_and_html,
     generate_candidate_identifiers,
     generate_report_markdown,
@@ -194,4 +195,40 @@ async def test_recover_company_via_candidate_probing():
             assert res["status"] == "recovered"
             assert res["new_platform"] == "ashby"
             assert res["new_ident"] == "anysphere"
+            assert res["new_career_url"] == "https://jobs.ashbyhq.com/anysphere"
+
+
+def test_construct_career_url():
+    assert construct_career_url("ashby", "consensys") == "https://jobs.ashbyhq.com/consensys"
+    assert construct_career_url("greenhouse", "adahealth") == "https://job-boards.greenhouse.io/adahealth"
+    assert construct_career_url("lever", "agicap") == "https://jobs.lever.co/agicap"
+    assert construct_career_url("workday", "adobe|wd5|external_experienced") == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
+    assert construct_career_url("smartrecruiters", "foo") == "https://careers.smartrecruiters.com/foo"
+    assert construct_career_url("unknown", "bar") == ""
+
+
+@pytest.mark.anyio
+async def test_recover_company_via_workday_clusters():
+    client = AsyncMock()
+    comp = {
+        "company_name": "Adobe",
+        "ats_platform": "workday",
+        "ats_identifier": "adobe|wd1|external",
+        "career_url": "https://adobe.wd1.myworkdayjobs.com/external",
+    }
+
+    async def mock_verify(client, plat, ident):
+        if plat == "workday" and ident == "adobe|wd5|external_experienced":
+            return True, "25 jobs"
+        return False, "404"
+
+    with patch("scripts.scan_and_fix_links.verify_ats", side_effect=mock_verify):
+        with patch("scripts.scan_and_fix_links.probe_career_url", new=AsyncMock(return_value=None)):
+            with patch("scripts.scan_and_fix_links.probe_workday_clusters", new=AsyncMock(return_value="adobe|wd5|external_experienced")):
+                res = await recover_company(client, comp)
+                assert res["status"] == "recovered"
+                assert res["new_platform"] == "workday"
+                assert res["new_ident"] == "adobe|wd5|external_experienced"
+                assert res["new_career_url"] == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
+
 
