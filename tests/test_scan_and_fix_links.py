@@ -1,6 +1,6 @@
 import json
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from scripts.scan_and_fix_links import (
     apply_fixes_to_companies,
@@ -230,5 +230,50 @@ async def test_recover_company_via_workday_clusters():
                 assert res["new_platform"] == "workday"
                 assert res["new_ident"] == "adobe|wd5|external_experienced"
                 assert res["new_career_url"] == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
+
+
+@pytest.mark.anyio
+async def test_main_async_sends_alert_email(tmp_path):
+    from scripts.scan_and_fix_links import main_async
+    import argparse
+
+    companies_file = tmp_path / "companies.json"
+    companies_file.write_text(json.dumps([
+        {"company_name": "Postman", "ats_platform": "greenhouse", "ats_identifier": "postman", "career_url": "https://boards.greenhouse.io/postman"}
+    ]))
+    failures_file = tmp_path / "failures.json"
+    failures_file.write_text(json.dumps([
+        {"company_name": "Postman", "ats_platform": "greenhouse", "ats_identifier": "postman", "error": "404 Not Found"}
+    ]))
+    report_file = tmp_path / "report.md"
+
+    args = argparse.Namespace(
+        companies_file=str(companies_file),
+        failures_file=str(failures_file),
+        log_file=None,
+        report_file=str(report_file),
+        dry_run=False,
+        no_email=False,
+        sync_db=False,
+    )
+
+    mock_send = MagicMock()
+    with patch("scripts.scan_and_fix_links.recover_company", new=AsyncMock(return_value={
+        "company_name": "Postman",
+        "old_platform": "greenhouse",
+        "old_ident": "postman",
+        "career_url": "https://boards.greenhouse.io/postman",
+        "status": "unrecoverable",
+        "reason": "no live ATS coordinates",
+    })):
+        with patch("jobs.notify.fixer_email_configured", return_value=True):
+            with patch("jobs.notify.send_email_unrecoverable_failures", new=mock_send):
+                code = await main_async(args)
+                assert code == 0
+                assert mock_send.called
+                unrec_arg = mock_send.call_args[0][0]
+                assert len(unrec_arg) == 1
+                assert unrec_arg[0]["company_name"] == "Postman"
+
 
 

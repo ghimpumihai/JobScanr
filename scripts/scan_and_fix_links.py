@@ -236,6 +236,7 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
         "company_name": name,
         "old_platform": old_platform,
         "old_ident": old_ident,
+        "career_url": career_url,
         "status": "unresolved",
         "new_platform": None,
         "new_ident": None,
@@ -469,6 +470,19 @@ async def main_async(args) -> int:
     print(f"\nRepair report written to {args.report_file}:")
     print(report_md)
 
+    # 7. Notify via email if unrecoverable failures exist
+    unrecoverable = [r for r in recoveries if r["status"] == "unrecoverable"]
+    if unrecoverable and not args.dry_run and not args.no_email:
+        try:
+            from jobs.notify import fixer_email_configured, send_email_unrecoverable_failures
+            if fixer_email_configured():
+                mid = send_email_unrecoverable_failures(unrecoverable)
+                print(f"\nSent failure alert email ({mid}) for {len(unrecoverable)} unrecoverable link(s).")
+            else:
+                print(f"\nAlert email skipped: FIXER_EMAIL or SMTP not configured ({len(unrecoverable)} unrecoverable link(s)).")
+        except Exception as exc:
+            print(f"\nWarning: failed to send failure alert email: {exc}", file=sys.stderr)
+
     return 0
 
 
@@ -484,6 +498,8 @@ def main():
                         help="path to output markdown report")
     parser.add_argument("--dry-run", action="store_true",
                         help="discover and verify fixes without modifying companies.json")
+    parser.add_argument("--no-email", action="store_true",
+                        help="skip sending alert email for unrecoverable links")
     parser.add_argument("--sync-db", action="store_true",
                         help="sync database directly if connection available")
     args = parser.parse_args()

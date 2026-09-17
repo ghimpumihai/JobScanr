@@ -45,6 +45,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
+          FIXER_EMAIL: ${{ secrets.FIXER_EMAIL }}
         run: |
           python -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --sync-db
           if [ -f fix_report.md ]; then
