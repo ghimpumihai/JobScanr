@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     # "production" environment is branch-restricted to main in repo settings,
     # so the digest can never execute from dev or arbitrary dispatches.
     environment: production
@@ -40,11 +41,12 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
 
-      - name: Scan logs, verify replacement links, and push to main
+      - name: Scan logs, verify replacement links, and open pull request
         if: always()
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -57,16 +59,24 @@ jobs:
             cat fix_report.md >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -n "$(git status --porcelain seed/companies.json)" ]; then
+            DATE_TAG="$(date +%Y%m%d)"
+            BRANCH="bot/fix-links-${DATE_TAG}"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$BRANCH"
             git add seed/companies.json
             {
-              echo "fix(seed): auto-recover broken ATS career links"
+              echo "fix(seed): auto-recover broken ATS career links (${DATE_TAG})"
               echo ""
               cat fix_report.md
             } > /tmp/commit_msg.txt
             git commit -F /tmp/commit_msg.txt
-            git pull --rebase origin main
-            git push origin main
+            git push origin "$BRANCH"
+
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "fix(seed): auto-recover broken ATS career links (${DATE_TAG})" \
+              --body-file fix_report.md
           fi
 
