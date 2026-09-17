@@ -1392,12 +1392,6 @@
     "ats_identifier": "posthog"
   },
   {
-    "company_name": "Postman",
-    "career_url": "https://job-boards.greenhouse.io/postman",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "postman"
-  },
-  {
     "company_name": "Prisma",
     "career_url": "https://boards.greenhouse.io/prisma",
     "ats_platform": "greenhouse",
