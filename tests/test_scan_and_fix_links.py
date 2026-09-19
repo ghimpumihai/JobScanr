@@ -276,4 +276,104 @@ async def test_main_async_sends_alert_email(tmp_path):
                 assert unrec_arg[0]["company_name"] == "Postman"
 
 
+@pytest.mark.anyio
+async def test_main_async_ai_prunes_unsupported(tmp_path):
+    from scripts.scan_and_fix_links import main_async
+    import argparse
+
+    companies_file = tmp_path / "companies.json"
+    companies_file.write_text(json.dumps([
+        {"company_name": "DeadCorp", "ats_platform": "greenhouse", "ats_identifier": "deadcorp", "career_url": "https://boards.greenhouse.io/deadcorp"},
+        {"company_name": "KeepCorp", "ats_platform": "ashby", "ats_identifier": "keepcorp", "career_url": "https://jobs.ashbyhq.com/keepcorp"}
+    ]))
+    failures_file = tmp_path / "failures.json"
+    failures_file.write_text(json.dumps([
+        {"company_name": "DeadCorp", "ats_platform": "greenhouse", "ats_identifier": "deadcorp", "error": "404 Not Found"}
+    ]))
+    report_file = tmp_path / "report.md"
+
+    args = argparse.Namespace(
+        companies_file=str(companies_file),
+        failures_file=str(failures_file),
+        log_file=None,
+        report_file=str(report_file),
+        dry_run=False,
+        no_email=True,
+        sync_db=False,
+        ai=True,
+        prune=True,
+        max_remove_pct=0.5,
+    )
+
+    with patch("scripts.scan_and_fix_links.recover_company", new=AsyncMock(return_value={
+        "company_name": "DeadCorp",
+        "old_platform": "greenhouse",
+        "old_ident": "deadcorp",
+        "career_url": "https://boards.greenhouse.io/deadcorp",
+        "status": "unrecoverable",
+        "reason": "no live ATS coordinates",
+    })):
+        with patch("scripts.ai_fixer.triage_company_with_ai", new=AsyncMock(return_value={
+            "company_name": "DeadCorp",
+            "old_platform": "greenhouse",
+            "old_ident": "deadcorp",
+            "career_url": "https://boards.greenhouse.io/deadcorp",
+            "status": "remove",
+            "reason": "uses unsupported ATS (personio)",
+        })):
+            code = await main_async(args)
+            assert code == 0
+            # Check companies.json had DeadCorp pruned
+            remaining = json.loads(companies_file.read_text())
+            assert len(remaining) == 1
+            assert remaining[0]["company_name"] == "KeepCorp"
+
+            # Check report content
+            report_text = report_file.read_text()
+            assert "## Removed Companies" in report_text
+            assert "DeadCorp" in report_text
+            assert "personio" in report_text
+
+
+def test_generate_report_markdown_ai_and_removal():
+    recoveries = [
+        {
+            "company_name": "FixedDet",
+            "old_platform": "greenhouse",
+            "old_ident": "old1",
+            "new_platform": "lever",
+            "new_ident": "new1",
+            "status": "recovered",
+            "verification_detail": "5 jobs",
+            "reason": "slug candidate",
+        },
+        {
+            "company_name": "FixedAI",
+            "old_platform": "ashby",
+            "old_ident": "old2",
+            "new_platform": "workday",
+            "new_ident": "w1|wd2|site",
+            "status": "recovered_by_ai",
+            "verification_detail": "12 jobs",
+            "reason": "search hit",
+        },
+        {
+            "company_name": "PrunedComp",
+            "old_platform": "greenhouse",
+            "old_ident": "old3",
+            "status": "remove",
+            "reason": "uses Personio",
+        },
+    ]
+    report = generate_report_markdown(recoveries, 3)
+    assert "Successfully Verified & Fixed**: 2 (Deterministic: 1, AI: 1)" in report
+    assert "Pruned from Seed (No Supported ATS)**: 1" in report
+    assert "## Verified Fixes (Deterministic)" in report
+    assert "FixedDet" in report
+    assert "## Verified Fixes (AI-Discovered)" in report
+    assert "FixedAI" in report
+    assert "## Removed Companies (Pruned from `seed/companies.json`)" in report
+    assert "PrunedComp" in report
+
+
 

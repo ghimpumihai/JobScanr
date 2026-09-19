@@ -32,11 +32,12 @@ def main() -> int:
     try:
         from db.queries import get_connection
         with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT id, ats_platform, ats_identifier FROM companies")
-            to_delete = [
-                row[0] for row in cur.fetchall()
-                if (row[1], row[2]) not in valid_keys
-            ]
+            cur.execute("SELECT id, name, ats_platform, ats_identifier FROM companies")
+            to_delete = []
+            for row in cur.fetchall():
+                if (row[2], row[3]) not in valid_keys:
+                    to_delete.append(row[0])
+                    print(f"  Pruning obsolete company from DB: {row[1]} ({row[2]}/{row[3]})")
             if to_delete:
                 cur.execute("DELETE FROM companies WHERE id = ANY(%s)", (to_delete,))
                 print(f"Pruned {cur.rowcount} obsolete company row(s).")

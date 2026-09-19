@@ -313,6 +313,9 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
     return res
 
 
+import os
+
+
 def apply_fixes_to_companies(companies: list[dict],
                              recoveries: list[dict]) -> tuple[list[dict], int]:
     """Updates companies list in-place with verified recoveries. Returns (updated_list, count)."""
@@ -321,7 +324,7 @@ def apply_fixes_to_companies(companies: list[dict],
 
     fixed_count = 0
     for r in recoveries:
-        if r["status"] != "recovered":
+        if r["status"] not in ("recovered", "recovered_by_ai"):
             continue
         comp = by_ident.get((r["old_platform"], r["old_ident"])) or by_name.get(r["company_name"].lower())
         if comp:
@@ -334,32 +337,79 @@ def apply_fixes_to_companies(companies: list[dict],
     return companies, fixed_count
 
 
+def remove_companies_from_seed(companies: list[dict],
+                               to_remove: list[dict]) -> tuple[list[dict], int]:
+    """Removes obsolete companies from seed list. Returns (updated_list, count_removed)."""
+    remove_keys = {
+        (r["old_platform"], r["old_ident"]) for r in to_remove if r.get("old_platform") and r.get("old_ident")
+    }
+    remove_names = {r["company_name"].lower() for r in to_remove if r.get("company_name")}
+
+    filtered = []
+    removed_count = 0
+    for c in companies:
+        key = (c.get("ats_platform"), c.get("ats_identifier"))
+        name = (c.get("company_name") or "").lower()
+        if key in remove_keys or name in remove_names:
+            removed_count += 1
+        else:
+            filtered.append(c)
+    return filtered, removed_count
+
+
 def generate_report_markdown(recoveries: list[dict], failures_count: int) -> str:
-    recovered = [r for r in recoveries if r["status"] == "recovered"]
+    recovered_det = [r for r in recoveries if r["status"] == "recovered"]
+    recovered_ai = [r for r in recoveries if r["status"] == "recovered_by_ai"]
     transient = [r for r in recoveries if r["status"] == "transient"]
-    unrecoverable = [r for r in recoveries if r["status"] == "unrecoverable"]
+    removed = [r for r in recoveries if r["status"] == "remove"]
+    unrecoverable = [r for r in recoveries if r["status"] in ("unrecoverable", "unresolved")]
+
+    total_fixed = len(recovered_det) + len(recovered_ai)
 
     lines = [
-        "# Automated ATS Link Repair Report",
+        "# Automated ATS Link Repair & Triage Report",
         "",
         "## Summary",
         f"- **Scanned Failures / Errors**: {failures_count}",
-        f"- **Successfully Verified & Fixed**: {len(recovered)}",
+        f"- **Successfully Verified & Fixed**: {total_fixed} (Deterministic: {len(recovered_det)}, AI: {len(recovered_ai)})",
+        f"- **Pruned from Seed (No Supported ATS)**: {len(removed)}",
         f"- **Transient (Self-Resolved)**: {len(transient)}",
         f"- **Unrecoverable (Requires Manual Review)**: {len(unrecoverable)}",
         "",
     ]
 
-    if recovered:
-        lines.append("## Verified Fixes (Applied to `seed/companies.json`)")
+    if recovered_det:
+        lines.append("## Verified Fixes (Deterministic)")
         lines.append("| Company | Old ATS | New ATS | Verified Jobs | Note |")
         lines.append("|---|---|---|---|---|")
-        for r in recovered:
+        for r in recovered_det:
             old_str = f"{r['old_platform']}/{r['old_ident']}"
             new_str = f"{r['new_platform']}/{r['new_ident']}"
             detail = r.get("verification_detail") or "OK"
             reason = r.get("reason") or ""
             lines.append(f"| {r['company_name']} | `{old_str}` | `{new_str}` | {detail} | {reason} |")
+        lines.append("")
+
+    if recovered_ai:
+        lines.append("## Verified Fixes (AI-Discovered)")
+        lines.append("| Company | Old ATS | New ATS | Verified Jobs | AI Reasoning |")
+        lines.append("|---|---|---|---|---|")
+        for r in recovered_ai:
+            old_str = f"{r['old_platform']}/{r['old_ident']}"
+            new_str = f"{r['new_platform']}/{r['new_ident']}"
+            detail = r.get("verification_detail") or "OK"
+            reason = r.get("reason") or ""
+            lines.append(f"| {r['company_name']} | `{old_str}` | `{new_str}` | {detail} | {reason} |")
+        lines.append("")
+
+    if removed:
+        lines.append("## Removed Companies (Pruned from `seed/companies.json`)")
+        lines.append("| Company | Former ATS | Reason / Detection |")
+        lines.append("|---|---|---|")
+        for r in removed:
+            old_str = f"{r['old_platform']}/{r['old_ident']}"
+            reason = r.get("reason") or "No live board on supported ATS platforms"
+            lines.append(f"| {r['company_name']} | `{old_str}` | {reason} |")
         lines.append("")
 
     if unrecoverable:
@@ -445,15 +495,58 @@ async def main_async(args) -> int:
             return await recover_company(client, comp)
 
     async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True) as client:
-        recoveries = await asyncio.gather(*(bounded_recover(client, t) for t in targets))
+        recoveries = list(await asyncio.gather(*(bounded_recover(client, t) for t in targets)))
+
+        # 4b. AI Triage for unrecoverable targets
+        arg_ai = getattr(args, "ai", None)
+        arg_no_ai = getattr(args, "no_ai", False)
+        enable_ai = arg_ai if arg_ai is not None else (os.environ.get("GROQ_API_KEY") is not None and not arg_no_ai)
+        if enable_ai:
+            unresolved_indices = [
+                i for i, r in enumerate(recoveries) if r["status"] == "unrecoverable"
+            ]
+            if unresolved_indices:
+                print(f"\nInvoking AI triage for {len(unresolved_indices)} unresolved companies...")
+                from scripts.ai_fixer import triage_company_with_ai
+
+                ai_sem = asyncio.Semaphore(3)
+
+                async def bounded_ai(idx):
+                    async with ai_sem:
+                        target_comp = targets[idx]
+                        ai_res = await triage_company_with_ai(client, target_comp)
+                        return idx, ai_res
+
+                ai_results = await asyncio.gather(*(bounded_ai(i) for i in unresolved_indices))
+                for idx, ai_res in ai_results:
+                    if ai_res["status"] in ("recovered_by_ai", "remove"):
+                        recoveries[idx] = ai_res
+                    elif ai_res["status"] == "unresolved":
+                        recoveries[idx]["reason"] = ai_res.get("reason") or recoveries[idx].get("reason")
 
     # 5. Apply fixes to seed/companies.json
     fixed_count = 0
-    if not args.dry_run:
+    removed_count = 0
+    if not getattr(args, "dry_run", False):
         companies, fixed_count = apply_fixes_to_companies(companies, recoveries)
-        if fixed_count > 0:
+
+        if getattr(args, "prune", True):
+            to_remove = [r for r in recoveries if r["status"] == "remove"]
+            if to_remove:
+                max_pct = getattr(args, "max_remove_pct", 0.15)
+                max_removals = max(5, int(len(companies) * max_pct))
+                if len(to_remove) > max_removals:
+                    print(
+                        f"WARNING: Removal circuit breaker triggered ({len(to_remove)} > max {max_removals}). "
+                        f"Skipping pruning to prevent accidental mass deletion."
+                    )
+                else:
+                    companies, removed_count = remove_companies_from_seed(companies, to_remove)
+                    print(f"Successfully pruned {removed_count} company/companies with no supported ATS from seed.")
+
+        if fixed_count > 0 or removed_count > 0:
             companies_path.write_text(json.dumps(companies, indent=2) + "\n")
-            print(f"Successfully applied {fixed_count} verified fix(es) to {companies_path}.")
+            print(f"Updated {companies_path} ({fixed_count} fixed, {removed_count} pruned).")
 
             # Optional DB sync
             if args.sync_db:
@@ -461,6 +554,13 @@ async def main_async(args) -> int:
                     from db import queries
                     written = queries.upsert_companies(companies)
                     print(f"Synchronized {written} companies to database.")
+                    if removed_count > 0:
+                        prune_keys = [
+                            (r["old_platform"], r["old_ident"]) for r in recoveries if r["status"] == "remove"
+                            and r.get("old_platform") and r.get("old_ident")
+                        ]
+                        deleted = queries.delete_companies_batch(prune_keys)
+                        print(f"Deleted {deleted} pruned company row(s) from database.")
                 except Exception as db_exc:
                     print(f"Note: Database sync skipped/failed: {db_exc}")
 
@@ -471,7 +571,7 @@ async def main_async(args) -> int:
     print(report_md)
 
     # 7. Notify via email if unrecoverable failures exist
-    unrecoverable = [r for r in recoveries if r["status"] == "unrecoverable"]
+    unrecoverable = [r for r in recoveries if r["status"] in ("unrecoverable", "unresolved")]
     if unrecoverable and not args.dry_run and not args.no_email:
         try:
             from jobs.notify import fixer_email_configured, send_email_unrecoverable_failures
@@ -502,6 +602,16 @@ def main():
                         help="skip sending alert email for unrecoverable links")
     parser.add_argument("--sync-db", action="store_true",
                         help="sync database directly if connection available")
+    parser.add_argument("--ai", action="store_true", default=None,
+                        help="enable AI search & triage for unrecoverable links")
+    parser.add_argument("--no-ai", action="store_true",
+                        help="disable AI search & triage")
+    parser.add_argument("--prune", action="store_true", default=True,
+                        help="remove companies confirmed to have no supported ATS")
+    parser.add_argument("--no-prune", action="store_false", dest="prune",
+                        help="do not remove unsupported companies from seed")
+    parser.add_argument("--max-remove-pct", type=float, default=0.15,
+                        help="circuit breaker max fraction of companies removable in one run (default: 0.15)")
     args = parser.parse_args()
 
     sys.exit(asyncio.run(main_async(args)))

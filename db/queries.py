@@ -109,6 +109,28 @@ def mark_notified(job_ids: list[int]) -> None:
         )
 
 
+def delete_company(ats_platform: str, ats_identifier: str) -> int:
+    """Delete a single company by ATS platform and identifier. Cascades to job_postings."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            (ats_platform, ats_identifier),
+        )
+        return cur.rowcount
+
+
+def delete_companies_batch(identifiers: list[tuple[str, str]]) -> int:
+    """Delete multiple companies by (ats_platform, ats_identifier). Cascades to job_postings."""
+    if not identifiers:
+        return 0
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.executemany(
+            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            identifiers,
+        )
+        return cur.rowcount
+
+
 def counts() -> dict:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT (SELECT COUNT(*) FROM companies), (SELECT COUNT(*) FROM job_postings)")

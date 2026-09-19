@@ -53,8 +53,9 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
           FIXER_EMAIL: ${{ secrets.FIXER_EMAIL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          python -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --sync-db
+          python -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --ai --prune
           if [ -f fix_report.md ]; then
             cat fix_report.md >> "$GITHUB_STEP_SUMMARY"
           fi

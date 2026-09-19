@@ -1,3 +1,4 @@
 httpx
 psycopg[binary]
 python-dotenv
+ddgs

@@ -86,7 +86,7 @@ python -m seed.seed
 python -m jobs.scrape_and_notify --dry-run
 ```
 
-**Deploy:** add `DATABASE_URL`, `SMTP_*`, `DIGEST_EMAIL` as repository secrets → merge to `main` → the schedule takes over. That's the whole ops story.
+**Deploy:** add `DATABASE_URL`, `SMTP_*`, `DIGEST_EMAIL`, and optional `GROQ_API_KEY` (free, no credit card needed via [console.groq.com/keys](https://console.groq.com/keys) for AI-assisted self-healing link repair) as repository secrets → merge to `main` → the schedule takes over. That's the whole ops story.
 
 ### Environment isolation
 
@@ -108,10 +108,26 @@ python -m scripts.test_email --staging --limit 3
 
 ---
 
+## Self-Healing ATS Links & Automated Triage
+
+When career URLs break (e.g. companies migrate ATS, rename boards, or shut down):
+1. **Deterministic Probing**: Checks redirects, known aliases, and Workday clusters.
+2. **AI Discovery & Web Search (`ai_fixer.py`)**: For unrecoverable feeds, searches DuckDuckGo across supported ATS domains (`greenhouse`, `ashby`, `lever`, `workday`, `smartrecruiters`) and uses Groq AI (Llama 3.3 70B / GPT-OSS) to analyze candidate boards.
+3. **Live Verification Gate**: Candidate links must pass live ATS API validation (`verify_ats`) before acceptance.
+4. **Automated Pruning**: Companies confirmed to have migrated to unsupported platforms (Personio, BambooHR, Teamtailor, etc.) or defunct boards are queued for removal.
+5. **Strict PR Isolation**:
+   - The fixer commits changes **only to `seed/companies.json`** inside an automated Pull Request (`bot/fix-links-...`).
+   - The production database is **never touched** by the bot or PR branches.
+   - Once the PR is merged into `main`, GitHub Actions runs `python -m seed.seed` on `main` to update the database and cleanly cascade-delete pruned companies.
+
+---
+
 ## The toolbox
 
 ```
 scripts/
+  scan_and_fix_links.py    self-healing repair pipeline (deterministic + AI triage)
+  ai_fixer.py              DuckDuckGo web search + Groq LLM discovery & verification
   validate_companies.py    health-check every board (exit 1 if >5% dead)
   discover_workday.py      find Workday coordinates via robots.txt
   expansion_batch.py       probe candidate companies at scale
@@ -121,6 +137,56 @@ scripts/
 ```
 
 Adding a company: guess its identifiers → probe → verify → seed. Adding a Workday company whose careers URL you know takes one command.
+
+---
+
+## CLI Command & Flag Reference
+
+### `python -m scripts.scan_and_fix_links`
+Scans scrape failures, discovers & verifies working ATS replacements, triages unrecoverables with AI, and updates `seed/companies.json`.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--log-file <path>` | `None` | Path to scrape log output (e.g. `scrape.log`). |
+| `--failures-file <path>` | `None` | Path to structured failures JSON (e.g. `failures.json`). |
+| `--companies-file <path>` | `seed/companies.json` | Path to company seed JSON file. |
+| `--report-file <path>` | `fix_report.md` | Path to write the Markdown triage & repair summary report. |
+| `--dry-run` | `False` | Discover, verify, and triage fixes without modifying `seed/companies.json` or database. |
+| `--ai` | Auto (`True` if `GROQ_API_KEY` set) | Explicitly enable AI search & triage for unrecoverable links. |
+| `--no-ai` | `False` | Disable AI search & triage, only running deterministic heuristics. |
+| `--prune` | `True` | Remove companies verified to have no supported ATS from `seed/companies.json`. |
+| `--no-prune` | `False` | Keep unsupported/dead companies in `seed/companies.json`. |
+| `--max-remove-pct <float>` | `0.15` (15%) | Safety circuit breaker: aborts pruning if removal count exceeds this fraction of total companies. |
+| `--sync-db` | `False` | Directly synchronize `seed/companies.json` and delete pruned rows from the database. |
+| `--no-email` | `False` | Skip sending alert email for unrecoverable failures. |
+
+### `python -m jobs.scrape_and_notify`
+Daily scraping, profile matching, database persistence, and email digest pipeline.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` | `False` | Fetch and match jobs without writing to database or sending emails. |
+| `--staging` | `False` | Run against the staging database and environment (`.env.stage`). |
+| `--failures-file <path>` | `None` | Path to write structured failure details JSON for downstream self-healing. |
+
+### `python -m seed.seed`
+Seeds `companies` table from `seed/companies.json` and prunes obsolete rows.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--staging` | `False` | Sync companies to the staging database (`.env.stage`). |
+
+### `python -m scripts.test_email`
+Preview digest emails or failure alerts without modifying the database.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--limit <int>` | `5` | How many recent job postings to include in the preview digest. |
+| `--staging` | `False` | Read postings from the staging database (`.env.stage`). |
+| `--failures` | `False` | Send a preview of the unrecoverable link failures alert email. |
+
+### `python -m scripts.validate_companies`
+Validates that every company in `seed/companies.json` has an active public ATS feed. Exits with code 1 if >5% of feeds fail.
 
 ---
 
