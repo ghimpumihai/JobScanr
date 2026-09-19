@@ -15,13 +15,11 @@ if "--staging" in sys.argv or os.environ.get("DB_ENV") == "staging":
     load_dotenv(env_file, override=True)
     DATABASE_URL = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_STAGING") or "").strip()
     DIGEST_EMAIL = (os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL") or "").strip()
-    FIXER_EMAIL = (os.environ.get("FIXER_EMAIL_TEST") or os.environ.get("FIXER_EMAIL") or "").strip()
 else:
     DB_ENV = "production"
     load_dotenv(BASE_DIR / ".env", override=True)
     DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
     DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
-    FIXER_EMAIL = os.environ.get("FIXER_EMAIL", "").strip()
 
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).

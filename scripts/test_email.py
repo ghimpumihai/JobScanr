@@ -13,7 +13,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from config import DIGEST_EMAIL, FIXER_EMAIL  # noqa: E402
+from config import DIGEST_EMAIL  # noqa: E402
 
 
 def fetch_sample(limit: int) -> list[dict]:
@@ -37,25 +37,7 @@ def main() -> int:
                         help="how many recent postings to include")
     parser.add_argument("--staging", action="store_true",
                         help="use staging environment (.env.stage)")
-    parser.add_argument("--failures", action="store_true",
-                        help="preview broken ATS unrecoverable failures alert email")
     args = parser.parse_args()
-
-    if args.failures:
-        from jobs.notify import send_email_unrecoverable_failures
-        sample_unrecoverable = [
-            {
-                "company_name": "Postman",
-                "old_platform": "greenhouse",
-                "old_ident": "postman",
-                "career_url": "https://boards.greenhouse.io/postman",
-                "reason": "no live ATS coordinates could be verified",
-            }
-        ]
-        print(f"Previewing failures alert -> {FIXER_EMAIL}")
-        send_email_unrecoverable_failures(sample_unrecoverable)
-        print("Preview failures alert sent.")
-        return 0
 
     jobs = fetch_sample(args.limit)
     if not jobs:

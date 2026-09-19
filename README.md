@@ -158,7 +158,6 @@ Scans scrape failures, discovers & verifies working ATS replacements, triages un
 | `--no-prune` | `False` | Keep unsupported/dead companies in `seed/companies.json`. |
 | `--max-remove-pct <float>` | `0.15` (15%) | Safety circuit breaker: aborts pruning if removal count exceeds this fraction of total companies. |
 | `--sync-db` | `False` | Directly synchronize `seed/companies.json` and delete pruned rows from the database. |
-| `--no-email` | `False` | Skip sending alert email for unrecoverable failures. |
 
 ### `python -m jobs.scrape_and_notify`
 Daily scraping, profile matching, database persistence, and email digest pipeline.
@@ -177,13 +176,12 @@ Seeds `companies` table from `seed/companies.json` and prunes obsolete rows.
 | `--staging` | `False` | Sync companies to the staging database (`.env.stage`). |
 
 ### `python -m scripts.test_email`
-Preview digest emails or failure alerts without modifying the database.
+Preview digest emails without modifying the database.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--limit <int>` | `5` | How many recent job postings to include in the preview digest. |
 | `--staging` | `False` | Read postings from the staging database (`.env.stage`). |
-| `--failures` | `False` | Send a preview of the unrecoverable link failures alert email. |
 
 ### `python -m scripts.validate_companies`
 Validates that every company in `seed/companies.json` has an active public ATS feed. Exits with code 1 if >5% of feeds fail.
