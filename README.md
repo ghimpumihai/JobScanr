@@ -200,7 +200,7 @@ Things we learned the hard way, now encoded as tests:
 
 ## Not doing (yet)
 
-- Workday tenant auto-discovery at scale · salary columns in digests ·  LLM relevance scoring · a mobile app
+- Workday tenant auto-discovery at scale ·  LLM relevance scoring · a mobile app
 
 ---
 
