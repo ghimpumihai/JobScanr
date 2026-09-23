@@ -12,6 +12,12 @@
     "ats_identifier": "360learning"
   },
   {
+    "company_name": "Accesa",
+    "career_url": "https://careers.smartrecruiters.com/accesa",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "accesa"
+  },
+  {
     "company_name": "Ada Health",
     "career_url": "https://job-boards.greenhouse.io/adahealth",
     "ats_platform": "greenhouse",
@@ -124,6 +130,12 @@
     "career_url": "https://jobs.ashbyhq.com/anyscale",
     "ats_platform": "ashby",
     "ats_identifier": "anyscale"
+  },
+  {
+    "company_name": "Arista Networks",
+    "career_url": "https://jobs.smartrecruiters.com/AristaNetworks",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "AristaNetworks"
   },
   {
     "company_name": "Asana",
@@ -252,6 +264,12 @@
     "ats_identifier": "bolt"
   },
   {
+    "company_name": "Bosch Group",
+    "career_url": "https://jobs.smartrecruiters.com/BoschGroup",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "BoschGroup"
+  },
+  {
     "company_name": "Box",
     "career_url": "https://job-boards.greenhouse.io/boxinc",
     "ats_platform": "greenhouse",
@@ -330,6 +348,12 @@
     "ats_identifier": "carta"
   },
   {
+    "company_name": "CD Projekt RED",
+    "career_url": "https://jobs.smartrecruiters.com/CDProjektRED",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "CDProjektRED"
+  },
+  {
     "company_name": "Celonis",
     "career_url": "https://job-boards.greenhouse.io/celonis",
     "ats_platform": "greenhouse",
@@ -358,6 +382,12 @@
     "career_url": "https://jobs.ashbyhq.com/choco",
     "ats_platform": "ashby",
     "ats_identifier": "choco"
+  },
+  {
+    "company_name": "Cint",
+    "career_url": "https://jobs.smartrecruiters.com/Cint",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Cint"
   },
   {
     "company_name": "CircleCI",
@@ -552,6 +582,12 @@
     "ats_identifier": "deliveroo"
   },
   {
+    "company_name": "Delivery Hero",
+    "career_url": "https://jobs.smartrecruiters.com/DeliveryHero",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "DeliveryHero"
+  },
+  {
     "company_name": "Depop",
     "career_url": "https://etsy.wd5.myworkdayjobs.com/Depop_Careers",
     "ats_platform": "workday",
@@ -562,6 +598,12 @@
     "career_url": "https://boards.greenhouse.io/descript",
     "ats_platform": "greenhouse",
     "ats_identifier": "descript"
+  },
+  {
+    "company_name": "Devoteam",
+    "career_url": "https://jobs.smartrecruiters.com/Devoteam",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Devoteam"
   },
   {
     "company_name": "Dfinity",
@@ -630,6 +672,12 @@
     "ats_identifier": "dust"
   },
   {
+    "company_name": "EEU Software",
+    "career_url": "https://careers.smartrecruiters.com/eeusoftware",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "eeusoftware"
+  },
+  {
     "company_name": "Eeze",
     "career_url": "https://careers.eeze.com/jobs",
     "ats_platform": "teamtailor",
@@ -646,6 +694,12 @@
     "career_url": "https://jobs.ashbyhq.com/elevenlabs",
     "ats_platform": "ashby",
     "ats_identifier": "elevenlabs"
+  },
+  {
+    "company_name": "Endava",
+    "career_url": "https://careers.smartrecruiters.com/endava",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "endava"
   },
   {
     "company_name": "Enpal",
@@ -670,6 +724,12 @@
     "career_url": "https://everymatrix.teamtailor.com/jobs",
     "ats_platform": "teamtailor",
     "ats_identifier": "everymatrix"
+  },
+  {
+    "company_name": "Evolution",
+    "career_url": "https://jobs.smartrecruiters.com/Evolution",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Evolution"
   },
   {
     "company_name": "Factory",
@@ -768,10 +828,22 @@
     "ats_identifier": "freenow"
   },
   {
+    "company_name": "Frequentis",
+    "career_url": "https://jobs.smartrecruiters.com/Frequentis",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Frequentis"
+  },
+  {
     "company_name": "Front",
     "career_url": "https://jobs.ashbyhq.com/frontapp",
     "ats_platform": "ashby",
     "ats_identifier": "frontapp"
+  },
+  {
+    "company_name": "Gameloft",
+    "career_url": "https://jobs.smartrecruiters.com/Gameloft",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Gameloft"
   },
   {
     "company_name": "GetFrankly",
@@ -910,6 +982,12 @@
     "career_url": "https://jobs.ashbyhq.com/inngest",
     "ats_platform": "ashby",
     "ats_identifier": "inngest"
+  },
+  {
+    "company_name": "InPost",
+    "career_url": "https://jobs.smartrecruiters.com/InPost",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "InPost"
   },
   {
     "company_name": "Instacart",
@@ -1110,6 +1188,18 @@
     "ats_identifier": "mirakl"
   },
   {
+    "company_name": "Mirantis",
+    "career_url": "https://jobs.smartrecruiters.com/Mirantis",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Mirantis"
+  },
+  {
+    "company_name": "Miratech",
+    "career_url": "https://careers.smartrecruiters.com/miratechgroup",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "miratechgroup"
+  },
+  {
     "company_name": "Miro",
     "career_url": "https://jobs.ashbyhq.com/miro",
     "ats_platform": "ashby",
@@ -1188,6 +1278,12 @@
     "ats_identifier": "n8n"
   },
   {
+    "company_name": "Nagarro",
+    "career_url": "https://jobs.smartrecruiters.com/Nagarro1",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Nagarro1"
+  },
+  {
     "company_name": "Neo4j",
     "career_url": "https://boards.greenhouse.io/neo4j",
     "ats_platform": "greenhouse",
@@ -1198,6 +1294,12 @@
     "career_url": "https://jobs.ashbyhq.com/neon",
     "ats_platform": "ashby",
     "ats_identifier": "neon"
+  },
+  {
+    "company_name": "Netcompany",
+    "career_url": "https://jobs.smartrecruiters.com/netcompany1",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "netcompany1"
   },
   {
     "company_name": "Netlify",
@@ -1422,6 +1524,12 @@
     "ats_identifier": "planetscale"
   },
   {
+    "company_name": "Playtech",
+    "career_url": "https://careers.smartrecruiters.com/playtech",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "playtech"
+  },
+  {
     "company_name": "Pleo",
     "career_url": "https://jobs.ashbyhq.com/pleo",
     "ats_platform": "ashby",
@@ -1578,6 +1686,12 @@
     "ats_identifier": "roblox"
   },
   {
+    "company_name": "Romanian Software",
+    "career_url": "https://jobs.smartrecruiters.com/RomanianSoftware",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "RomanianSoftware"
+  },
+  {
     "company_name": "RunPod",
     "career_url": "https://jobs.ashbyhq.com/runpod",
     "ats_platform": "ashby",
@@ -1614,6 +1728,12 @@
     "ats_identifier": "satispay"
   },
   {
+    "company_name": "Scalable Capital",
+    "career_url": "https://jobs.smartrecruiters.com/ScalableGmbH",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "ScalableGmbH"
+  },
+  {
     "company_name": "Scale AI",
     "career_url": "https://job-boards.greenhouse.io/scaleai",
     "ats_platform": "greenhouse",
@@ -1624,6 +1744,12 @@
     "career_url": "https://boards.greenhouse.io/scandit",
     "ats_platform": "greenhouse",
     "ats_identifier": "scandit"
+  },
+  {
+    "company_name": "Sectigo",
+    "career_url": "https://jobs.smartrecruiters.com/Sectigo",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Sectigo"
   },
   {
     "company_name": "Secureframe",
@@ -1726,6 +1852,12 @@
     "career_url": "https://jobs.ashbyhq.com/spendesk",
     "ats_platform": "ashby",
     "ats_identifier": "spendesk"
+  },
+  {
+    "company_name": "Sportradar",
+    "career_url": "https://jobs.smartrecruiters.com/Sportradar",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Sportradar"
   },
   {
     "company_name": "Spotify",
@@ -1938,6 +2070,12 @@
     "ats_identifier": "transcendinc"
   },
   {
+    "company_name": "Triboot",
+    "career_url": "https://jobs.smartrecruiters.com/Triboot",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Triboot"
+  },
+  {
     "company_name": "Trigger.dev",
     "career_url": "https://jobs.ashbyhq.com/triggerdev",
     "ats_platform": "ashby",
@@ -2089,9 +2227,9 @@
   },
   {
     "company_name": "Wise",
-    "career_url": "https://job-boards.greenhouse.io/wise",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "wise"
+    "career_url": "https://jobs.smartrecruiters.com/Wise",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Wise"
   },
   {
     "company_name": "Wiz",

@@ -7,6 +7,7 @@ from scrapers.lever import LeverClient
 from scrapers.workday import WorkdayClient
 from scrapers.google import GoogleClient
 from scrapers.teamtailor import TeamtailorClient
+from scrapers.smartrecruiters import SmartRecruitersClient
 
 CLIENTS: dict[str, type[BaseClient]] = {
     "workday": WorkdayClient,
@@ -15,6 +16,7 @@ CLIENTS: dict[str, type[BaseClient]] = {
     "ashby": AshbyClient,
     "lever": LeverClient,
     "teamtailor": TeamtailorClient,
+    "smartrecruiters": SmartRecruitersClient,
 }
 
 

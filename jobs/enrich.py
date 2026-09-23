@@ -108,7 +108,13 @@ async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
     # on this succeeding (workday builds those from the listing itself).
     for attempt in range(3):
         try:
-            if "|" in ident:  # workday: "tenant|wdN|Site"
+            platform = job.get("ats_platform")
+            if platform == "smartrecruiters":
+                from scrapers.smartrecruiters import SmartRecruitersClient
+
+                detail = await SmartRecruitersClient(client).get_job_detail(
+                    ident, job["external_id"])
+            elif "|" in ident:  # workday: "tenant|wdN|Site"
                 from scrapers.workday import WorkdayClient
 
                 detail = await WorkdayClient(client).get_job_detail(
