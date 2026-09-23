@@ -1627,9 +1627,9 @@
   },
   {
     "company_name": "Snyk",
-    "career_url": "https://jobs.ashbyhq.com/snyk",
-    "ats_platform": "ashby",
-    "ats_identifier": "snyk"
+    "career_url": "https://snyk.wd103.myworkdayjobs.com/External",
+    "ats_platform": "workday",
+    "ats_identifier": "snyk|wd103|External"
   },
   {
     "company_name": "Solaris",
