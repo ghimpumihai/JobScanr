@@ -114,6 +114,20 @@ async def check_google(client: httpx.AsyncClient, ident: str) -> tuple[bool, str
     return True, f"{n} cards on first page"
 
 
+async def check_teamtailor(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
+    if ident.startswith("http://") or ident.startswith("https://"):
+        url = f"{ident.rstrip('/')}/jobs.json"
+    else:
+        url = f"https://{ident}.teamtailor.com/jobs.json"
+    r = await client.get(url)
+    if r.status_code != 200:
+        return False, f"HTTP {r.status_code}"
+    items = r.json().get("items")
+    if not isinstance(items, list):
+        return False, "no 'items' array in response"
+    return True, f"{len(items)} jobs"
+
+
 CHECKS = {
     "workday": check_workday,
     "google": check_google,
@@ -121,6 +135,7 @@ CHECKS = {
     "lever": check_lever,
     "smartrecruiters": check_smartrecruiters,
     "ashby": check_ashby,
+    "teamtailor": check_teamtailor,
 }
 
 

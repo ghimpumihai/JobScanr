@@ -25,10 +25,11 @@ SIGNATURES = [
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-zA-Z0-9_.-]+)")),
     ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([a-zA-Z0-9_-]+)")),
     ("workable", re.compile(r"(?:apply|jobs)\.workable\.com/([a-zA-Z0-9_-]+)")),
+    ("teamtailor", re.compile(r"([a-zA-Z0-9_-]+)\.teamtailor\.com")),
 ]
 
 DROP_SIGNATURES = [
-    "myworkdayjobs.com", "workday", "teamtailor.com", "rippling",
+    "myworkdayjobs.com", "workday", "rippling",
     "pinpoint", "recruitee", "personio", "bamboohr", "jazzhr",
     "smartrecruiters.com", "eightfold.ai", "phenompeople", "icims",
     "successfactors", "oraclecloud.com", "greenhouse.io/embed",

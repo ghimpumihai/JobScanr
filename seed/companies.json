@@ -192,6 +192,12 @@
     "ats_identifier": "beamery"
   },
   {
+    "company_name": "BearingPoint Romania",
+    "career_url": "https://bearingpoint.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "bearingpoint"
+  },
+  {
     "company_name": "Bird",
     "career_url": "https://boards.greenhouse.io/bird",
     "ats_platform": "greenhouse",
@@ -232,6 +238,12 @@
     "career_url": "https://boards.greenhouse.io/block",
     "ats_platform": "greenhouse",
     "ats_identifier": "block"
+  },
+  {
+    "company_name": "BMW TechWorks Romania",
+    "career_url": "https://bmwtechworks.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "bmwtechworks"
   },
   {
     "company_name": "Bolt",
@@ -618,6 +630,12 @@
     "ats_identifier": "dust"
   },
   {
+    "company_name": "Eeze",
+    "career_url": "https://careers.eeze.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "https://careers.eeze.com"
+  },
+  {
     "company_name": "Elastic",
     "career_url": "https://job-boards.greenhouse.io/elastic",
     "ats_platform": "greenhouse",
@@ -646,6 +664,12 @@
     "career_url": "https://etsy.wd5.myworkdayjobs.com/Etsy_Careers",
     "ats_platform": "workday",
     "ats_identifier": "etsy|wd5|Etsy_Careers"
+  },
+  {
+    "company_name": "EveryMatrix",
+    "career_url": "https://everymatrix.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "everymatrix"
   },
   {
     "company_name": "Factory",
@@ -720,6 +744,12 @@
     "ats_identifier": "flowtraders"
   },
   {
+    "company_name": "Fonn Group",
+    "career_url": "https://fonngroup.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "fonngroup"
+  },
+  {
     "company_name": "Form3",
     "career_url": "https://job-boards.greenhouse.io/form3",
     "ats_platform": "greenhouse",
@@ -742,6 +772,12 @@
     "career_url": "https://jobs.ashbyhq.com/frontapp",
     "ats_platform": "ashby",
     "ats_identifier": "frontapp"
+  },
+  {
+    "company_name": "GetFrankly",
+    "career_url": "https://getfrankly.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "getfrankly"
   },
   {
     "company_name": "GetYourGuide",
@@ -846,6 +882,12 @@
     "ats_identifier": "honeycomb"
   },
   {
+    "company_name": "Horse Powertrain",
+    "career_url": "https://horse.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "horse"
+  },
+  {
     "company_name": "HPE",
     "career_url": "https://hpe.wd5.myworkdayjobs.com/Jobsathpe",
     "ats_platform": "workday",
@@ -886,6 +928,12 @@
     "career_url": "https://job-boards.greenhouse.io/intercom",
     "ats_platform": "greenhouse",
     "ats_identifier": "intercom"
+  },
+  {
+    "company_name": "InterVenture",
+    "career_url": "https://interventure.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "interventure"
   },
   {
     "company_name": "Jane Street",
@@ -1452,6 +1500,12 @@
     "ats_identifier": "rampnetwork"
   },
   {
+    "company_name": "RebelDot",
+    "career_url": "https://rebeldot.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "rebeldot"
+  },
+  {
     "company_name": "Reddit",
     "career_url": "https://job-boards.greenhouse.io/reddit",
     "ats_platform": "greenhouse",
@@ -1594,6 +1648,12 @@
     "career_url": "https://job-boards.greenhouse.io/shifttechnology",
     "ats_platform": "greenhouse",
     "ats_identifier": "shifttechnology"
+  },
+  {
+    "company_name": "Signicat",
+    "career_url": "https://signicat.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "signicat"
   },
   {
     "company_name": "SingleStore",
@@ -2104,6 +2164,12 @@
     "career_url": "https://jobs.ashbyhq.com/zilch",
     "ats_platform": "ashby",
     "ats_identifier": "zilch"
+  },
+  {
+    "company_name": "Zitec",
+    "career_url": "https://zitec.teamtailor.com/jobs",
+    "ats_platform": "teamtailor",
+    "ats_identifier": "zitec"
   },
   {
     "company_name": "Zoox",

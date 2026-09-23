@@ -19,6 +19,7 @@ from scripts.validate_companies import (
     check_greenhouse,
     check_lever,
     check_smartrecruiters,
+    check_teamtailor,
     check_workday,
 )
 
@@ -31,6 +32,7 @@ CHECKS = {
     "workday": check_workday,
     "smartrecruiters": check_smartrecruiters,
     "google": check_google,
+    "teamtailor": check_teamtailor,
 }
 
 SIGNATURES = [
@@ -44,12 +46,12 @@ SIGNATURES = [
         ),
     ),
     ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([a-zA-Z0-9_-]+)")),
+    ("teamtailor", re.compile(r"([a-zA-Z0-9_-]+)\.teamtailor\.com")),
 ]
 
 UNSUPPORTED_ATS_KEYWORDS = [
     "personio",
     "bamboohr",
-    "teamtailor",
     "workable",
     "recruitee",
     "pinpoint",

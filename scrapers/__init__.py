@@ -6,6 +6,7 @@ from scrapers.greenhouse import GreenhouseClient
 from scrapers.lever import LeverClient
 from scrapers.workday import WorkdayClient
 from scrapers.google import GoogleClient
+from scrapers.teamtailor import TeamtailorClient
 
 CLIENTS: dict[str, type[BaseClient]] = {
     "workday": WorkdayClient,
@@ -13,6 +14,7 @@ CLIENTS: dict[str, type[BaseClient]] = {
     "greenhouse": GreenhouseClient,
     "ashby": AshbyClient,
     "lever": LeverClient,
+    "teamtailor": TeamtailorClient,
 }
 
 
