@@ -2,10 +2,10 @@
 
 # 🔭 JobScanr
 
-**A personal radar that watches 350+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
+**A personal radar that watches 380+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
 
 ![python](https://img.shields.io/badge/python-3.12-blue)
-![platforms](https://img.shields.io/badge/ATS-Greenhouse%20%C2%B7%20Ashby%20%C2%B7%20Lever%20%C2%B7%20Workday-purple)
+![platforms](https://img.shields.io/badge/ATS-Greenhouse%20%C2%B7%20Ashby%20%C2%B7%20Lever%20%C2%B7%20Workday%20%C2%B7%20SmartRecruiters%20%C2%B7%20Teamtailor-purple)
 ![cost](https://img.shields.io/badge/cost-%240%2Fmonth-success)
 
 </div>
@@ -22,8 +22,8 @@ Once a day, a GitHub Actions cron wakes up and:
             ▼
 ┌───────────────────────┐      ┌──────────────────────────┐
 │ 1 · SCRAPE            │      │ 2 · ENRICH               │
-│ 357 career boards     │ ───► │ listings without         │
-│ across 5 ATS platforms│      │ descriptions get fetched │
+│ 388 career boards     │ ───► │ listings without         │
+│ across 7 ATS platforms│      │ descriptions get fetched │
 └───────────────────────┘      │ individually             │
                                └────────────┬─────────────┘
                                             ▼
@@ -59,13 +59,15 @@ Everything is one editable dict in [`config.py`](config.py). Start noisy, tune f
 
 | Platform | Companies | Notes |
 |----------|----------:|-------|
-| Greenhouse | 185 | clean public API |
-| Ashby | 108 | unauthenticated GraphQL, reverse-engineered from their SPA bundle |
-| Lever | 39 | simplest API of the four |
-| Workday | 24 | the CXS API: POST-only, `limit` capped at exactly 20, throttles with silent empty pages |
+| Greenhouse | 180 | clean public API |
+| Ashby | 107 | unauthenticated GraphQL, reverse-engineered from their SPA bundle |
+| Lever | 40 | simplest API of the four |
+| Workday | 25 | the CXS API: POST-only, `limit` capped at exactly 20, throttles with silent empty pages |
+| SmartRecruiters | 24 | public REST API (`/v1/companies/{id}/postings`) with on-demand description enrichment |
+| Teamtailor | 11 | public unauthenticated JSON Feed v1.1 (`/jobs.json`) with multi-city location parsing |
 | Google | 1 | custom HTML scraper |
 
-**~40,000+ live postings scanned per run.** Companies are onboarded probe-first — nothing enters the list until its feed is verified alive. Dead feeds (companies migrate ATS constantly) are dropped or re-discovered automatically.
+**~50,000+ live postings scanned per run.** Companies are onboarded probe-first — nothing enters the list until its feed is verified alive. Dead feeds (companies migrate ATS constantly) are dropped or re-discovered automatically.
 
 ---
 
@@ -90,14 +92,15 @@ python -m jobs.scrape_and_notify --dry-run
 
 ### Environment isolation
 
-| | production | staging |
-|--|-----------|---------|
-| trigger | cron + dispatches from `main` | you, locally |
-| CLI flag | *(default)* | `--staging` |
-| env file | `.env` | `.env.stage` |
-| inbox | `DIGEST_EMAIL` | `DIGEST_EMAIL_TEST` |
+| | production | staging | sync-db |
+|--|-----------|---------|---------|
+| trigger | cron (06:00 UTC) + dispatches from `main` | you, locally | push / merge to `main` |
+| scope | live scrape & daily email digest | safe offline testing | company catalog DB sync |
+| CLI flag | *(default)* | `--staging` | `python -m seed.seed` |
+| env file | `.env` | `.env.stage` | `.env` |
+| inbox | `DIGEST_EMAIL` | `DIGEST_EMAIL_TEST` | N/A |
 
-Experiments can never pollute production state or spam the real reader.
+Experiments can never pollute production state or spam the real reader. GitHub Actions also cleanly isolates **`sync-db`** deployments (company catalog changes) from **`production`** deployments (daily scraping and email delivery).
 
 ```bash
 # Example staging runs:
@@ -112,13 +115,13 @@ python -m scripts.test_email --staging --limit 3
 
 When career URLs break (e.g. companies migrate ATS, rename boards, or shut down):
 1. **Deterministic Probing**: Checks redirects, known aliases, and Workday clusters.
-2. **AI Discovery & Web Search (`ai_fixer.py`)**: For unrecoverable feeds, searches DuckDuckGo across supported ATS domains (`greenhouse`, `ashby`, `lever`, `workday`, `smartrecruiters`) and uses Groq AI (Llama 3.3 70B / GPT-OSS) to analyze candidate boards.
+2. **AI Discovery & Web Search (`ai_fixer.py`)**: For unrecoverable feeds, searches DuckDuckGo across supported ATS domains (`greenhouse`, `ashby`, `lever`, `workday`, `smartrecruiters`, `teamtailor`) and uses Groq AI (Llama 3.3 70B / GPT-OSS) to analyze candidate boards.
 3. **Live Verification Gate**: Candidate links must pass live ATS API validation (`verify_ats`) before acceptance.
-4. **Automated Pruning**: Companies confirmed to have migrated to unsupported platforms (Personio, BambooHR, Teamtailor, etc.) or defunct boards are queued for removal.
+4. **Automated Pruning**: Companies confirmed to have migrated to unsupported platforms (Personio, BambooHR, Taleo, etc.) or defunct boards are queued for removal.
 5. **Strict PR Isolation**:
    - The fixer commits changes **only to `seed/companies.json`** inside an automated Pull Request (`bot/fix-links-...`).
    - The production database is **never touched** by the bot or PR branches.
-   - Once the PR is merged into `main`, GitHub Actions runs `python -m seed.seed` on `main` to update the database and cleanly cascade-delete pruned companies.
+   - Once the PR is merged into `main`, GitHub Actions runs `python -m seed.seed` under the `sync-db` environment to update the database and cleanly cascade-delete pruned companies.
 
 ---
 

@@ -21,7 +21,7 @@ jobs:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
+    environment: sync-db
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
