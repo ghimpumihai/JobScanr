@@ -144,6 +144,12 @@
     "ats_identifier": "asana"
   },
   {
+    "company_name": "ASML",
+    "career_url": "https://asml.wd3.myworkdayjobs.com/ASMLEXT1",
+    "ats_platform": "workday",
+    "ats_identifier": "asml|wd3|ASMLEXT1"
+  },
+  {
     "company_name": "Autodesk",
     "career_url": "https://autodesk.wd1.myworkdayjobs.com/Ext",
     "ats_platform": "workday",
@@ -1254,6 +1260,12 @@
     "ats_identifier": "moss"
   },
   {
+    "company_name": "Motorola Solutions",
+    "career_url": "https://motorolasolutions.wd5.myworkdayjobs.com/Careers",
+    "ats_platform": "workday",
+    "ats_identifier": "motorolasolutions|wd5|Careers"
+  },
+  {
     "company_name": "Mozilla",
     "career_url": "https://boards.greenhouse.io/mozilla",
     "ats_platform": "greenhouse",
@@ -1324,6 +1336,12 @@
     "career_url": "https://jobs.ashbyhq.com/notion",
     "ats_platform": "ashby",
     "ats_identifier": "notion"
+  },
+  {
+    "company_name": "NVIDIA",
+    "career_url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+    "ats_platform": "workday",
+    "ats_identifier": "nvidia|wd5|NVIDIAExternalCareerSite"
   },
   {
     "company_name": "NXP Semiconductors",
