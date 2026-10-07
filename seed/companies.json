@@ -972,12 +972,6 @@
     "ats_identifier": "hpe|wd5|Jobsathpe"
   },
   {
-    "company_name": "HubSpot",
-    "career_url": "https://boards.greenhouse.io/hubspot",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "hubspot"
-  },
-  {
     "company_name": "Improbable",
     "career_url": "https://jobs.ashbyhq.com/improbable",
     "ats_platform": "ashby",
