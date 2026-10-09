@@ -57,10 +57,16 @@ def _send_email(subject: str, text_body: str, html_body: str, to_email: str | No
         f"<html><body>{html_body}</body></html>", subtype="html"
     )
 
-    with smtplib.SMTP(host, port) as smtp:
-        smtp.starttls()
-        smtp.login(user, password)
-        smtp.send_message(msg)
+    use_ssl = port == 465 or os.environ.get("SMTP_SSL", "").strip().lower() in ("true", "1", "yes")
+    if use_ssl:
+        with smtplib.SMTP_SSL(host, port) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port) as smtp:
+            smtp.starttls()
+            smtp.login(user, password)
+            smtp.send_message(msg)
     return msg["Message-ID"] or "sent"
 
 

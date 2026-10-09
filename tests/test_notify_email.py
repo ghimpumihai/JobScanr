@@ -65,3 +65,60 @@ def test_html_escaping_prevents_injection():
     assert "&lt;€50k &amp; €60k&gt;" in html
     assert "⏳ &lt;2026-12-31&gt;" in html
     assert "href=\"https://example.com/job?id=1&amp;ref=&quot;onload=&quot;evil()\"" in html
+from unittest.mock import MagicMock, patch
+from jobs.notify import _send_email
+
+
+def test_send_email_starttls_default(monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_USER", "user@example.com")
+    monkeypatch.setenv("SMTP_PASS", "secret")
+    monkeypatch.delenv("SMTP_SSL", raising=False)
+
+    mock_smtp_instance = MagicMock()
+    with patch("smtplib.SMTP", return_value=mock_smtp_instance) as mock_smtp,          patch("smtplib.SMTP_SSL") as mock_smtp_ssl:
+        mock_smtp_instance.__enter__.return_value = mock_smtp_instance
+        _send_email("Subject", "Body", "Body", to_email="test@example.com")
+
+        mock_smtp.assert_called_once_with("smtp.example.com", 587)
+        mock_smtp_instance.starttls.assert_called_once()
+        mock_smtp_instance.login.assert_called_once_with("user@example.com", "secret")
+        mock_smtp_instance.send_message.assert_called_once()
+        mock_smtp_ssl.assert_not_called()
+
+
+def test_send_email_ssl_port_465(monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_PORT", "465")
+    monkeypatch.setenv("SMTP_USER", "user@example.com")
+    monkeypatch.setenv("SMTP_PASS", "secret")
+    monkeypatch.delenv("SMTP_SSL", raising=False)
+
+    mock_ssl_instance = MagicMock()
+    with patch("smtplib.SMTP") as mock_smtp,          patch("smtplib.SMTP_SSL", return_value=mock_ssl_instance) as mock_smtp_ssl:
+        mock_ssl_instance.__enter__.return_value = mock_ssl_instance
+        _send_email("Subject", "Body", "Body", to_email="test@example.com")
+
+        mock_smtp_ssl.assert_called_once_with("smtp.example.com", 465)
+        mock_ssl_instance.login.assert_called_once_with("user@example.com", "secret")
+        mock_ssl_instance.send_message.assert_called_once()
+        mock_smtp.assert_not_called()
+
+
+def test_send_email_ssl_env_flag(monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_PORT", "2525")
+    monkeypatch.setenv("SMTP_USER", "user@example.com")
+    monkeypatch.setenv("SMTP_PASS", "secret")
+    monkeypatch.setenv("SMTP_SSL", "true")
+
+    mock_ssl_instance = MagicMock()
+    with patch("smtplib.SMTP") as mock_smtp,          patch("smtplib.SMTP_SSL", return_value=mock_ssl_instance) as mock_smtp_ssl:
+        mock_ssl_instance.__enter__.return_value = mock_ssl_instance
+        _send_email("Subject", "Body", "Body", to_email="test@example.com")
+
+        mock_smtp_ssl.assert_called_once_with("smtp.example.com", 2525)
+        mock_ssl_instance.login.assert_called_once_with("user@example.com", "secret")
+        mock_ssl_instance.send_message.assert_called_once()
+        mock_smtp.assert_not_called()
