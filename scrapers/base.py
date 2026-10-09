@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import binascii
 import html
 import re
 from abc import ABC, abstractmethod
@@ -37,7 +38,7 @@ def decode_html_field(raw: str | None) -> str | None:
         return None
     try:
         return base64.b64decode(raw, validate=True).decode("utf-8", errors="replace")
-    except Exception:
+    except (binascii.Error, ValueError):
         return raw
 
 

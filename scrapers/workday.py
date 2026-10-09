@@ -14,10 +14,13 @@ Quirks (documented community-wide):
 """
 
 import asyncio
+import logging
 
 import httpx
 
 from scrapers.base import BaseClient
+
+logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 20
 MAX_PAGES = 100
@@ -112,7 +115,8 @@ class WorkdayClient(BaseClient):
             if named:
                 out["locationText"] = ", ".join(named)
             return out
-        except Exception:
+        except Exception as exc:
+            logger.debug("Failed workday detail fetch for %s/%s: %s", ats_identifier, slug, exc)
             return None
 
 
