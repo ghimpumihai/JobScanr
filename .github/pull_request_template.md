@@ -2,10 +2,6 @@
 
 <!-- What does this feature do? Who is it for? Why is it needed? -->
 
-## User Story
-
-<!-- As a [type of user], I want [goal] so that [reason]. -->
-
 ## Type of Change
 
 - [ ] New feature
@@ -60,11 +56,6 @@
 - [ ] Tested on mobile (if UI change)
 - [ ] No new warnings or console errors introduced
 - [ ] Backwards compatible (or migration plan documented)
-
-## Feature Flag
-
-- [ ] No feature flag needed
-- [ ] Behind feature flag: `FLAG_NAME`
 
 ## Related Issues
 
