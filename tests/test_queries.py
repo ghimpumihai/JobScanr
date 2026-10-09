@@ -114,3 +114,44 @@ def test_delete_stale_jobs_custom_days():
             (14,),
         )
         assert deleted == 5
+
+
+def test_upsert_jobs_empty_list():
+    assert queries.upsert_jobs([]) == []
+
+
+def test_upsert_jobs_inserts_and_returns_new_jobs():
+    jobs = [
+        {"external_id": "job1", "company_id": 1, "title": "Software Engineer",
+         "location": "Berlin", "department": "Eng", "url": "http://example.com/1",
+         "compensation": None, "application_deadline": None},
+        {"external_id": "job2", "company_id": 1, "title": "Junior Dev",
+         "location": "London", "department": "Eng", "url": "http://example.com/2",
+         "compensation": "€60k", "application_deadline": "2026-12-31"},
+    ]
+
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    # (job_id, external_id, company_id, is_new)
+    # job1 is new (is_new=True), job2 was existing updated (is_new=False)
+    mock_cur.fetchall.return_value = [
+        (101, "job1", 1, True),
+        (102, "job2", 1, False),
+    ]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        result = queries.upsert_jobs(jobs)
+
+        mock_cur.execute.assert_called_once()
+        sql, arrays = mock_cur.execute.call_args[0]
+        assert "(jp.first_seen_at = jp.last_seen_at) AS is_new" in sql
+        assert arrays["external_id"] == ["job1", "job2"]
+        assert arrays["company_id"] == [1, 1]
+
+        # Only job1 is returned as new
+        assert len(result) == 1
+        assert result[0]["id"] == 101
+        assert result[0]["external_id"] == "job1"
+        assert result[0]["title"] == "Software Engineer"

@@ -107,16 +107,17 @@ def upsert_jobs(jobs: list[dict]) -> list[dict]:
                 url = EXCLUDED.url,
                 compensation = EXCLUDED.compensation,
                 application_deadline = EXCLUDED.application_deadline
-        RETURNING jp.id, jp.external_id, jp.company_id, (xmax = 0) AS is_new
+        RETURNING jp.id, jp.external_id, jp.company_id, (jp.first_seen_at = jp.last_seen_at) AS is_new
     """
+    job_map = {(j["external_id"], j["company_id"]): j for j in jobs}
     out: list[dict] = []
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, arrays)
         for job_id, external_id, company_id, is_new in cur.fetchall():
             if is_new:
-                src = next(j for j in jobs
-                           if j["external_id"] == external_id and j["company_id"] == company_id)
-                out.append({**src, "id": job_id})
+                src = job_map.get((external_id, company_id))
+                if src is not None:
+                    out.append({**src, "id": job_id})
     return out
 
 
