@@ -14,29 +14,11 @@ import sys
 
 import httpx
 
+from scripts.validate_companies import ALIASES
+
 CONCURRENCY = 12
 TIMEOUT = 15.0
 UA = "JobScanr/0.1 (personal job alert; contact: local-user)"
-
-# Known renames/migrations (old identifier -> better candidates)
-ALIASES = {
-    "sentry": ["getsentry"],
-    "unity technologies": ["unity3d"],
-    "weights & biases": ["wandb"],
-    "dbt labs": ["dbtlabsinc"],
-    "cursor": ["anysphere", "getcursor"],
-    "turso": ["chiselstrike", "tursodatabase"],
-    "fly.io": ["flydotio", "flyio"],
-    "starrocks": ["starrocksai"],
-    "deepl": ["deeplcom", "deep-l"],
-    "hugging face": ["huggingface", "hugging-face"],
-    "kraken": ["krakenfx", "payward"],
-    "klarna": ["klarnase", "klarna-bank"],
-    "1password": ["onepassword", "1passwordcareers"],
-    "hotjar": ["contentsquare", "hotjar-com"],
-    "invision": ["invisionapp"],
-    "digitalocean": ["digitalocean-careers"],
-}
 
 ASHBY_QUERY = """query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) {
   jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) {

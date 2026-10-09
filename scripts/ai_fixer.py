@@ -14,40 +14,12 @@ from urllib.parse import urlparse
 import httpx
 
 from scripts.validate_companies import (
-    check_ashby,
-    check_google,
-    check_greenhouse,
-    check_lever,
-    check_smartrecruiters,
-    check_teamtailor,
-    check_workday,
+    CHECKS,
+    SIGNATURES,
+    construct_career_url,
 )
 
 logger = logging.getLogger(__name__)
-
-CHECKS = {
-    "greenhouse": check_greenhouse,
-    "ashby": check_ashby,
-    "lever": check_lever,
-    "workday": check_workday,
-    "smartrecruiters": check_smartrecruiters,
-    "google": check_google,
-    "teamtailor": check_teamtailor,
-}
-
-SIGNATURES = [
-    ("greenhouse", re.compile(r"(?:boards|job-boards)\.greenhouse\.io/([a-zA-Z0-9_-]+)")),
-    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-zA-Z0-9_.-]+)")),
-    ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-zA-Z0-9_-]+)")),
-    (
-        "workday",
-        re.compile(
-            r"https://([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([a-zA-Z0-9_-]+)"
-        ),
-    ),
-    ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([a-zA-Z0-9_-]+)")),
-    ("teamtailor", re.compile(r"([a-zA-Z0-9_-]+)\.teamtailor\.com")),
-]
 
 UNSUPPORTED_ATS_KEYWORDS = [
     "personio",
@@ -71,26 +43,6 @@ GROQ_MODELS = [
     "qwen/qwen3.8-27b",
     "llama-3.3-70b-versatile",
 ]
-
-
-def construct_career_url(platform: str, identifier: str) -> str:
-    """Canonical career URL for an ATS platform and identifier."""
-    if not platform or not identifier:
-        return ""
-    if platform == "ashby":
-        return f"https://jobs.ashbyhq.com/{identifier}"
-    if platform == "greenhouse":
-        return f"https://job-boards.greenhouse.io/{identifier}"
-    if platform == "lever":
-        return f"https://jobs.lever.co/{identifier}"
-    if platform == "workday" and "|" in identifier:
-        parts = identifier.split("|")
-        if len(parts) == 3:
-            tenant, wd, site = parts
-            return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}"
-    if platform == "smartrecruiters":
-        return f"https://careers.smartrecruiters.com/{identifier}"
-    return ""
 
 
 async def verify_ats(client: httpx.AsyncClient, platform: str, ident: str) -> tuple[bool, str]:

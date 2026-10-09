@@ -138,6 +138,63 @@ CHECKS = {
     "teamtailor": check_teamtailor,
 }
 
+SIGNATURES = [
+    ("greenhouse", re.compile(r"(?:boards|job-boards)\.greenhouse\.io/([a-zA-Z0-9_-]+)")),
+    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-zA-Z0-9_.-]+)")),
+    ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-zA-Z0-9_-]+)")),
+    (
+        "workday",
+        re.compile(
+            r"https://([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([a-zA-Z0-9_-]+)"
+        ),
+    ),
+    ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([a-zA-Z0-9_-]+)")),
+    ("teamtailor", re.compile(r"([a-zA-Z0-9_-]+)\.teamtailor\.com")),
+]
+
+ALIASES: dict[str, list[str]] = {
+    "sentry": ["getsentry"],
+    "unity technologies": ["unity3d"],
+    "weights & biases": ["wandb"],
+    "dbt labs": ["dbtlabsinc"],
+    "cursor": ["anysphere", "getcursor"],
+    "turso": ["chiselstrike", "tursodatabase"],
+    "fly.io": ["flydotio", "flyio"],
+    "starrocks": ["starrocksai"],
+    "deepl": ["deeplcom", "deep-l"],
+    "hugging face": ["huggingface", "hugging-face"],
+    "kraken": ["krakenfx", "payward"],
+    "klarna": ["klarnase", "klarna-bank"],
+    "1password": ["onepassword", "1passwordcareers"],
+    "hotjar": ["contentsquare", "hotjar-com"],
+    "invision": ["invisionapp"],
+    "digitalocean": ["digitalocean-careers"],
+}
+
+
+def construct_career_url(platform: str, identifier: str) -> str:
+    """Canonical career URL for an ATS platform and identifier."""
+    if not platform or not identifier:
+        return ""
+    if platform == "ashby":
+        return f"https://jobs.ashbyhq.com/{identifier}"
+    if platform == "greenhouse":
+        return f"https://job-boards.greenhouse.io/{identifier}"
+    if platform == "lever":
+        return f"https://jobs.lever.co/{identifier}"
+    if platform == "workday" and "|" in identifier:
+        parts = identifier.split("|")
+        if len(parts) == 3:
+            tenant, wd, site = parts
+            return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}"
+    if platform == "smartrecruiters":
+        return f"https://careers.smartrecruiters.com/{identifier}"
+    if platform == "teamtailor":
+        if identifier.startswith("http://") or identifier.startswith("https://"):
+            return identifier.rstrip("/")
+        return f"https://{identifier}.teamtailor.com"
+    return ""
+
 
 async def validate_company(client: httpx.AsyncClient, company: dict) -> dict:
     platform = company["ats_platform"]
