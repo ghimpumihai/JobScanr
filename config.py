@@ -8,18 +8,36 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
 
-# If '--staging' flag is passed (or DB_ENV=staging), use staging (.env.stage); otherwise prod (.env)
-if "--staging" in sys.argv or os.environ.get("DB_ENV") == "staging":
-    DB_ENV = "staging"
-    env_file = BASE_DIR / ".env.stage" if (BASE_DIR / ".env.stage").is_file() else BASE_DIR / ".env"
-    load_dotenv(env_file, override=True)
-    DATABASE_URL = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_STAGING") or "").strip()
-    DIGEST_EMAIL = (os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL") or "").strip()
-else:
-    DB_ENV = "production"
-    load_dotenv(BASE_DIR / ".env", override=True)
-    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-    DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
+
+def load_environment(staging: bool | None = None) -> str:
+    """Load the appropriate environment configuration without clobbering preset variables."""
+    global DB_ENV, DATABASE_URL, DIGEST_EMAIL
+    if staging is None:
+        is_staging = os.environ.get("DB_ENV") == "staging" or (
+            hasattr(sys, "argv") and "--staging" in sys.argv
+        )
+    else:
+        is_staging = staging
+
+    if is_staging:
+        DB_ENV = "staging"
+        env_file = BASE_DIR / ".env.stage" if (BASE_DIR / ".env.stage").is_file() else BASE_DIR / ".env"
+        load_dotenv(env_file, override=False)
+        DATABASE_URL = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_STAGING") or "").strip()
+        DIGEST_EMAIL = (os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL") or "").strip()
+    else:
+        DB_ENV = "production"
+        load_dotenv(BASE_DIR / ".env", override=False)
+        DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+        DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
+    return DB_ENV
+
+
+# Initialize default environment
+DB_ENV = "production"
+DATABASE_URL = ""
+DIGEST_EMAIL = ""
+load_environment()
 
 # Target: early-career software engineering roles (intern / junior / graduate)
 # across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
