@@ -19,16 +19,7 @@ from config import DIGEST_EMAIL  # noqa: E402
 def fetch_sample(limit: int) -> list[dict]:
     from db import queries
 
-    with queries.get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            """SELECT jp.title, c.name AS company_name, jp.location, jp.url
-               FROM job_postings jp JOIN companies c ON c.id = jp.company_id
-               ORDER BY jp.first_seen_at DESC
-               LIMIT %s""",
-            (limit,),
-        )
-        return [dict(zip(("title", "company_name", "location", "url"), r))
-                for r in cur.fetchall()]
+    return queries.get_recent_job_samples(limit)
 
 
 def main() -> int:

@@ -167,3 +167,42 @@ def counts() -> dict:
         cur.execute("SELECT (SELECT COUNT(*) FROM companies), (SELECT COUNT(*) FROM job_postings)")
         n_companies, n_jobs = cur.fetchone()
         return {"companies": n_companies, "job_postings": n_jobs}
+
+
+def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[dict]:
+    """Delete companies not present in valid_keys. Cascades to job_postings.
+
+    Returns the list of deleted company metadata dicts.
+    """
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, name, ats_platform, ats_identifier FROM companies")
+        to_delete = []
+        deleted_records = []
+        for row in cur.fetchall():
+            if (row[2], row[3]) not in valid_keys:
+                to_delete.append(row[0])
+                deleted_records.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "ats_platform": row[2],
+                    "ats_identifier": row[3],
+                })
+        if to_delete:
+            cur.execute("DELETE FROM companies WHERE id = ANY(%s)", (to_delete,))
+        return deleted_records
+
+
+def get_recent_job_samples(limit: int = 5) -> list[dict]:
+    """Fetch sample of recent job postings for previews/testing."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT jp.title, c.name AS company_name, jp.location, jp.url
+               FROM job_postings jp JOIN companies c ON c.id = jp.company_id
+               ORDER BY jp.first_seen_at DESC
+               LIMIT %s""",
+            (limit,),
+        )
+        return [
+            dict(zip(("title", "company_name", "location", "url"), r))
+            for r in cur.fetchall()
+        ]
