@@ -42,6 +42,7 @@ async def scrape_all(companies: list[dict],
             if c["id"] in ashby_ids:
                 async with ashby_lock:
                     await asyncio.sleep(0.5)
+                async with sem:
                     return await fetch_company(http, c)
             else:
                 async with sem:
