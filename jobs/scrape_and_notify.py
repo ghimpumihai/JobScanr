@@ -9,7 +9,6 @@ Usage:
 import argparse
 import asyncio
 import sys
-import time
 
 from config import PROFILE
 from db import queries
@@ -73,20 +72,11 @@ async def scrape_all(companies: list[dict],
     return all_jobs, failures
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="JobScanr scrape & digest runner.")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="fetch + match, no DB writes, no email")
-    parser.add_argument("--staging", action="store_true",
-                        help="use staging environment (.env.stage)")
-    parser.add_argument("--failures-file", type=str, default=None,
-                        help="path to write structured failures JSON")
-    args = parser.parse_args()
-
+async def run_pipeline(args) -> int:
     companies = queries.get_all_companies()
     print(f"Scraping {len(companies)} companies...")
     failure_details: list[dict] = []
-    jobs, failures = asyncio.run(scrape_all(companies, failure_details=failure_details))
+    jobs, failures = await scrape_all(companies, failure_details=failure_details)
 
     for failure in failures:
         print(f"  FAIL {failure}")
@@ -111,12 +101,10 @@ def main() -> int:
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
         # let the window cool before enriching.
-        time.sleep(15)
+        await asyncio.sleep(15)
 
-        async def _enrich():
-            async with make_http_client() as http:
-                return await enrich_jobs(candidates, http)
-        asyncio.run(_enrich())
+        async with make_http_client() as http:
+            await enrich_jobs(candidates, http)
         print(f"Enriched {len(candidates)} description-less candidates.")
 
     # Filter BEFORE persisting: the DB is an archive of matches only.
@@ -157,6 +145,19 @@ def main() -> int:
     queries.mark_notified([j["id"] for j in new_matches])
     print(f"Email digest sent ({message_id}) for {len(new_matches)} jobs.")
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="JobScanr scrape & digest runner.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="fetch + match, no DB writes, no email")
+    parser.add_argument("--staging", action="store_true",
+                        help="use staging environment (.env.stage)")
+    parser.add_argument("--failures-file", type=str, default=None,
+                        help="path to write structured failures JSON")
+    args = parser.parse_args()
+
+    return asyncio.run(run_pipeline(args))
 
 
 if __name__ == "__main__":
