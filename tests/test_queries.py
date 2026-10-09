@@ -80,3 +80,37 @@ def test_close_pool():
     mock_pool.close.assert_called_once()
     assert queries._pool is None
     assert queries._pool_conninfo is None
+
+
+def test_delete_stale_jobs_default_days():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 42
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        deleted = queries.delete_stale_jobs()
+
+        mock_cur.execute.assert_called_once_with(
+            "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
+            (30,),
+        )
+        assert deleted == 42
+
+
+def test_delete_stale_jobs_custom_days():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 5
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        deleted = queries.delete_stale_jobs(days=14)
+
+        mock_cur.execute.assert_called_once_with(
+            "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
+            (14,),
+        )
+        assert deleted == 5

@@ -139,7 +139,7 @@ def main() -> int:
         return 0
 
     new_matches = queries.upsert_jobs(matches)
-    stale = queries.delete_stale_jobs(days=3)
+    stale = queries.delete_stale_jobs(days=30)
     print(f"Stored {len(new_matches)} new / {len(matches)} matched; pruned {stale} stale.")
 
     if not new_matches:
