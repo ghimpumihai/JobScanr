@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import MagicMock, patch
 
 import jobs.enrich as enrich
 
@@ -121,3 +122,23 @@ def test_match_pipeline_extracts_salary_into_matches(monkeypatch):
     job = {"title": "Junior Software Engineer", "location": "Berlin",
            "description": "€45k–€52k", "compensation": None}
     assert extract_compensation(job["description"]) == "€45k–€52k"
+
+
+def test_fetch_detail_logs_exception(monkeypatch):
+    job = {"title": "Junior Software Engineer", "ats_identifier": "acme",
+           "external_id": "123", "ats_platform": "ashby"}
+
+    async def fake_get_detail(*args, **kwargs):
+        raise ConnectionResetError("Server disconnected")
+
+    from unittest.mock import MagicMock
+    mock_client = MagicMock()
+
+    with patch("scrapers.ashby.AshbyClient.get_job_detail", fake_get_detail), \
+         patch.object(enrich.logger, "debug") as mock_debug, \
+         patch("asyncio.sleep", return_value=None):
+        result = asyncio.run(enrich._fetch_detail(job, mock_client))
+        assert result is None
+        assert mock_debug.call_count == 3
+        assert "Detail fetch attempt" in mock_debug.call_args[0][0]
+

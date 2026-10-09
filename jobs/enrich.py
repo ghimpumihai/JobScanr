@@ -9,6 +9,7 @@ one extra request per plausible candidate, not per listing.
 """
 
 import asyncio
+import logging
 import re
 
 import httpx
@@ -16,6 +17,8 @@ import httpx
 from config import PROFILE
 from jobs.match import _any_word, _normalize
 from scrapers.base import strip_html
+
+logger = logging.getLogger(__name__)
 
 CONCURRENCY = 8
 
@@ -126,8 +129,11 @@ async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
                     ident, job["external_id"])
             if detail is not None and detail.get("descriptionHtml"):
                 return detail
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Detail fetch attempt %d/3 failed for %s (%s): %s",
+                attempt + 1, ident, job.get("external_id"), exc,
+            )
         await asyncio.sleep(3.0 * (attempt + 1))
     return None
 
