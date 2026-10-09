@@ -40,3 +40,28 @@ def test_missing_salary_renders_empty_cells():
     html = build_html_digest([_job("B")])
     assert "<td></td><td></td></tr>" in html
 
+
+
+def test_html_escaping_prevents_injection():
+    job = {
+        "title": "<script>alert('xss')</script> Engineer & Developer",
+        "company_name": "Acme <Inc>",
+        "location": "Berlin & Paris",
+        "url": "https://example.com/job?id=1&ref=\"onload=\"evil()",
+        "compensation": "<€50k & €60k>",
+        "application_deadline": "<2026-12-31>",
+    }
+    html = build_html_digest([job])
+    # Ensure unescaped tags are not present
+    assert "<script>" not in html
+    assert "<Inc>" not in html
+    assert "<€50k" not in html
+    assert "<2026-12-31>" not in html
+    assert '"onload="evil()' not in html
+    # Ensure escaped entities are present
+    assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; Engineer &amp; Developer" in html
+    assert "Acme &lt;Inc&gt;" in html
+    assert "Berlin &amp; Paris" in html
+    assert "&lt;€50k &amp; €60k&gt;" in html
+    assert "⏳ &lt;2026-12-31&gt;" in html
+    assert "href=\"https://example.com/job?id=1&amp;ref=&quot;onload=&quot;evil()\"" in html

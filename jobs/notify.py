@@ -4,6 +4,7 @@ Phone buzzes from the mail app; the laptop gets an HTML table with a
 clickable link per role for applying.
 """
 
+import html
 import os
 import smtplib
 from email.message import EmailMessage
@@ -15,14 +16,19 @@ from jobs.digest import build_digest
 def build_html_digest(jobs: list[dict]) -> str:
     rows = ""
     for j in jobs:
-        comp = f'<td>{j["compensation"]}</td>' if j.get("compensation") else "<td></td>"
-        deadline = (f'<td>⏳ {j["application_deadline"]}</td>'
-                    if j.get("application_deadline") else "<td></td>")
+        title = html.escape(str(j.get("title") or ""))
+        company = html.escape(str(j.get("company_name") or ""))
+        location = html.escape(str(j.get("location") or ""))
+        url = html.escape(str(j.get("url") or ""), quote=True)
+        comp_val = html.escape(str(j["compensation"])) if j.get("compensation") else ""
+        comp = f"<td>{comp_val}</td>" if comp_val else "<td></td>"
+        deadline_val = html.escape(str(j["application_deadline"])) if j.get("application_deadline") else ""
+        deadline = f"<td>⏳ {deadline_val}</td>" if deadline_val else "<td></td>"
         rows += (
             f'<tr>'
-            f'<td><a href="{j["url"]}">{j["title"]}</a></td>'
-            f'<td>{j["company_name"]}</td>'
-            f'<td>{j.get("location") or ""}</td>'
+            f'<td><a href="{url}">{title}</a></td>'
+            f'<td>{company}</td>'
+            f'<td>{location}</td>'
             f'{comp}{deadline}'
             f'</tr>'
         )
