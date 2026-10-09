@@ -16,11 +16,10 @@ from urllib.parse import urlparse
 import httpx
 
 from scripts.validate_companies import (
-    check_ashby,
-    check_google,
-    check_greenhouse,
-    check_lever,
-    check_workday,
+    ALIASES,
+    CHECKS,
+    SIGNATURES,
+    construct_career_url,
 )
 
 SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
@@ -32,45 +31,6 @@ UA = "JobScanr/0.1 (personal job alert; automated link fixer)"
 FAIL_LINE_RE = re.compile(
     r"^\s*(?:FAIL\s+)?(?P<name>[^()]+?)\s+\((?P<platform>[a-zA-Z0-9_-]+)\):\s*(?P<error>.*)$"
 )
-
-SIGNATURES = [
-    ("greenhouse", re.compile(r"(?:boards|job-boards)\.greenhouse\.io/([a-zA-Z0-9_-]+)")),
-    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-zA-Z0-9_.-]+)")),
-    ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-zA-Z0-9_-]+)")),
-    (
-        "workday",
-        re.compile(
-            r"https://([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([a-zA-Z0-9_-]+)"
-        ),
-    ),
-]
-
-ALIASES: dict[str, list[str]] = {
-    "sentry": ["getsentry"],
-    "unity technologies": ["unity3d"],
-    "weights & biases": ["wandb"],
-    "dbt labs": ["dbtlabsinc"],
-    "cursor": ["anysphere", "getcursor"],
-    "turso": ["chiselstrike", "tursodatabase"],
-    "fly.io": ["flydotio", "flyio"],
-    "starrocks": ["starrocksai"],
-    "deepl": ["deeplcom", "deep-l"],
-    "hugging face": ["huggingface", "hugging-face"],
-    "kraken": ["krakenfx", "payward"],
-    "klarna": ["klarnase", "klarna-bank"],
-    "1password": ["onepassword", "1passwordcareers"],
-    "hotjar": ["contentsquare", "hotjar-com"],
-    "invision": ["invisionapp"],
-    "digitalocean": ["digitalocean-careers"],
-}
-
-CHECKS = {
-    "greenhouse": check_greenhouse,
-    "ashby": check_ashby,
-    "lever": check_lever,
-    "workday": check_workday,
-    "google": check_google,
-}
 
 
 def slugify(name: str) -> str:
@@ -203,26 +163,6 @@ def generate_candidate_identifiers(company: dict) -> list[str]:
     if "-" in current_ident:
         variants.append(current_ident.replace("-", ""))
     return list(dict.fromkeys(v for v in variants if v))
-
-
-def construct_career_url(platform: str, identifier: str) -> str:
-    """Construct canonical career board URL for a given ATS platform and identifier."""
-    if not platform or not identifier:
-        return ""
-    if platform == "ashby":
-        return f"https://jobs.ashbyhq.com/{identifier}"
-    if platform == "greenhouse":
-        return f"https://job-boards.greenhouse.io/{identifier}"
-    if platform == "lever":
-        return f"https://jobs.lever.co/{identifier}"
-    if platform == "workday" and "|" in identifier:
-        parts = identifier.split("|")
-        if len(parts) == 3:
-            tenant, wd, site = parts
-            return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}"
-    if platform == "smartrecruiters":
-        return f"https://careers.smartrecruiters.com/{identifier}"
-    return ""
 
 
 async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
