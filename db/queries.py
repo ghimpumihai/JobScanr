@@ -1,18 +1,48 @@
 """All DB operations in one place (plan Phase 3)."""
 
+from collections.abc import Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 import psycopg
+from psycopg_pool import ConnectionPool
 
-from config import DATABASE_URL
+import config
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
+_pool: ConnectionPool | None = None
+_pool_conninfo: str | None = None
 
-def get_connection() -> psycopg.Connection:
-    if not DATABASE_URL:
+
+def get_pool() -> ConnectionPool:
+    global _pool, _pool_conninfo
+    database_url = getattr(config, "DATABASE_URL", "").strip()
+    if not database_url:
         raise RuntimeError("DATABASE_URL is not set — check .env or GitHub secrets")
-    return psycopg.connect(DATABASE_URL, autocommit=False)
+    if _pool is None or _pool.closed or _pool_conninfo != database_url:
+        if _pool is not None and not _pool.closed:
+            _pool.close()
+        _pool = ConnectionPool(
+            conninfo=database_url,
+            min_size=1,
+            max_size=10,
+            open=True,
+        )
+        _pool_conninfo = database_url
+    return _pool
+
+
+def close_pool() -> None:
+    global _pool, _pool_conninfo
+    if _pool is not None and not _pool.closed:
+        _pool.close()
+    _pool = None
+    _pool_conninfo = None
+
+
+def get_connection(timeout: float | None = None) -> AbstractContextManager[psycopg.Connection]:
+    return get_pool().connection(timeout=timeout)
 
 
 def apply_schema() -> None:
