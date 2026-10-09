@@ -120,7 +120,7 @@ def upsert_jobs(jobs: list[dict]) -> list[dict]:
     return out
 
 
-def delete_stale_jobs(days: int = 3) -> int:
+def delete_stale_jobs(days: int = 30) -> int:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
