@@ -30,17 +30,11 @@ def main() -> int:
     # Prune obsolete rows not present in seed/companies.json (e.g. ATS migrations or dropped boards)
     valid_keys = {(c["ats_platform"], c["ats_identifier"]) for c in companies}
     try:
-        from db.queries import get_connection
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT id, name, ats_platform, ats_identifier FROM companies")
-            to_delete = []
-            for row in cur.fetchall():
-                if (row[2], row[3]) not in valid_keys:
-                    to_delete.append(row[0])
-                    print(f"  Pruning obsolete company from DB: {row[1]} ({row[2]}/{row[3]})")
-            if to_delete:
-                cur.execute("DELETE FROM companies WHERE id = ANY(%s)", (to_delete,))
-                print(f"Pruned {cur.rowcount} obsolete company row(s).")
+        pruned = queries.prune_obsolete_companies(valid_keys)
+        for p in pruned:
+            print(f"  Pruning obsolete company from DB: {p['name']} ({p['ats_platform']}/{p['ats_identifier']})")
+        if pruned:
+            print(f"Pruned {len(pruned)} obsolete company row(s).")
     except Exception as exc:
         print(f"Skipping obsolete cleanup: {exc}")
     print(queries.counts())

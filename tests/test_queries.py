@@ -155,3 +155,51 @@ def test_upsert_jobs_inserts_and_returns_new_jobs():
         assert result[0]["id"] == 101
         assert result[0]["external_id"] == "job1"
         assert result[0]["title"] == "Software Engineer"
+
+
+def test_prune_obsolete_companies():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    # Mock existing companies in DB: (id, name, ats_platform, ats_identifier)
+    mock_cur.fetchall.return_value = [
+        (1, "Active Co", "greenhouse", "activeco"),
+        (2, "Dead Co", "ashby", "deadco"),
+    ]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+
+        valid_keys = {("greenhouse", "activeco")}
+        pruned = queries.prune_obsolete_companies(valid_keys)
+
+        assert len(pruned) == 1
+        assert pruned[0]["id"] == 2
+        assert pruned[0]["name"] == "Dead Co"
+        mock_cur.execute.assert_any_call("DELETE FROM companies WHERE id = ANY(%s)", ([2],))
+
+
+def test_get_recent_job_samples():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.fetchall.return_value = [
+        ("Software Engineer", "Acme", "Berlin", "https://example.com/job/1"),
+        ("Junior Dev", "Beta", "Remote", "https://example.com/job/2"),
+    ]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+
+        samples = queries.get_recent_job_samples(limit=2)
+        assert len(samples) == 2
+        assert samples[0] == {
+            "title": "Software Engineer",
+            "company_name": "Acme",
+            "location": "Berlin",
+            "url": "https://example.com/job/1",
+        }
+        mock_cur.execute.assert_called_once()
+        sql, params = mock_cur.execute.call_args[0]
+        assert "LIMIT %s" in sql
+        assert params == (2,)
