@@ -37,3 +37,59 @@ def test_explicit_load_environment(monkeypatch):
     assert config.DB_ENV == "staging"
 
 
+
+
+def test_default_profile_loaded():
+    import config
+    assert "titles" in config.PROFILE
+    assert "levels" in config.PROFILE
+    assert "software engineer" in config.PROFILE["titles"]
+
+
+def test_load_profile_custom_path(tmp_path):
+    import json
+    import config
+
+    custom = {"titles": ["rust engineer"], "levels": ["senior"]}
+    profile_file = tmp_path / "custom_profile.json"
+    profile_file.write_text(json.dumps(custom))
+
+    loaded = config.load_profile(profile_file)
+    assert loaded == custom
+    assert config.PROFILE == custom
+
+
+def test_load_profile_env_var(tmp_path, monkeypatch):
+    import json
+    import config
+
+    custom = {"titles": ["go engineer"], "levels": ["staff"]}
+    profile_file = tmp_path / "env_profile.json"
+    profile_file.write_text(json.dumps(custom))
+
+    monkeypatch.setenv("PROFILE_PATH", str(profile_file))
+    loaded = config.load_profile()
+    assert loaded == custom
+    assert config.PROFILE == custom
+
+
+def test_load_profile_cli_arg(tmp_path, monkeypatch):
+    import json
+    import config
+
+    custom = {"titles": ["devops engineer"], "levels": ["lead"]}
+    profile_file = tmp_path / "cli_profile.json"
+    profile_file.write_text(json.dumps(custom))
+
+    monkeypatch.delenv("PROFILE_PATH", raising=False)
+    monkeypatch.setattr(sys, "argv", ["app", "--profile", str(profile_file)])
+    loaded = config.load_profile()
+    assert loaded == custom
+    assert config.PROFILE == custom
+
+
+def test_load_profile_missing_fallback(tmp_path):
+    import config
+    missing = tmp_path / "non_existent.json"
+    loaded = config.load_profile(missing)
+    assert loaded == config.DEFAULT_PROFILE

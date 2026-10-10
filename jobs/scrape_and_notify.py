@@ -74,6 +74,8 @@ async def scrape_all(companies: list[dict],
 
 
 async def run_pipeline(args) -> int:
+    import config
+    profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
     companies = queries.get_all_companies()
     print(f"Scraping {len(companies)} companies...")
     failure_details: list[dict] = []
@@ -98,7 +100,7 @@ async def run_pipeline(args) -> int:
     # details only for candidates passing the cheap title/location gate so
     # country-restriction and experience checks see full text.
     from jobs.enrich import enrich_jobs, passes_prefilter
-    candidates = [j for j in jobs if passes_prefilter(j)]
+    candidates = [j for j in jobs if passes_prefilter(j, profile)]
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
         # let the window cool before enriching.
@@ -111,7 +113,7 @@ async def run_pipeline(args) -> int:
     # Filter BEFORE persisting: the DB is an archive of matches only.
     # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
     # and failed sends stay unnotified for retry on the next run.
-    matches = [j for j in jobs if matches_profile(j)]
+    matches = [j for j in jobs if matches_profile(j, profile)]
 
     # Employers rarely fill structured salary fields but often paste ranges
     # into descriptions — extract for anything missing one.
@@ -156,6 +158,8 @@ def main() -> int:
                         help="use staging environment (.env.stage)")
     parser.add_argument("--failures-file", type=str, default=None,
                         help="path to write structured failures JSON")
+    parser.add_argument("--profile", type=str, default=None,
+                        help="path to custom profile JSON")
     args = parser.parse_args()
 
     return asyncio.run(run_pipeline(args))
