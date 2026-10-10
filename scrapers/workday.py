@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 20
 MAX_PAGES = 100
+MAX_SEARCH_PAGES = 5  # For large boards (>40 jobs), cap search pagination to 5 pages per query
+SEARCH_QUERIES = ["software", "developer"]
 RETRY_DELAY = 2.0
 
 
@@ -48,41 +50,81 @@ class WorkdayClient(BaseClient):
         base, _ = self._base(ats_identifier)
         headers = {"Accept": "application/json"}
         jobs: dict[str, dict] = {}
-        offset = 0
-        total = None
-        for _page in range(MAX_PAGES):
-            r = await self.request_with_retry(
-                "POST", f"{base}/jobs",
-                json={"appliedFacets": {}, "limit": PAGE_SIZE,
-                      "offset": offset, "searchText": ""},
-                headers=headers,
-            )
-            r.raise_for_status()
-            data = r.json()
-            postings = data.get("jobPostings") or []
-            if total is None:
-                total = data.get("total", 0)
-            if not postings:
-                break
-            for p in postings:
+
+        # 1. Initial page with limit=20
+        r = await self.request_with_retry(
+            "POST", f"{base}/jobs",
+            json={"appliedFacets": {}, "limit": PAGE_SIZE,
+                  "offset": 0, "searchText": ""},
+            headers=headers,
+        )
+        r.raise_for_status()
+        data = r.json()
+        total = data.get("total", 0)
+        postings = data.get("jobPostings") or []
+
+        def add_postings(items):
+            for p in items:
                 external_path = p.get("externalPath") or ""
                 slug = external_path.rsplit("/", 1)[-1]
-                jobs[slug] = {
-                    "external_id": p.get("jobPostingId") or slug,
-                    "title": (p.get("title") or "").strip(),
-                    # listings often give vague counts ("2 Locations");
-                    # the detail fetch fills the real location later
-                    "location": p.get("locationsText"),
-                    "department": None,
-                    "url": self._public_url(ats_identifier, external_path),
-                    "description": None,
-                    "ats_identifier": ats_identifier,
-                    "external_path": slug,
-                }
-            offset += len(postings)
-            if total and len(jobs) >= int(total):
-                break
-            await asyncio.sleep(0.4)  # throttle courtesy
+                if slug and slug not in jobs:
+                    jobs[slug] = {
+                        "external_id": p.get("jobPostingId") or slug,
+                        "title": (p.get("title") or "").strip(),
+                        # listings often give vague counts ("2 Locations");
+                        # the detail fetch fills the real location later
+                        "location": p.get("locationsText"),
+                        "department": None,
+                        "url": self._public_url(ats_identifier, external_path),
+                        "description": None,
+                        "ats_identifier": ats_identifier,
+                        "external_path": slug,
+                    }
+
+        add_postings(postings)
+
+        # 2. If board is small (<= 40 total jobs), page through remaining unfiltered
+        if total <= 40:
+            offset = len(postings)
+            while offset < total:
+                await asyncio.sleep(0.4)
+                r = await self.request_with_retry(
+                    "POST", f"{base}/jobs",
+                    json={"appliedFacets": {}, "limit": PAGE_SIZE,
+                          "offset": offset, "searchText": ""},
+                    headers=headers,
+                )
+                r.raise_for_status()
+                next_postings = r.json().get("jobPostings") or []
+                if not next_postings:
+                    break
+                add_postings(next_postings)
+                offset += len(next_postings)
+            return list(jobs.values())
+
+        # 3. For large boards (> 40 total jobs), query targeted tech keywords
+        # to avoid paging through hundreds of non-tech jobs
+        for q in SEARCH_QUERIES:
+            offset = 0
+            for _ in range(MAX_SEARCH_PAGES):
+                await asyncio.sleep(0.4)
+                r = await self.request_with_retry(
+                    "POST", f"{base}/jobs",
+                    json={"appliedFacets": {}, "limit": PAGE_SIZE,
+                          "offset": offset, "searchText": q},
+                    headers=headers,
+                )
+                r.raise_for_status()
+                q_data = r.json()
+                q_postings = q_data.get("jobPostings") or []
+                if not q_postings:
+                    break
+                add_postings(q_postings)
+                offset += len(q_postings)
+                q_total = q_data.get("total", 0)
+                if offset >= q_total:
+                    break
+
         return list(jobs.values())
 
     async def get_job_detail(self, ats_identifier: str, slug: str) -> dict | None:

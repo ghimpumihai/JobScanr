@@ -35,20 +35,26 @@ async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
 
 async def scrape_all(companies: list[Company | dict],
                        failure_details: list[dict] | None = None) -> tuple[list[JobPosting], list[str]]:
-    # Ashby throttles concurrent bursts, so it gets a dedicated paced lane.
-    ashby_ids = {c["id"] for c in companies if c["ats_platform"] == "ashby"}
+    # Separate concurrency pools by platform characteristics:
+    # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
+    # - Workday: dedicated concurrent pool (20) so multi-page crawls never starve fast platforms
+    # - Ashby: independent serialized pacing lock (0.5s) to prevent 429s and soft-throttle drops
     async with make_http_client() as http:
-        sem = asyncio.Semaphore(10)
+        fast_sem = asyncio.Semaphore(30)
+        workday_sem = asyncio.Semaphore(20)
         ashby_lock = asyncio.Lock()
 
         async def fetch(c):
-            if c["id"] in ashby_ids:
+            plat = c.get("ats_platform")
+            if plat == "ashby":
                 async with ashby_lock:
                     await asyncio.sleep(0.5)
-                async with sem:
+                    return await fetch_company(http, c)
+            elif plat == "workday":
+                async with workday_sem:
                     return await fetch_company(http, c)
             else:
-                async with sem:
+                async with fast_sem:
                     return await fetch_company(http, c)
 
         results = await asyncio.gather(
