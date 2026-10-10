@@ -13,13 +13,14 @@ import sys
 from config import PROFILE
 from db import queries
 from jobs.match import matches_profile
+from models import Company, JobPosting
 from scrapers import get_client
 from scrapers.base import make_http_client
 
 FAILURE_RATE_LIMIT = 0.2
 
 
-async def fetch_company(http, company: dict) -> list[dict]:
+async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
     client = get_client(company["ats_platform"], http)
     jobs = await client.get_jobs(company["ats_identifier"])
     for job in jobs:
@@ -29,8 +30,8 @@ async def fetch_company(http, company: dict) -> list[dict]:
     return jobs
 
 
-async def scrape_all(companies: list[dict],
-                       failure_details: list[dict] | None = None) -> tuple[list[dict], list[str]]:
+async def scrape_all(companies: list[Company | dict],
+                       failure_details: list[dict] | None = None) -> tuple[list[JobPosting], list[str]]:
     # Ashby throttles concurrent bursts, so it gets a dedicated paced lane.
     ashby_ids = {c["id"] for c in companies if c["ats_platform"] == "ashby"}
     async with make_http_client() as http:

@@ -8,6 +8,7 @@ import psycopg
 from psycopg_pool import ConnectionPool
 
 import config
+from models import Company, JobPosting
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -50,7 +51,7 @@ def apply_schema() -> None:
         cur.execute(SCHEMA_PATH.read_text())
 
 
-def get_all_companies() -> list[dict]:
+def get_all_companies() -> list[Company]:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, ats_platform, ats_identifier, career_url FROM companies ORDER BY id"
@@ -61,7 +62,7 @@ def get_all_companies() -> list[dict]:
         ]
 
 
-def upsert_companies(companies: list[dict]) -> int:
+def upsert_companies(companies: list[Company | dict]) -> int:
     """Idempotent seed. Returns number of rows written."""
     with get_connection() as conn, conn.cursor() as cur:
         cur.executemany(
@@ -77,7 +78,7 @@ def upsert_companies(companies: list[dict]) -> int:
         return cur.rowcount
 
 
-def upsert_jobs(jobs: list[dict]) -> list[dict]:
+def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
     """Insert jobs for known company_ids.
 
     Descriptions are deliberately NOT persisted — they're used in memory
@@ -169,7 +170,7 @@ def counts() -> dict:
         return {"companies": n_companies, "job_postings": n_jobs}
 
 
-def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[dict]:
+def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[Company]:
     """Delete companies not present in valid_keys. Cascades to job_postings.
 
     Returns the list of deleted company metadata dicts.
