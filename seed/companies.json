@@ -7200,12 +7200,6 @@
     "ats_identifier": "faculty-fellowship"
   },
   {
-    "company_name": "Faculty AI",
-    "career_url": "https://jobs.ashbyhq.com/faculty",
-    "ats_platform": "ashby",
-    "ats_identifier": "faculty"
-  },
-  {
     "company_name": "Faire",
     "career_url": "https://boards.greenhouse.io/faire",
     "ats_platform": "greenhouse",
@@ -12492,12 +12486,6 @@
     "ats_identifier": "msd|wd5|searchjobs"
   },
   {
-    "company_name": "Mercor",
-    "career_url": "https://jobs.ashbyhq.com/mercor",
-    "ats_platform": "ashby",
-    "ats_identifier": "mercor"
-  },
-  {
     "company_name": "Mercury",
     "career_url": "https://boards.greenhouse.io/mercury",
     "ats_platform": "greenhouse",
@@ -12553,9 +12541,9 @@
   },
   {
     "company_name": "Meter",
-    "career_url": "https://jobs.ashbyhq.com/meter",
-    "ats_platform": "ashby",
-    "ats_identifier": "meter"
+    "career_url": "https://jobs.lever.co/metergysolutions",
+    "ats_platform": "lever",
+    "ats_identifier": "metergysolutions"
   },
   {
     "company_name": "Metergy Solutions",
@@ -13540,12 +13528,6 @@
     "career_url": "https://niagarawater.wd5.myworkdayjobs.com/niagara",
     "ats_platform": "workday",
     "ats_identifier": "niagarawater|wd5|niagara"
-  },
-  {
-    "company_name": "Niantic Spatial",
-    "career_url": "https://jobs.ashbyhq.com/niantic-spatial",
-    "ats_platform": "ashby",
-    "ats_identifier": "niantic-spatial"
   },
   {
     "company_name": "Nidec",
@@ -18348,12 +18330,6 @@
     "ats_identifier": "stradaeducation"
   },
   {
-    "company_name": "Strala Group",
-    "career_url": "https://jobs.ashbyhq.com/strala-ai",
-    "ats_platform": "ashby",
-    "ats_identifier": "strala-ai"
-  },
-  {
     "company_name": "Strand Therapeutics",
     "career_url": "https://job-boards.greenhouse.io/strandtherapeutics",
     "ats_platform": "greenhouse",
@@ -18469,9 +18445,9 @@
   },
   {
     "company_name": "Sunday Robotics",
-    "career_url": "https://jobs.ashbyhq.com/sunday",
-    "ats_platform": "ashby",
-    "ats_identifier": "sunday"
+    "career_url": "https://workday.wd5.myworkdayjobs.com/Workday",
+    "ats_platform": "workday",
+    "ats_identifier": "workday|wd5|Workday"
   },
   {
     "company_name": "Suno",
@@ -19429,9 +19405,9 @@
   },
   {
     "company_name": "Titan",
-    "career_url": "https://jobs.ashbyhq.com/titan-msp",
+    "career_url": "https://jobs.ashbyhq.com/titan",
     "ats_platform": "ashby",
-    "ats_identifier": "titan-msp"
+    "ats_identifier": "titan"
   },
   {
     "company_name": "TJX",
