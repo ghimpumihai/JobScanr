@@ -8,6 +8,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ from scripts.validate_companies import (
     ALIASES,
     CHECKS,
     SIGNATURES,
+    check_workday,
     construct_career_url,
 )
 
@@ -28,9 +30,7 @@ CONCURRENCY = 8
 TIMEOUT = 15.0
 UA = "JobScanr/0.1 (personal job alert; automated link fixer)"
 
-FAIL_LINE_RE = re.compile(
-    r"^\s*(?:FAIL\s+)?(?P<name>[^()]+?)\s+\((?P<platform>[a-zA-Z0-9_-]+)\):\s*(?P<error>.*)$"
-)
+FAIL_LINE_RE = re.compile(r"^\s*(?:FAIL\s+)?(?P<name>[^()]+?)\s+\((?P<platform>[a-zA-Z0-9_-]+)\):\s*(?P<error>.*)$")
 
 
 def slugify(name: str) -> str:
@@ -52,12 +52,14 @@ def parse_failures_from_log(log_text: str) -> list[dict]:
             key = (name.lower(), platform.lower())
             if key not in seen:
                 seen.add(key)
-                failures.append({
-                    "company_name": name,
-                    "ats_platform": platform,
-                    "error": error,
-                    "is_404": "404" in error or "Not Found" in error,
-                })
+                failures.append(
+                    {
+                        "company_name": name,
+                        "ats_platform": platform,
+                        "error": error,
+                        "is_404": "404" in error or "Not Found" in error,
+                    }
+                )
         elif "404" in line or "Client error" in line:
             # Fallback scan for lines containing 404
             pass
@@ -152,14 +154,16 @@ def generate_candidate_identifiers(company: dict) -> list[str]:
         variants.append(current_ident)
     for alias in ALIASES.get(name.lower(), []):
         variants.append(alias)
-    variants.extend([
-        f"{slug}hq",
-        f"{slug}careers",
-        f"{slug}-careers",
-        f"{slug}jobs",
-        f"{slug}inc",
-        f"{slug}tech",
-    ])
+    variants.extend(
+        [
+            f"{slug}hq",
+            f"{slug}careers",
+            f"{slug}-careers",
+            f"{slug}jobs",
+            f"{slug}inc",
+            f"{slug}tech",
+        ]
+    )
     if "-" in current_ident:
         variants.append(current_ident.replace("-", ""))
     return list(dict.fromkeys(v for v in variants if v))
@@ -235,7 +239,7 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
 
     # Step 4: If Workday, probe clusters
     if old_platform == "workday" or "myworkdayjobs.com" in career_url:
-        tenant = (old_ident.split("|")[0] if old_ident and "|" in old_ident else slugify(name))
+        tenant = old_ident.split("|")[0] if old_ident and "|" in old_ident else slugify(name)
         wd_ident = await probe_workday_clusters(client, tenant)
         if wd_ident:
             ok, detail = await verify_ats(client, "workday", wd_ident)
@@ -253,11 +257,7 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
     return res
 
 
-import os
-
-
-def apply_fixes_to_companies(companies: list[dict],
-                             recoveries: list[dict]) -> tuple[list[dict], int]:
+def apply_fixes_to_companies(companies: list[dict], recoveries: list[dict]) -> tuple[list[dict], int]:
     """Updates companies list in-place with verified recoveries. Returns (updated_list, count)."""
     by_name = {c["company_name"].lower(): c for c in companies}
     by_ident = {(c["ats_platform"], c["ats_identifier"]): c for c in companies}
@@ -277,8 +277,7 @@ def apply_fixes_to_companies(companies: list[dict],
     return companies, fixed_count
 
 
-def remove_companies_from_seed(companies: list[dict],
-                               to_remove: list[dict]) -> tuple[list[dict], int]:
+def remove_companies_from_seed(companies: list[dict], to_remove: list[dict]) -> tuple[list[dict], int]:
     """Removes obsolete companies from seed list. Returns (updated_list, count_removed)."""
     remove_keys = {
         (r["old_platform"], r["old_ident"]) for r in to_remove if r.get("old_platform") and r.get("old_ident")
@@ -409,21 +408,25 @@ async def main_async(args) -> int:
         ident = f.get("ats_identifier") or ""
         c = comp_by_ident.get((plat, ident)) or comp_by_name.get(name.lower())
         if c:
-            targets.append({
-                "company_name": c["company_name"],
-                "ats_platform": c["ats_platform"],
-                "ats_identifier": c["ats_identifier"],
-                "career_url": c.get("career_url"),
-                "error": f.get("error", ""),
-            })
+            targets.append(
+                {
+                    "company_name": c["company_name"],
+                    "ats_platform": c["ats_platform"],
+                    "ats_identifier": c["ats_identifier"],
+                    "career_url": c.get("career_url"),
+                    "error": f.get("error", ""),
+                }
+            )
         else:
-            targets.append({
-                "company_name": name,
-                "ats_platform": plat,
-                "ats_identifier": ident,
-                "career_url": f.get("career_url"),
-                "error": f.get("error", ""),
-            })
+            targets.append(
+                {
+                    "company_name": name,
+                    "ats_platform": plat,
+                    "ats_identifier": ident,
+                    "career_url": f.get("career_url"),
+                    "error": f.get("error", ""),
+                }
+            )
 
     print(f"Attempting link repair for {len(targets)} failed company boards...\n")
 
@@ -442,9 +445,7 @@ async def main_async(args) -> int:
         arg_no_ai = getattr(args, "no_ai", False)
         enable_ai = arg_ai if arg_ai is not None else (os.environ.get("GROQ_API_KEY") is not None and not arg_no_ai)
         if enable_ai:
-            unresolved_indices = [
-                i for i, r in enumerate(recoveries) if r["status"] == "unrecoverable"
-            ]
+            unresolved_indices = [i for i, r in enumerate(recoveries) if r["status"] == "unrecoverable"]
             if unresolved_indices:
                 print(f"\nInvoking AI triage for {len(unresolved_indices)} unresolved companies...")
                 from scripts.ai_fixer import triage_company_with_ai
@@ -492,12 +493,14 @@ async def main_async(args) -> int:
             if args.sync_db:
                 try:
                     from db import queries
+
                     written = queries.upsert_companies(companies)
                     print(f"Synchronized {written} companies to database.")
                     if removed_count > 0:
                         prune_keys = [
-                            (r["old_platform"], r["old_ident"]) for r in recoveries if r["status"] == "remove"
-                            and r.get("old_platform") and r.get("old_ident")
+                            (r["old_platform"], r["old_ident"])
+                            for r in recoveries
+                            if r["status"] == "remove" and r.get("old_platform") and r.get("old_ident")
                         ]
                         deleted = queries.delete_companies_batch(prune_keys)
                         print(f"Deleted {deleted} pruned company row(s) from database.")
@@ -515,28 +518,32 @@ async def main_async(args) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Scan scrape logs, discover & verify ATS fixes.")
-    parser.add_argument("--log-file", type=str, default=None,
-                        help="path to scrape log output (e.g. scrape.log)")
-    parser.add_argument("--failures-file", type=str, default=None,
-                        help="path to structured failures JSON")
-    parser.add_argument("--companies-file", type=str, default=str(SEED_FILE),
-                        help="path to seed/companies.json")
-    parser.add_argument("--report-file", type=str, default=str(DEFAULT_REPORT_FILE),
-                        help="path to output markdown report")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="discover and verify fixes without modifying companies.json")
-    parser.add_argument("--sync-db", action="store_true",
-                        help="sync database directly if connection available")
-    parser.add_argument("--ai", action="store_true", default=None,
-                        help="enable AI search & triage for unrecoverable links")
-    parser.add_argument("--no-ai", action="store_true",
-                        help="disable AI search & triage")
-    parser.add_argument("--prune", action="store_true", default=True,
-                        help="remove companies confirmed to have no supported ATS")
-    parser.add_argument("--no-prune", action="store_false", dest="prune",
-                        help="do not remove unsupported companies from seed")
-    parser.add_argument("--max-remove-pct", type=float, default=0.15,
-                        help="circuit breaker max fraction of companies removable in one run (default: 0.15)")
+    parser.add_argument("--log-file", type=str, default=None, help="path to scrape log output (e.g. scrape.log)")
+    parser.add_argument("--failures-file", type=str, default=None, help="path to structured failures JSON")
+    parser.add_argument("--companies-file", type=str, default=str(SEED_FILE), help="path to seed/companies.json")
+    parser.add_argument(
+        "--report-file", type=str, default=str(DEFAULT_REPORT_FILE), help="path to output markdown report"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="discover and verify fixes without modifying companies.json"
+    )
+    parser.add_argument("--sync-db", action="store_true", help="sync database directly if connection available")
+    parser.add_argument(
+        "--ai", action="store_true", default=None, help="enable AI search & triage for unrecoverable links"
+    )
+    parser.add_argument("--no-ai", action="store_true", help="disable AI search & triage")
+    parser.add_argument(
+        "--prune", action="store_true", default=True, help="remove companies confirmed to have no supported ATS"
+    )
+    parser.add_argument(
+        "--no-prune", action="store_false", dest="prune", help="do not remove unsupported companies from seed"
+    )
+    parser.add_argument(
+        "--max-remove-pct",
+        type=float,
+        default=0.15,
+        help="circuit breaker max fraction of companies removable in one run (default: 0.15)",
+    )
     args = parser.parse_args()
 
     sys.exit(asyncio.run(main_async(args)))
@@ -544,4 +551,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

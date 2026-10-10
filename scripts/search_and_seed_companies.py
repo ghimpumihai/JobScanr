@@ -31,7 +31,6 @@ import httpx
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.validate_companies import (
-    ASHBY_QUERY,
     CHECKS,
     SEED_FILE,
     check_ashby,
@@ -39,7 +38,6 @@ from scripts.validate_companies import (
     check_lever,
     check_smartrecruiters,
     check_teamtailor,
-    check_workday,
     construct_career_url,
 )
 
@@ -121,15 +119,19 @@ def resolve_workday_name(ident: str) -> str:
 async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> list[dict]:
     """Search for a company keyword across all handled ATS platforms."""
     slug = slugify(query)
-    variants = list(dict.fromkeys([
-        slug,
-        slug + "hq",
-        slug + "careers",
-        slug + "tech",
-        f"get{slug}",
-        query.lower().replace(" ", "-"),
-        query.lower().replace(" ", ""),
-    ]))
+    variants = list(
+        dict.fromkeys(
+            [
+                slug,
+                slug + "hq",
+                slug + "careers",
+                slug + "tech",
+                f"get{slug}",
+                query.lower().replace(" ", "-"),
+                query.lower().replace(" ", ""),
+            ]
+        )
+    )
 
     found = []
 
@@ -139,13 +141,15 @@ async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> li
             ok, detail = await check_greenhouse(client, v)
             if ok:
                 name = await resolve_greenhouse_name(client, v) or query.title()
-                found.append({
-                    "company_name": name,
-                    "career_url": construct_career_url("greenhouse", v),
-                    "ats_platform": "greenhouse",
-                    "ats_identifier": v,
-                    "_detail": detail,
-                })
+                found.append(
+                    {
+                        "company_name": name,
+                        "career_url": construct_career_url("greenhouse", v),
+                        "ats_platform": "greenhouse",
+                        "ats_identifier": v,
+                        "_detail": detail,
+                    }
+                )
                 break
         except Exception:
             pass
@@ -156,13 +160,15 @@ async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> li
             ok, detail = await check_lever(client, v)
             if ok:
                 name = await resolve_lever_name(client, v) or query.title()
-                found.append({
-                    "company_name": name,
-                    "career_url": construct_career_url("lever", v),
-                    "ats_platform": "lever",
-                    "ats_identifier": v,
-                    "_detail": detail,
-                })
+                found.append(
+                    {
+                        "company_name": name,
+                        "career_url": construct_career_url("lever", v),
+                        "ats_platform": "lever",
+                        "ats_identifier": v,
+                        "_detail": detail,
+                    }
+                )
                 break
         except Exception:
             pass
@@ -173,13 +179,15 @@ async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> li
             ok, detail = await check_ashby(client, v)
             if ok:
                 name = await resolve_ashby_name(client, v) or query.title()
-                found.append({
-                    "company_name": name,
-                    "career_url": construct_career_url("ashby", v),
-                    "ats_platform": "ashby",
-                    "ats_identifier": v,
-                    "_detail": detail,
-                })
+                found.append(
+                    {
+                        "company_name": name,
+                        "career_url": construct_career_url("ashby", v),
+                        "ats_platform": "ashby",
+                        "ats_identifier": v,
+                        "_detail": detail,
+                    }
+                )
                 break
         except Exception:
             pass
@@ -189,13 +197,15 @@ async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> li
         try:
             ok, detail = await check_smartrecruiters(client, v)
             if ok:
-                found.append({
-                    "company_name": query.title(),
-                    "career_url": construct_career_url("smartrecruiters", v),
-                    "ats_platform": "smartrecruiters",
-                    "ats_identifier": v,
-                    "_detail": detail,
-                })
+                found.append(
+                    {
+                        "company_name": query.title(),
+                        "career_url": construct_career_url("smartrecruiters", v),
+                        "ats_platform": "smartrecruiters",
+                        "ats_identifier": v,
+                        "_detail": detail,
+                    }
+                )
                 break
         except Exception:
             pass
@@ -205,13 +215,15 @@ async def search_company_across_ats(client: httpx.AsyncClient, query: str) -> li
         try:
             ok, detail = await check_teamtailor(client, v)
             if ok:
-                found.append({
-                    "company_name": query.title(),
-                    "career_url": construct_career_url("teamtailor", v),
-                    "ats_platform": "teamtailor",
-                    "ats_identifier": v,
-                    "_detail": detail,
-                })
+                found.append(
+                    {
+                        "company_name": query.title(),
+                        "career_url": construct_career_url("teamtailor", v),
+                        "ats_platform": "teamtailor",
+                        "ats_identifier": v,
+                        "_detail": detail,
+                    }
+                )
                 break
         except Exception:
             pass
@@ -299,12 +311,14 @@ def save_seed(seed_path: Path, companies: list[dict]) -> None:
         seen_keys.add(key)
         seen_names.add((name_key, key[0]))
 
-        deduped.append({
-            "company_name": c["company_name"].strip(),
-            "career_url": c["career_url"].strip(),
-            "ats_platform": c["ats_platform"].strip(),
-            "ats_identifier": c["ats_identifier"].strip(),
-        })
+        deduped.append(
+            {
+                "company_name": c["company_name"].strip(),
+                "career_url": c["career_url"].strip(),
+                "ats_platform": c["ats_platform"].strip(),
+                "ats_identifier": c["ats_identifier"].strip(),
+            }
+        )
 
     # Write formatted JSON to seed_path
     content = json.dumps(deduped, indent=2, ensure_ascii=False) + "\n"
@@ -312,9 +326,7 @@ def save_seed(seed_path: Path, companies: list[dict]) -> None:
 
 
 async def main_async() -> int:
-    parser = argparse.ArgumentParser(
-        description="Search, validate, and seed companies for JobScanr."
-    )
+    parser = argparse.ArgumentParser(description="Search, validate, and seed companies for JobScanr.")
     parser.add_argument(
         "--target",
         type=int,
@@ -369,9 +381,7 @@ async def main_async() -> int:
     current_seed = load_seed(args.seed_file)
     print(f"Loaded {len(current_seed)} companies from {args.seed_file}")
 
-    existing_keys = {
-        (c["ats_platform"], c["ats_identifier"]) for c in current_seed
-    }
+    existing_keys = {(c["ats_platform"], c["ats_identifier"]) for c in current_seed}
     existing_names = {c["company_name"].lower() for c in current_seed}
 
     sem = asyncio.Semaphore(args.concurrency)
@@ -429,10 +439,7 @@ async def main_async() -> int:
                 r = await client.get(url)
                 if r.status_code == 200:
                     raw_list = r.json()
-                    fresh = [
-                        item for item in raw_list
-                        if (plat, item) not in existing_keys
-                    ]
+                    fresh = [item for item in raw_list if (plat, item) not in existing_keys]
                     candidate_pools[plat] = fresh
                     print(f"  {plat}: {len(fresh)} new candidates available")
             except Exception as exc:
@@ -458,7 +465,9 @@ async def main_async() -> int:
                         existing_keys.add(key)
                         existing_names.add(name_lower)
                         newly_validated.append(res)
-                        print(f"  [+{len(newly_validated)}/{needed}] {res['company_name']} ({res['ats_platform']}/{res['ats_identifier']})")
+                        print(
+                            f"  [+{len(newly_validated)}/{needed}] {res['company_name']} ({res['ats_platform']}/{res['ats_identifier']})"
+                        )
                 return res
 
         tasks = []

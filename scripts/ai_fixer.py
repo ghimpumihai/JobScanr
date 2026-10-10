@@ -8,8 +8,6 @@ unrecoverable links into verified fixes or pruning recommendations.
 import json
 import logging
 import os
-import re
-from urllib.parse import urlparse
 
 import httpx
 
@@ -81,11 +79,13 @@ def search_duckduckgo(company_name: str, max_results: int = 6) -> list[dict]:
                     href = h.get("href") or ""
                     if href and href not in seen_urls:
                         seen_urls.add(href)
-                        results.append({
-                            "title": h.get("title", ""),
-                            "href": href,
-                            "body": h.get("body", ""),
-                        })
+                        results.append(
+                            {
+                                "title": h.get("title", ""),
+                                "href": href,
+                                "body": h.get("body", ""),
+                            }
+                        )
             except Exception as exc:
                 logger.warning(f"DuckDuckGo search error for query '{query}': {exc}")
                 continue
@@ -140,8 +140,7 @@ async def analyze_with_groq(
         return None
 
     results_text = "\n".join(
-        f"- Title: {r.get('title')}\n  URL: {r.get('href')}\n  Snippet: {r.get('body')}"
-        for r in search_results[:8]
+        f"- Title: {r.get('title')}\n  URL: {r.get('href')}\n  Snippet: {r.get('body')}" for r in search_results[:8]
     )
 
     prompt = f"""You are an ATS (Applicant Tracking System) career board researcher.
@@ -184,7 +183,10 @@ Respond ONLY with a JSON object matching this schema:
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": "You are a precise data extraction assistant that only outputs valid JSON."},
+                    {
+                        "role": "system",
+                        "content": "You are a precise data extraction assistant that only outputs valid JSON.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.1,
@@ -272,10 +274,7 @@ async def triage_company_with_ai(
                 res["status"] = "recovered_by_ai"
                 res["new_platform"] = plat
                 res["new_ident"] = ident
-                res["new_career_url"] = (
-                    llm_analysis.get("career_url")
-                    or construct_career_url(plat, ident)
-                )
+                res["new_career_url"] = llm_analysis.get("career_url") or construct_career_url(plat, ident)
                 res["verification_detail"] = detail
                 res["reason"] = f"AI discovered & verified on {plat}/{ident}: {llm_analysis.get('reason', '')}"
                 return res
@@ -302,4 +301,3 @@ async def triage_company_with_ai(
     res["status"] = "unresolved"
     res["reason"] = "no active board found on supported platforms (inconclusive search)"
     return res
-

@@ -4,18 +4,19 @@ GET https://api.lever.co/v0/postings/{company}?mode=json — single response, no
 `descriptionPlain` is already plain text; fall back to stripping `description` HTML.
 """
 
+from models import JobPosting
 from scrapers.base import BaseClient, strip_html
 
 
 class LeverClient(BaseClient):
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         r = await self.request_with_retry(
             "GET",
             f"https://api.lever.co/v0/postings/{ats_identifier}",
             params={"mode": "json"},
         )
         r.raise_for_status()
-        jobs = []
+        jobs: list[JobPosting] = []
         for posting in r.json():
             categories = posting.get("categories") or {}
             description = posting.get("descriptionPlain")
@@ -25,12 +26,14 @@ class LeverClient(BaseClient):
             workplace = (posting.get("workplaceType") or "").replace("_", " ").title()
             if workplace and location and workplace.lower() not in location.lower():
                 location = f"{location} ({workplace})"
-            jobs.append({
-                "external_id": str(posting["id"]),
-                "title": (posting.get("text") or "").strip(),
-                "location": location,
-                "department": categories.get("department"),
-                "url": posting.get("hostedUrl") or posting.get("applyUrl"),
-                "description": description,
-            })
+            jobs.append(
+                {
+                    "external_id": str(posting["id"]),
+                    "title": (posting.get("text") or "").strip(),
+                    "location": location,
+                    "department": categories.get("department"),
+                    "url": posting.get("hostedUrl") or posting.get("applyUrl"),
+                    "description": description,
+                }
+            )
         return jobs

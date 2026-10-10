@@ -1,13 +1,13 @@
 """ATS client registry."""
 
-from scrapers.base import BaseClient
 from scrapers.ashby import AshbyClient
+from scrapers.base import BaseClient
+from scrapers.google import GoogleClient
 from scrapers.greenhouse import GreenhouseClient
 from scrapers.lever import LeverClient
-from scrapers.workday import WorkdayClient
-from scrapers.google import GoogleClient
-from scrapers.teamtailor import TeamtailorClient
 from scrapers.smartrecruiters import SmartRecruitersClient
+from scrapers.teamtailor import TeamtailorClient
+from scrapers.workday import WorkdayClient
 
 CLIENTS: dict[str, type[BaseClient]] = {
     "workday": WorkdayClient,

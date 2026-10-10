@@ -24,9 +24,8 @@ SEED_FILE = Path(__file__).parent / "companies.json"
 def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="Seed companies table from seed/companies.json.")
-    parser.add_argument("--staging", action="store_true",
-                        help="use staging environment (.env.stage)")
-    args = parser.parse_args()
+    parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
+    _ = parser.parse_args()
 
     companies = json.loads(SEED_FILE.read_text())
     written = queries.upsert_companies(companies)
@@ -36,7 +35,9 @@ def main() -> int:
     try:
         pruned = queries.prune_obsolete_companies(valid_keys)
         for p in pruned:
-            logger.info("Pruning obsolete company from DB: %s (%s/%s)", p['name'], p['ats_platform'], p['ats_identifier'])
+            logger.info(
+                "Pruning obsolete company from DB: %s (%s/%s)", p["name"], p["ats_platform"], p["ats_identifier"]
+            )
         if pruned:
             logger.info("Pruned %d obsolete company row(s).", len(pruned))
     except Exception as exc:

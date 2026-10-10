@@ -16,7 +16,7 @@ import httpx
 
 from config import PROFILE
 from jobs.match import _any_word, _normalize
-from models import EnrichedJobPosting, JobPosting
+from models import JobPosting
 from scrapers.base import strip_html
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def extract_compensation(text: str | None) -> str | None:
     for m in SALARY_RE.finditer(t):
         token = m.group(0)
         # '€800M+', '$2B+' — company metrics, not salaries
-        rest = t[m.end():m.end() + 3].lstrip()
+        rest = t[m.end() : m.end() + 3].lstrip()
         if rest[:1] in ("M", "B"):
             continue
         values = [_parse_amount(x) for x in re.findall(r"\d[\d,.]*\s?[kK]?", token)]
@@ -67,12 +67,11 @@ def extract_compensation(text: str | None) -> str | None:
         if max(values) < 10_000 and not re.search(r"[kK]\s?$", token):
             continue
         # hourly gigs
-        if re.match(r"\s*/?\s*h(\.|our)?", t[m.end():], re.IGNORECASE):
+        if re.match(r"\s*/?\s*h(\.|our)?", t[m.end() :], re.IGNORECASE):
             continue
         # revenue/funding marketing copy
-        context = t[max(0, m.start() - 45):m.end() + 45]
-        if re.search(r"\b(ARR|MRR|revenue|funding|raised|valuation)\b",
-                     context, re.IGNORECASE):
+        context = t[max(0, m.start() - 45) : m.end() + 45]
+        if re.search(r"\b(ARR|MRR|revenue|funding|raised|valuation)\b", context, re.IGNORECASE):
             continue
         return re.sub(r"\s+", "", token) or None
     return None
@@ -93,8 +92,7 @@ def passes_prefilter(job: JobPosting | dict, p: dict | None = None) -> bool:
         return False
     if not _any_word(p.get("levels", []), title):
         return False
-    if not is_workday and not any(
-            loc in headline for loc in map(_normalize, p["locations"])):
+    if not is_workday and not any(loc in headline for loc in map(_normalize, p["locations"])):
         return False
     if _any_word(p.get("excluded_title_keywords", []), title):
         return False
@@ -116,31 +114,32 @@ async def _fetch_detail(job: JobPosting | dict, client: httpx.AsyncClient) -> di
             if platform == "smartrecruiters":
                 from scrapers.smartrecruiters import SmartRecruitersClient
 
-                detail = await SmartRecruitersClient(client).get_job_detail(
-                    ident, job["external_id"])
+                detail = await SmartRecruitersClient(client).get_job_detail(ident, job["external_id"])
             elif "|" in ident:  # workday: "tenant|wdN|Site"
                 from scrapers.workday import WorkdayClient
 
-                detail = await WorkdayClient(client).get_job_detail(
-                    ident, job["external_path"])
+                detail = await WorkdayClient(client).get_job_detail(ident, job["external_path"])
             else:
                 from scrapers.ashby import AshbyClient
 
-                detail = await AshbyClient(client).get_job_detail(
-                    ident, job["external_id"])
+                detail = await AshbyClient(client).get_job_detail(ident, job["external_id"])
             if detail is not None and detail.get("descriptionHtml"):
                 return detail
         except Exception as exc:
             logger.debug(
                 "Detail fetch attempt %d/3 failed for %s (%s): %s",
-                attempt + 1, ident, job.get("external_id"), exc,
+                attempt + 1,
+                ident,
+                job.get("external_id"),
+                exc,
             )
         await asyncio.sleep(3.0 * (attempt + 1))
     return None
 
 
-async def enrich_jobs(jobs: list[JobPosting | dict], client: httpx.AsyncClient,
-                      p: dict | None = None) -> list[JobPosting | dict]:
+async def enrich_jobs(
+    jobs: list[JobPosting | dict], client: httpx.AsyncClient, p: dict | None = None
+) -> list[JobPosting | dict]:
     """Fill descriptions for candidates lacking them. Failures are silent:
     an unenriched job still gets matched on title/location."""
     targets = [j for j in jobs if passes_prefilter(j, p) and _needs_enrichment(j)]
@@ -161,8 +160,9 @@ async def enrich_jobs(jobs: list[JobPosting | dict], client: httpx.AsyncClient,
         if detail is None or not detail.get("descriptionHtml"):
             failures += 1
     if failures:
-        logger.warning("enrichment: %d/%d detail fetches incomplete (links/descriptions may be stale)",
-                       failures, len(targets))
+        logger.warning(
+            "enrichment: %d/%d detail fetches incomplete (links/descriptions may be stale)", failures, len(targets)
+        )
 
     for job in jobs:
         key = (job.get("ats_identifier"), job.get("external_id"))

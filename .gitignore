@@ -54,3 +54,9 @@ Thumbs.db
 .vscode/
 *.swp
 fixtures/google.html
+
+# ─── Frontend & Node ──────────────────────────────────────────────
+node_modules/
+.svelte-kit/
+.svelte/
+build/

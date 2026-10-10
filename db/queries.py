@@ -1,6 +1,5 @@
 """All DB operations in one place (plan Phase 3)."""
 
-from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from pathlib import Path
 
@@ -53,9 +52,7 @@ def apply_schema() -> None:
 
 def get_all_companies() -> list[Company]:
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, name, ats_platform, ats_identifier, career_url FROM companies ORDER BY id"
-        )
+        cur.execute("SELECT id, name, ats_platform, ats_identifier, career_url FROM companies ORDER BY id")
         return [
             {"id": r[0], "name": r[1], "ats_platform": r[2], "ats_identifier": r[3], "career_url": r[4]}
             for r in cur.fetchall()
@@ -89,8 +86,16 @@ def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
     """
     if not jobs:
         return []
-    cols = ["external_id", "company_id", "title", "location", "department", "url",
-            "compensation", "application_deadline"]
+    cols = [
+        "external_id",
+        "company_id",
+        "title",
+        "location",
+        "department",
+        "url",
+        "compensation",
+        "application_deadline",
+    ]
     arrays = {c: [j.get(c) for j in jobs] for c in cols}
     sql = """
         INSERT INTO job_postings AS jp (external_id, company_id, title, location, department, url,
@@ -182,12 +187,14 @@ def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[Company]:
         for row in cur.fetchall():
             if (row[2], row[3]) not in valid_keys:
                 to_delete.append(row[0])
-                deleted_records.append({
-                    "id": row[0],
-                    "name": row[1],
-                    "ats_platform": row[2],
-                    "ats_identifier": row[3],
-                })
+                deleted_records.append(
+                    {
+                        "id": row[0],
+                        "name": row[1],
+                        "ats_platform": row[2],
+                        "ats_identifier": row[3],
+                    }
+                )
         if to_delete:
             cur.execute("DELETE FROM companies WHERE id = ANY(%s)", (to_delete,))
         return deleted_records
@@ -203,7 +210,4 @@ def get_recent_job_samples(limit: int = 5) -> list[dict]:
                LIMIT %s""",
             (limit,),
         )
-        return [
-            dict(zip(("title", "company_name", "location", "url"), r))
-            for r in cur.fetchall()
-        ]
+        return [dict(zip(("title", "company_name", "location", "url"), r)) for r in cur.fetchall()]

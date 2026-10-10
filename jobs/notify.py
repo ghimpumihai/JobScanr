@@ -27,20 +27,13 @@ def build_html_digest(jobs: list[dict]) -> str:
         comp = f"<td>{comp_val}</td>" if comp_val else "<td></td>"
         deadline_val = html.escape(str(j["application_deadline"])) if j.get("application_deadline") else ""
         deadline = f"<td>⏳ {deadline_val}</td>" if deadline_val else "<td></td>"
-        rows += (
-            f'<tr>'
-            f'<td><a href="{url}">{title}</a></td>'
-            f'<td>{company}</td>'
-            f'<td>{location}</td>'
-            f'{comp}{deadline}'
-            f'</tr>'
-        )
+        rows += f'<tr><td><a href="{url}">{title}</a></td><td>{company}</td><td>{location}</td>{comp}{deadline}</tr>'
     header = "<tr><th>Role</th><th>Company</th><th>Location</th><th>Salary</th><th>Deadline</th></tr>"
     return (
-        f'<p><strong>{len(jobs)}</strong> new matching job'
-        f'{"s" if len(jobs) != 1 else ""}:</p>'
+        f"<p><strong>{len(jobs)}</strong> new matching job"
+        f"{'s' if len(jobs) != 1 else ''}:</p>"
         f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
-        f'{header}{rows}</table>'
+        f"{header}{rows}</table>"
     )
 
 
@@ -56,9 +49,7 @@ def _send_email(subject: str, text_body: str, html_body: str, to_email: str | No
     msg["From"] = user
     msg["To"] = recipient
     msg.set_content(text_body)
-    msg.add_alternative(
-        f"<html><body>{html_body}</body></html>", subtype="html"
-    )
+    msg.add_alternative(f"<html><body>{html_body}</body></html>", subtype="html")
 
     with smtplib.SMTP(host, port) as smtp:
         smtp.starttls()
@@ -86,8 +77,7 @@ def email_configured() -> bool:
         missing.append("DIGEST_EMAIL (or DIGEST_EMAIL_TEST for staging)")
     if missing:
         logger.warning(
-            "Email not configured, skipping (missing: %s). "
-            "Set them in .env / Actions secrets to receive digests.",
+            "Email not configured, skipping (missing: %s). Set them in .env / Actions secrets to receive digests.",
             ", ".join(missing),
         )
         return False

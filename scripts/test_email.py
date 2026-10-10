@@ -28,10 +28,8 @@ def fetch_sample(limit: int) -> list[dict]:
 def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="Preview digest email.")
-    parser.add_argument("--limit", type=int, default=5,
-                        help="how many recent postings to include")
-    parser.add_argument("--staging", action="store_true",
-                        help="use staging environment (.env.stage)")
+    parser.add_argument("--limit", type=int, default=5, help="how many recent postings to include")
+    parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
     args = parser.parse_args()
 
     jobs = fetch_sample(args.limit)

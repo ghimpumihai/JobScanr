@@ -1,7 +1,7 @@
-import pytest
 import httpx
-from scrapers.teamtailor import TeamtailorClient, _format_location
+import pytest
 
+from scrapers.teamtailor import TeamtailorClient, _format_location
 
 SAMPLE_FEED = {
     "version": "https://jsonfeed.org/version/1.1",
@@ -71,9 +71,7 @@ def test_format_location_telecommute():
 
     hybrid_remote = {
         "jobLocationType": "TELECOMMUTE",
-        "jobLocation": [
-            {"address": {"addressLocality": "Bucharest", "addressCountry": "RO"}}
-        ],
+        "jobLocation": [{"address": {"addressLocality": "Bucharest", "addressCountry": "RO"}}],
     }
     assert _format_location(hybrid_remote) == "Bucharest, RO; Remote"
 

@@ -1,7 +1,7 @@
 import asyncio
 import base64
+
 import httpx
-import pytest
 
 from scrapers.greenhouse import GreenhouseClient, _first_department
 

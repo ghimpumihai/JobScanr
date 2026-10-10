@@ -13,6 +13,7 @@ candidate via the ApiJobPosting detail query.
 
 import asyncio
 
+from models import JobPosting
 from scrapers.base import BaseClient, strip_html
 
 GRAPHQL_URL = "https://jobs.ashbyhq.com/api/non-user-graphql"
@@ -44,20 +45,18 @@ DETAIL_QUERY = """query ApiJobPosting($organizationHostedJobsPageName: String!, 
 
 
 class AshbyClient(BaseClient):
-    async def _graphql(self, operation: str, query: str, variables: dict,
-                       data_key: str) -> dict:
+    async def _graphql(self, operation: str, query: str, variables: dict, data_key: str) -> dict:
         delay = RETRY_DELAY
         for _ in range(RETRIES):
             r = await self.request_with_retry(
-                "POST", GRAPHQL_URL,
-                json={"operationName": operation, "variables": variables,
-                      "query": query},
+                "POST",
+                GRAPHQL_URL,
+                json={"operationName": operation, "variables": variables, "query": query},
             )
             r.raise_for_status()
             body = r.json()
             if body.get("errors"):
-                raise RuntimeError(
-                    f"ashby graphql error: {body['errors'][0]['message'][:120]}")
+                raise RuntimeError(f"ashby graphql error: {body['errors'][0]['message'][:120]}")
             data = (body.get("data") or {}).get(data_key)
             if data is not None:
                 return data
@@ -65,33 +64,37 @@ class AshbyClient(BaseClient):
             delay *= 2
         raise RuntimeError(f"ashby: throttled after {RETRIES} retries ({variables})")
 
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         board = await self._graphql(
-            "ApiJobBoardWithTeams", BOARD_QUERY,
-            {"organizationHostedJobsPageName": ats_identifier}, "jobBoard",
+            "ApiJobBoardWithTeams",
+            BOARD_QUERY,
+            {"organizationHostedJobsPageName": ats_identifier},
+            "jobBoard",
         )
         team_names = {t["id"]: t["name"] for t in board.get("teams", [])}
-        jobs = []
+        jobs: list[JobPosting] = []
         for posting in board.get("jobPostings", []):
             locations = [posting.get("locationName") or ""]
             locations += [s["locationName"] for s in posting.get("secondaryLocations") or []]
-            jobs.append({
-                "external_id": str(posting["id"]),
-                "title": (posting.get("title") or "").strip(),
-                "location": ", ".join(loc for loc in locations if loc) or None,
-                "department": team_names.get(posting.get("teamId")),
-                "url": f"https://jobs.ashbyhq.com/{ats_identifier}/{posting['id']}",
-                "description": None,
-                "ats_identifier": ats_identifier,  # used by detail enrichment
-            })
+            jobs.append(
+                {
+                    "external_id": str(posting["id"]),
+                    "title": (posting.get("title") or "").strip(),
+                    "location": ", ".join(loc for loc in locations if loc) or None,
+                    "department": team_names.get(posting.get("teamId")),
+                    "url": f"https://jobs.ashbyhq.com/{ats_identifier}/{posting['id']}",
+                    "description": None,
+                    "ats_identifier": ats_identifier,  # used by detail enrichment
+                }
+            )
         return jobs
 
     async def get_job_detail(self, ats_identifier: str, posting_id: str) -> dict | None:
         """Full description + deadline + compensation for one posting."""
         return await self._graphql(
-            "ApiJobPosting", DETAIL_QUERY,
-            {"organizationHostedJobsPageName": ats_identifier,
-             "jobPostingId": posting_id},
+            "ApiJobPosting",
+            DETAIL_QUERY,
+            {"organizationHostedJobsPageName": ats_identifier, "jobPostingId": posting_id},
             "jobPosting",
         )
 

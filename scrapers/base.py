@@ -68,7 +68,9 @@ class BaseClient(ABC):
                     r.raise_for_status()  # dead board: fail fast, no retry
                 if r.status_code == 429:
                     retry_after = r.headers.get("Retry-After")
-                    sleep_time = float(retry_after) if retry_after and retry_after.isdigit() else (delay * (attempt + 1))
+                    sleep_time = (
+                        float(retry_after) if retry_after and retry_after.isdigit() else (delay * (attempt + 1))
+                    )
                     await asyncio.sleep(sleep_time)
                     delay *= 1.5
                     continue

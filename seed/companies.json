@@ -1308,7 +1308,7 @@
     "ats_identifier": "ankura|wd5|ankura"
   },
   {
-    "company_name": "Ann & Robert H. Lurie Children\u2019s Hospital of Chicago",
+    "company_name": "Ann & Robert H. Lurie Children’s Hospital of Chicago",
     "career_url": "https://luriechildrens.wd1.myworkdayjobs.com/externalportal",
     "ats_platform": "workday",
     "ats_identifier": "luriechildrens|wd1|externalportal"
@@ -1956,7 +1956,7 @@
     "ats_identifier": "athene|wd5|athene_careers"
   },
   {
-    "company_name": "AtkinsR\u00e9alis",
+    "company_name": "AtkinsRéalis",
     "career_url": "https://slihrms.wd3.myworkdayjobs.com/careers",
     "ats_platform": "workday",
     "ats_identifier": "slihrms|wd3|careers"
@@ -4326,7 +4326,7 @@
     "ats_identifier": "cimgroup"
   },
   {
-    "company_name": "Cincinnati Children\u2019s Hospital and Medical Center",
+    "company_name": "Cincinnati Children’s Hospital and Medical Center",
     "career_url": "https://cincinnatichildrens.wd5.myworkdayjobs.com/careersatcincinnatichildrens",
     "ats_platform": "workday",
     "ats_identifier": "cincinnatichildrens|wd5|careersatcincinnatichildrens"
@@ -4644,7 +4644,7 @@
     "ats_identifier": "cloudscaler"
   },
   {
-    "company_name": "Cl\u0113nera",
+    "company_name": "Clēnera",
     "career_url": "https://job-boards.greenhouse.io/clenera",
     "ats_platform": "greenhouse",
     "ats_identifier": "clenera"
@@ -8034,7 +8034,7 @@
     "ats_identifier": "furtherearlycareer"
   },
   {
-    "company_name": "Fussball Club Cincinnati LLC (\u201cFC Cincinnati\u201d)",
+    "company_name": "Fussball Club Cincinnati LLC (“FC Cincinnati”)",
     "career_url": "https://job-boards.greenhouse.io/fccincinnati",
     "ats_platform": "greenhouse",
     "ats_identifier": "fccincinnati"
@@ -9522,7 +9522,7 @@
     "ats_identifier": "hottopic"
   },
   {
-    "company_name": "Hottinger Br\u00fcel & Kjaer (HBK)",
+    "company_name": "Hottinger Brüel & Kjaer (HBK)",
     "career_url": "https://spectris.wd3.myworkdayjobs.com/HBK_Careers",
     "ats_platform": "workday",
     "ats_identifier": "spectris|wd3|HBK_Careers"
@@ -9702,7 +9702,7 @@
     "ats_identifier": "synnex|wd5|hyvecareers"
   },
   {
-    "company_name": "H\u00f6gan\u00e4s",
+    "company_name": "Höganäs",
     "career_url": "https://hoganas.wd3.myworkdayjobs.com/Careers",
     "ats_platform": "workday",
     "ats_identifier": "hoganas|wd3|Careers"
@@ -12270,7 +12270,7 @@
     "ats_identifier": "mcafee|wd1|external"
   },
   {
-    "company_name": "McCoy\u2019s",
+    "company_name": "McCoy’s",
     "career_url": "https://mccoys.wd1.myworkdayjobs.com/mccoys_external_careers",
     "ats_platform": "workday",
     "ats_identifier": "mccoys|wd1|mccoys_external_careers"
@@ -12538,12 +12538,6 @@
     "career_url": "https://jobs.ashbyhq.com/metaview",
     "ats_platform": "ashby",
     "ats_identifier": "metaview"
-  },
-  {
-    "company_name": "Meter",
-    "career_url": "https://jobs.lever.co/metergysolutions",
-    "ats_platform": "lever",
-    "ats_identifier": "metergysolutions"
   },
   {
     "company_name": "Metergy Solutions",
@@ -18442,12 +18436,6 @@
     "career_url": "https://suncor.wd1.myworkdayjobs.com/Suncor_External",
     "ats_platform": "workday",
     "ats_identifier": "suncor|wd1|Suncor_External"
-  },
-  {
-    "company_name": "Sunday Robotics",
-    "career_url": "https://workday.wd5.myworkdayjobs.com/Workday",
-    "ats_platform": "workday",
-    "ats_identifier": "workday|wd5|Workday"
   },
   {
     "company_name": "Suno",

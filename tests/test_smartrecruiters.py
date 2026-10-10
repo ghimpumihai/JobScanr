@@ -1,7 +1,7 @@
-import pytest
 import httpx
-from scrapers.smartrecruiters import SmartRecruitersClient, _format_location
+import pytest
 
+from scrapers.smartrecruiters import SmartRecruitersClient, _format_location
 
 SAMPLE_POSTINGS_PAGE1 = {
     "totalFound": 2,
@@ -105,4 +105,3 @@ async def test_smartrecruiters_get_job_detail():
         assert "We are hiring a junior SWE." in detail["descriptionHtml"]
         assert "Python" in detail["descriptionHtml"]
         assert detail["externalUrl"] == "https://jobs.smartrecruiters.com/TestCo/1001-junior-software-engineer"
-

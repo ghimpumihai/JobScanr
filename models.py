@@ -5,6 +5,7 @@ from typing import NotRequired, TypedDict
 
 class Company(TypedDict):
     """Company record stored in the database or used by scrapers."""
+
     id: NotRequired[int]
     name: str
     ats_platform: str
@@ -15,6 +16,7 @@ class Company(TypedDict):
 
 class JobPosting(TypedDict):
     """Core job posting produced by ATS scrapers and persisted to DB."""
+
     external_id: str
     title: str
     location: str | None
@@ -38,6 +40,7 @@ class JobPosting(TypedDict):
 
 class EnrichedJobPosting(JobPosting):
     """Job posting enriched with detailed description, deadline, or compensation."""
+
     description: str | None
     compensation: NotRequired[str | None]
     application_deadline: NotRequired[str | None]
