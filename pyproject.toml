@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobscanr"
+version = "0.1.0"
+description = "Automated job board scraper and notification service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx==0.28.1",
+    "psycopg[binary,pool]==3.3.4",
+    "python-dotenv==1.2.3",
+    "ddgs==9.16.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scrapers*", "jobs*", "db*", "scripts*", "seed*"]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not integration and not network'"
+markers = [
+    "integration: marks tests as external integration tests",
+    "network: marks tests that require live network access",
+]

@@ -203,3 +203,127 @@ def test_get_recent_job_samples():
         sql, params = mock_cur.execute.call_args[0]
         assert "LIMIT %s" in sql
         assert params == (2,)
+
+
+def test_apply_schema():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        queries.apply_schema()
+        mock_cur.execute.assert_called_once()
+        sql = mock_cur.execute.call_args[0][0]
+        assert "CREATE TABLE IF NOT EXISTS companies" in sql
+        assert "CREATE TABLE IF NOT EXISTS job_postings" in sql
+
+
+def test_get_all_companies():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.fetchall.return_value = [
+        (1, "Acme Corp", "greenhouse", "acme", "https://acme.com/jobs"),
+        (2, "Beta Inc", "lever", "beta", "https://beta.com/jobs"),
+    ]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        companies = queries.get_all_companies()
+        assert len(companies) == 2
+        assert companies[0] == {
+            "id": 1,
+            "name": "Acme Corp",
+            "ats_platform": "greenhouse",
+            "ats_identifier": "acme",
+            "career_url": "https://acme.com/jobs",
+        }
+
+
+def test_upsert_companies():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 2
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    companies = [
+        {"company_name": "Acme", "ats_platform": "greenhouse", "ats_identifier": "acme", "career_url": "http://acme.com"},
+        {"company_name": "Beta", "ats_platform": "lever", "ats_identifier": "beta", "career_url": "http://beta.com"},
+    ]
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        written = queries.upsert_companies(companies)
+        assert written == 2
+        mock_cur.executemany.assert_called_once()
+        sql, rows = mock_cur.executemany.call_args[0]
+        assert "INSERT INTO companies" in sql
+        assert "ON CONFLICT (ats_platform, ats_identifier) DO UPDATE" in sql
+        assert rows == companies
+
+
+def test_mark_notified_empty():
+    with patch("db.queries.get_connection") as mock_get_conn:
+        queries.mark_notified([])
+        mock_get_conn.assert_not_called()
+
+
+def test_mark_notified_ids():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        queries.mark_notified([101, 102])
+        mock_cur.execute.assert_called_once_with(
+            "UPDATE job_postings SET notified_at = NOW() WHERE id = ANY(%s::int[])",
+            ([101, 102],),
+        )
+
+
+def test_delete_company():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 1
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        deleted = queries.delete_company("ashby", "deadco")
+        assert deleted == 1
+        mock_cur.execute.assert_called_once_with(
+            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            ("ashby", "deadco"),
+        )
+
+
+def test_delete_companies_batch():
+    assert queries.delete_companies_batch([]) == 0
+
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 2
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        deleted = queries.delete_companies_batch([("ashby", "co1"), ("lever", "co2")])
+        assert deleted == 2
+        mock_cur.executemany.assert_called_once_with(
+            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            [("ashby", "co1"), ("lever", "co2")],
+        )
+
+
+def test_counts():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.fetchone.return_value = (42, 108)
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        res = queries.counts()
+        assert res == {"companies": 42, "job_postings": 108}
