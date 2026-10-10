@@ -37,3 +37,16 @@ def test_explicit_load_environment(monkeypatch):
     assert config.DB_ENV == "staging"
 
 
+def test_setup_logging():
+    import logging
+    import config
+
+    config.setup_logging(level=logging.DEBUG)
+    root = logging.getLogger()
+    assert root.level == logging.DEBUG
+    assert len(root.handlers) > 0
+    formatter = root.handlers[0].formatter
+    assert "%(asctime)s" in formatter._fmt
+    assert "%(levelname)s" in formatter._fmt
+
+

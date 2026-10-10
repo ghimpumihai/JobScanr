@@ -160,8 +160,8 @@ async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
         if detail is None or not detail.get("descriptionHtml"):
             failures += 1
     if failures:
-        print(f"  enrichment: {failures}/{len(targets)} detail fetches incomplete "
-              f"(links/descriptions may be stale)")
+        logger.warning("enrichment: %d/%d detail fetches incomplete (links/descriptions may be stale)",
+                       failures, len(targets))
 
     for job in jobs:
         key = (job.get("ats_identifier"), job.get("external_id"))

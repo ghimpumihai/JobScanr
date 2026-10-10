@@ -5,12 +5,15 @@ clickable link per role for applying.
 """
 
 import html
+import logging
 import os
 import smtplib
 from email.message import EmailMessage
 
 from config import DIGEST_EMAIL
 from jobs.digest import build_digest
+
+logger = logging.getLogger(__name__)
 
 
 def build_html_digest(jobs: list[dict]) -> str:
@@ -82,7 +85,10 @@ def email_configured() -> bool:
     if not DIGEST_EMAIL:
         missing.append("DIGEST_EMAIL (or DIGEST_EMAIL_TEST for staging)")
     if missing:
-        print(f"Email not configured, skipping (missing: {', '.join(missing)}). "
-              f"Set them in .env / Actions secrets to receive digests.")
+        logger.warning(
+            "Email not configured, skipping (missing: %s). "
+            "Set them in .env / Actions secrets to receive digests.",
+            ", ".join(missing),
+        )
         return False
     return True

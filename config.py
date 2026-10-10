@@ -1,3 +1,15 @@
+import logging
+
+
+def setup_logging(level: int | str = logging.INFO) -> None:
+    """Configure standard application logging format."""
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+
 """Central config: hardcoded user profile + env-driven secrets."""
 
 import os

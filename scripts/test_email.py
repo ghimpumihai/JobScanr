@@ -9,11 +9,14 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 
 sys.path.insert(0, ".")
 
-from config import DIGEST_EMAIL  # noqa: E402
+from config import DIGEST_EMAIL, setup_logging  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_sample(limit: int) -> list[dict]:
@@ -23,6 +26,7 @@ def fetch_sample(limit: int) -> list[dict]:
 
 
 def main() -> int:
+    setup_logging()
     parser = argparse.ArgumentParser(description="Preview digest email.")
     parser.add_argument("--limit", type=int, default=5,
                         help="how many recent postings to include")
@@ -32,14 +36,14 @@ def main() -> int:
 
     jobs = fetch_sample(args.limit)
     if not jobs:
-        print("No rows to sample.")
+        logger.warning("No rows to sample.")
         return 1
 
-    print(f"Previewing {len(jobs)} rows -> {DIGEST_EMAIL}")
+    logger.info("Previewing %d rows -> %s", len(jobs), DIGEST_EMAIL)
     from jobs.notify import send_email_digest
 
     send_email_digest(jobs)
-    print("Preview digest sent (no DB writes).")
+    logger.info("Preview digest sent (no DB writes).")
     return 0
 
 
