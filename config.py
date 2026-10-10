@@ -1,5 +1,6 @@
-"""Central config: hardcoded user profile + env-driven secrets."""
+"""Central config: user profile configuration + env-driven secrets."""
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -39,10 +40,8 @@ DATABASE_URL = ""
 DIGEST_EMAIL = ""
 load_environment()
 
-# Target: early-career software engineering roles (intern / junior / graduate)
-# across Europe's tech hubs + remote. Tune from digest logs (plan Phase 6).
-PROFILE = {
-    # Substring-matched against the title.
+# Built-in fallback profile for early-career software engineering roles
+DEFAULT_PROFILE = {
     "titles": [
         "software engineer",
         "software developer",
@@ -54,13 +53,10 @@ PROFILE = {
         "entry level software engineer",
         "associate software engineer",
     ],
-    # At least one of these must appear in the title (career-level gate).
     "levels": [
         "intern", "internship", "junior", "graduate", "new grad", "new-grad",
         "entry level", "entry-level", "associate", "trainee", "apprentice",
     ],
-    # Title-scoped: seniority markers plus non-SWE role families
-    # (hybrids like "Software Engineer - Frontend").
     "excluded_title_keywords": [
         "senior", "sr.", "staff", "principal", "lead", "manager", "director",
         "head of", "vp", "vice president", "architect",
@@ -70,8 +66,6 @@ PROFILE = {
         "site reliability", "devops", "qa", "test engineer",
         "embedded", "hardware",
     ],
-    # Ghost listings that advertise future possibilities instead of real
-    # jobs. Matched case-insensitively anywhere in the posting text.
     "excluded_description_patterns": [
         r"this (exact )?(role|posting|requisition) may not be",
         r"advertis\w+ (a )?potential",
@@ -85,8 +79,6 @@ PROFILE = {
         "brussels", "milan", "bucharest", "budapest",
         "germany", "netherlands",
     ],
-    # Countries whose requirements count as compatible with the user.
-    # A posting restricting eligibility to anything else is rejected.
     "eligible_regions": [
         "europe", "european union", "eu",
         "germany", "berlin", "munich", "netherlands", "amsterdam",
@@ -99,3 +91,39 @@ PROFILE = {
         "hungary", "budapest",
     ],
 }
+
+
+def load_profile(path: str | Path | None = None) -> dict:
+    """Load user search preferences from a JSON file, environment variable, or fallback."""
+    global PROFILE
+    profile_path = None
+    if path:
+        profile_path = Path(path)
+    elif os.environ.get("PROFILE_PATH"):
+        profile_path = Path(os.environ["PROFILE_PATH"])
+    elif hasattr(sys, "argv") and "--profile" in sys.argv:
+        try:
+            idx = sys.argv.index("--profile")
+            if idx + 1 < len(sys.argv):
+                profile_path = Path(sys.argv[idx + 1])
+        except ValueError:
+            pass
+
+    if profile_path is None:
+        profile_path = BASE_DIR / "profile.json"
+
+    if profile_path.is_file():
+        try:
+            with open(profile_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    PROFILE = loaded
+                    return loaded
+        except Exception:
+            pass
+
+    PROFILE = dict(DEFAULT_PROFILE)
+    return PROFILE
+
+
+PROFILE = load_profile()
