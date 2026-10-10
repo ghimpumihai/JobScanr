@@ -1,9 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from scripts.ai_fixer import (
     analyze_with_groq,
-    construct_career_url,
     detect_unsupported_ats_in_results,
     extract_ats_candidates_from_results,
     triage_company_with_ai,
@@ -23,7 +23,11 @@ def test_extract_ats_candidates_from_results():
     assert ("lever", "spotify", "https://jobs.lever.co/spotify/") in candidates
     assert ("ashby", "consensys", "https://jobs.ashbyhq.com/consensys") in candidates
     assert ("greenhouse", "adahealth", "https://job-boards.greenhouse.io/adahealth") in candidates
-    assert ("workday", "adobe|wd5|external_experienced", "https://adobe.wd5.myworkdayjobs.com/external_experienced") in candidates
+    assert (
+        "workday",
+        "adobe|wd5|external_experienced",
+        "https://adobe.wd5.myworkdayjobs.com/external_experienced",
+    ) in candidates
     assert ("smartrecruiters", "foo", "https://careers.smartrecruiters.com/foo") in candidates
 
 
@@ -76,9 +80,7 @@ async def test_triage_company_with_ai_recovers_live_feed():
         "career_url": "https://boards.greenhouse.io/acme-old",
     }
 
-    fake_search = [
-        {"title": "Acme Careers", "href": "https://jobs.ashbyhq.com/acme", "body": "Jobs at Acme"}
-    ]
+    fake_search = [{"title": "Acme Careers", "href": "https://jobs.ashbyhq.com/acme", "body": "Jobs at Acme"}]
 
     with patch("scripts.ai_fixer.search_duckduckgo", return_value=fake_search):
         with patch("scripts.ai_fixer.verify_ats", new=AsyncMock(return_value=(True, "10 jobs"))):
@@ -145,11 +147,8 @@ def test_remove_companies_from_seed():
         {"company_name": "KeepMe", "ats_platform": "ashby", "ats_identifier": "keep"},
         {"company_name": "DropMe", "ats_platform": "greenhouse", "ats_identifier": "drop"},
     ]
-    to_remove = [
-        {"company_name": "DropMe", "old_platform": "greenhouse", "old_ident": "drop"}
-    ]
+    to_remove = [{"company_name": "DropMe", "old_platform": "greenhouse", "old_ident": "drop"}]
     filtered, count = remove_companies_from_seed(companies, to_remove)
     assert count == 1
     assert len(filtered) == 1
     assert filtered[0]["company_name"] == "KeepMe"
-

@@ -1,6 +1,7 @@
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from scripts.scan_and_fix_links import (
     apply_fixes_to_companies,
@@ -69,8 +70,18 @@ def test_generate_candidate_identifiers():
 
 def test_apply_fixes_to_companies():
     companies = [
-        {"company_name": "Company A", "ats_platform": "greenhouse", "ats_identifier": "comp-a-old", "career_url": "http://a.com"},
-        {"company_name": "Company B", "ats_platform": "lever", "ats_identifier": "comp-b", "career_url": "http://b.com"},
+        {
+            "company_name": "Company A",
+            "ats_platform": "greenhouse",
+            "ats_identifier": "comp-a-old",
+            "career_url": "http://a.com",
+        },
+        {
+            "company_name": "Company B",
+            "ats_platform": "lever",
+            "ats_identifier": "comp-b",
+            "career_url": "http://b.com",
+        },
     ]
     recoveries = [
         {
@@ -165,8 +176,10 @@ async def test_recover_company_via_fingerprint():
         return False, "Not Found"
 
     with patch("scripts.scan_and_fix_links.verify_ats", side_effect=mock_verify):
-        with patch("scripts.scan_and_fix_links.probe_career_url",
-                   new=AsyncMock(return_value=("ashby", "testcorp", "https://jobs.ashbyhq.com/testcorp"))):
+        with patch(
+            "scripts.scan_and_fix_links.probe_career_url",
+            new=AsyncMock(return_value=("ashby", "testcorp", "https://jobs.ashbyhq.com/testcorp")),
+        ):
             res = await recover_company(client, comp)
             assert res["status"] == "recovered"
             assert res["new_platform"] == "ashby"
@@ -202,7 +215,10 @@ def test_construct_career_url():
     assert construct_career_url("ashby", "consensys") == "https://jobs.ashbyhq.com/consensys"
     assert construct_career_url("greenhouse", "adahealth") == "https://job-boards.greenhouse.io/adahealth"
     assert construct_career_url("lever", "agicap") == "https://jobs.lever.co/agicap"
-    assert construct_career_url("workday", "adobe|wd5|external_experienced") == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
+    assert (
+        construct_career_url("workday", "adobe|wd5|external_experienced")
+        == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
+    )
     assert construct_career_url("smartrecruiters", "foo") == "https://careers.smartrecruiters.com/foo"
     assert construct_career_url("unknown", "bar") == ""
 
@@ -224,7 +240,10 @@ async def test_recover_company_via_workday_clusters():
 
     with patch("scripts.scan_and_fix_links.verify_ats", side_effect=mock_verify):
         with patch("scripts.scan_and_fix_links.probe_career_url", new=AsyncMock(return_value=None)):
-            with patch("scripts.scan_and_fix_links.probe_workday_clusters", new=AsyncMock(return_value="adobe|wd5|external_experienced")):
+            with patch(
+                "scripts.scan_and_fix_links.probe_workday_clusters",
+                new=AsyncMock(return_value="adobe|wd5|external_experienced"),
+            ):
                 res = await recover_company(client, comp)
                 assert res["status"] == "recovered"
                 assert res["new_platform"] == "workday"
@@ -232,22 +251,44 @@ async def test_recover_company_via_workday_clusters():
                 assert res["new_career_url"] == "https://adobe.wd5.myworkdayjobs.com/external_experienced"
 
 
-
-
 @pytest.mark.anyio
 async def test_main_async_ai_prunes_unsupported(tmp_path):
-    from scripts.scan_and_fix_links import main_async
     import argparse
 
+    from scripts.scan_and_fix_links import main_async
+
     companies_file = tmp_path / "companies.json"
-    companies_file.write_text(json.dumps([
-        {"company_name": "DeadCorp", "ats_platform": "greenhouse", "ats_identifier": "deadcorp", "career_url": "https://boards.greenhouse.io/deadcorp"},
-        {"company_name": "KeepCorp", "ats_platform": "ashby", "ats_identifier": "keepcorp", "career_url": "https://jobs.ashbyhq.com/keepcorp"}
-    ]))
+    companies_file.write_text(
+        json.dumps(
+            [
+                {
+                    "company_name": "DeadCorp",
+                    "ats_platform": "greenhouse",
+                    "ats_identifier": "deadcorp",
+                    "career_url": "https://boards.greenhouse.io/deadcorp",
+                },
+                {
+                    "company_name": "KeepCorp",
+                    "ats_platform": "ashby",
+                    "ats_identifier": "keepcorp",
+                    "career_url": "https://jobs.ashbyhq.com/keepcorp",
+                },
+            ]
+        )
+    )
     failures_file = tmp_path / "failures.json"
-    failures_file.write_text(json.dumps([
-        {"company_name": "DeadCorp", "ats_platform": "greenhouse", "ats_identifier": "deadcorp", "error": "404 Not Found"}
-    ]))
+    failures_file.write_text(
+        json.dumps(
+            [
+                {
+                    "company_name": "DeadCorp",
+                    "ats_platform": "greenhouse",
+                    "ats_identifier": "deadcorp",
+                    "error": "404 Not Found",
+                }
+            ]
+        )
+    )
     report_file = tmp_path / "report.md"
 
     args = argparse.Namespace(
@@ -263,22 +304,32 @@ async def test_main_async_ai_prunes_unsupported(tmp_path):
         max_remove_pct=0.5,
     )
 
-    with patch("scripts.scan_and_fix_links.recover_company", new=AsyncMock(return_value={
-        "company_name": "DeadCorp",
-        "old_platform": "greenhouse",
-        "old_ident": "deadcorp",
-        "career_url": "https://boards.greenhouse.io/deadcorp",
-        "status": "unrecoverable",
-        "reason": "no live ATS coordinates",
-    })):
-        with patch("scripts.ai_fixer.triage_company_with_ai", new=AsyncMock(return_value={
-            "company_name": "DeadCorp",
-            "old_platform": "greenhouse",
-            "old_ident": "deadcorp",
-            "career_url": "https://boards.greenhouse.io/deadcorp",
-            "status": "remove",
-            "reason": "uses unsupported ATS (personio)",
-        })):
+    with patch(
+        "scripts.scan_and_fix_links.recover_company",
+        new=AsyncMock(
+            return_value={
+                "company_name": "DeadCorp",
+                "old_platform": "greenhouse",
+                "old_ident": "deadcorp",
+                "career_url": "https://boards.greenhouse.io/deadcorp",
+                "status": "unrecoverable",
+                "reason": "no live ATS coordinates",
+            }
+        ),
+    ):
+        with patch(
+            "scripts.ai_fixer.triage_company_with_ai",
+            new=AsyncMock(
+                return_value={
+                    "company_name": "DeadCorp",
+                    "old_platform": "greenhouse",
+                    "old_ident": "deadcorp",
+                    "career_url": "https://boards.greenhouse.io/deadcorp",
+                    "status": "remove",
+                    "reason": "uses unsupported ATS (personio)",
+                }
+            ),
+        ):
             code = await main_async(args)
             assert code == 0
             # Check companies.json had DeadCorp pruned
@@ -332,6 +383,3 @@ def test_generate_report_markdown_ai_and_removal():
     assert "FixedAI" in report
     assert "## Removed Companies (Pruned from `seed/companies.json`)" in report
     assert "PrunedComp" in report
-
-
-

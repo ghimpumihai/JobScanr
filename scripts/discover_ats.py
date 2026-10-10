@@ -29,10 +29,21 @@ SIGNATURES = [
 ]
 
 DROP_SIGNATURES = [
-    "myworkdayjobs.com", "workday", "rippling",
-    "pinpoint", "recruitee", "personio", "bamboohr", "jazzhr",
-    "smartrecruiters.com", "eightfold.ai", "phenompeople", "icims",
-    "successfactors", "oraclecloud.com", "greenhouse.io/embed",
+    "myworkdayjobs.com",
+    "workday",
+    "rippling",
+    "pinpoint",
+    "recruitee",
+    "personio",
+    "bamboohr",
+    "jazzhr",
+    "smartrecruiters.com",
+    "eightfold.ai",
+    "phenompeople",
+    "icims",
+    "successfactors",
+    "oraclecloud.com",
+    "greenhouse.io/embed",
 ]
 
 

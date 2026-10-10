@@ -47,9 +47,7 @@ async def recover(client: httpx.AsyncClient, name: str, pairs) -> dict | None:
         check = CHECKS[platform]
         try:
             if await check(client, ident):
-                return {"company_name": name,
-                        "ats_platform": platform,
-                        "ats_identifier": ident}
+                return {"company_name": name, "ats_platform": platform, "ats_identifier": ident}
         except Exception:
             continue
     return None
@@ -70,8 +68,7 @@ async def main() -> int:
     recovered = [{"company_name": n, **r} for n, r in results if r]
     print(f"Recovered {len(recovered)}/{len(raw)}:", file=sys.stderr)
     for r in sorted(recovered, key=lambda x: x["company_name"]):
-        print(f"  {r['company_name']:<24} -> {r['ats_platform']}/{r['ats_identifier']}",
-              file=sys.stderr)
+        print(f"  {r['company_name']:<24} -> {r['ats_platform']}/{r['ats_identifier']}", file=sys.stderr)
 
     json.dump(recovered, sys.stdout, indent=2)
     return 0

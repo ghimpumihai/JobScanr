@@ -18,6 +18,7 @@ import logging
 
 import httpx
 
+from models import JobPosting
 from scrapers.base import BaseClient
 
 logger = logging.getLogger(__name__)
@@ -46,16 +47,16 @@ class WorkdayClient(BaseClient):
         path = external_path if external_path.startswith("/") else f"/{external_path}"
         return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}"
 
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         base, _ = self._base(ats_identifier)
         headers = {"Accept": "application/json"}
-        jobs: dict[str, dict] = {}
+        jobs: dict[str, JobPosting] = {}
 
         # 1. Initial page with limit=20
         r = await self.request_with_retry(
-            "POST", f"{base}/jobs",
-            json={"appliedFacets": {}, "limit": PAGE_SIZE,
-                  "offset": 0, "searchText": ""},
+            "POST",
+            f"{base}/jobs",
+            json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": 0, "searchText": ""},
             headers=headers,
         )
         r.raise_for_status()
@@ -89,9 +90,9 @@ class WorkdayClient(BaseClient):
             while offset < total:
                 await asyncio.sleep(0.4)
                 r = await self.request_with_retry(
-                    "POST", f"{base}/jobs",
-                    json={"appliedFacets": {}, "limit": PAGE_SIZE,
-                          "offset": offset, "searchText": ""},
+                    "POST",
+                    f"{base}/jobs",
+                    json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": offset, "searchText": ""},
                     headers=headers,
                 )
                 r.raise_for_status()
@@ -109,9 +110,9 @@ class WorkdayClient(BaseClient):
             for _ in range(MAX_SEARCH_PAGES):
                 await asyncio.sleep(0.4)
                 r = await self.request_with_retry(
-                    "POST", f"{base}/jobs",
-                    json={"appliedFacets": {}, "limit": PAGE_SIZE,
-                          "offset": offset, "searchText": q},
+                    "POST",
+                    f"{base}/jobs",
+                    json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": offset, "searchText": q},
                     headers=headers,
                 )
                 r.raise_for_status()
@@ -131,8 +132,7 @@ class WorkdayClient(BaseClient):
         """Full HTML description + human-facing URL for one posting."""
         base, _ = self._base(ats_identifier)
         try:
-            r = await self.request_with_retry(
-                "GET", f"{base}/job/{slug}", headers={"Accept": "application/json"})
+            r = await self.request_with_retry("GET", f"{base}/job/{slug}", headers={"Accept": "application/json"})
             r.raise_for_status()
             body = r.json()
             info = body.get("jobPostingInfo") or {}
@@ -146,7 +146,8 @@ class WorkdayClient(BaseClient):
                 return x if isinstance(x, str) else None
 
             loc_parts = [descriptor(info.get("location"))] + [
-                descriptor(l) for l in (info.get("additionalLocations") or [])]
+                descriptor(loc) for loc in (info.get("additionalLocations") or [])
+            ]
             named = [x for x in loc_parts if x]
 
             out = {"descriptionHtml": desc}

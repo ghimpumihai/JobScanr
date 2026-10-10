@@ -1,6 +1,6 @@
 import asyncio
+
 import httpx
-import pytest
 
 from scrapers.lever import LeverClient
 

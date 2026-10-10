@@ -5,6 +5,7 @@ Teamtailor provides an unauthenticated JSON Feed (v1.1) for career boards.
 Pagination follows `next_url` when present.
 """
 
+from models import JobPosting
 from scrapers.base import BaseClient, strip_html
 
 
@@ -43,13 +44,13 @@ def _format_location(job_posting: dict) -> str | None:
 
 
 class TeamtailorClient(BaseClient):
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         if ats_identifier.startswith("http://") or ats_identifier.startswith("https://"):
             url = f"{ats_identifier.rstrip('/')}/jobs.json"
         else:
             url = f"https://{ats_identifier}.teamtailor.com/jobs.json"
 
-        jobs = []
+        jobs: list[JobPosting] = []
         page_count = 0
         max_pages = 10
 
@@ -65,17 +66,18 @@ class TeamtailorClient(BaseClient):
                 description_html = item.get("content_html") or job_posting.get("description")
                 department = item.get("department") or job_posting.get("occupationalCategory")
 
-                jobs.append({
-                    "external_id": external_id,
-                    "title": title,
-                    "location": _format_location(job_posting),
-                    "department": department,
-                    "url": item.get("url"),
-                    "description": strip_html(description_html),
-                })
+                jobs.append(
+                    {
+                        "external_id": external_id,
+                        "title": title,
+                        "location": _format_location(job_posting),
+                        "department": department,
+                        "url": item.get("url"),
+                        "description": strip_html(description_html),
+                    }
+                )
 
             url = data.get("next_url")
             page_count += 1
 
         return jobs
-

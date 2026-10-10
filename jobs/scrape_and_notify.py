@@ -11,7 +11,7 @@ import asyncio
 import logging
 import sys
 
-from config import PROFILE, setup_logging
+from config import setup_logging
 from db import queries
 from jobs.match import matches_profile
 from models import Company, JobPosting
@@ -33,8 +33,9 @@ async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
     return jobs
 
 
-async def scrape_all(companies: list[Company | dict],
-                       failure_details: list[dict] | None = None) -> tuple[list[JobPosting], list[str]]:
+async def scrape_all(
+    companies: list[Company | dict], failure_details: list[dict] | None = None
+) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
     # - Workday: dedicated concurrent pool (20) so multi-page crawls never starve fast platforms
@@ -69,15 +70,17 @@ async def scrape_all(companies: list[Company | dict],
             if failure_details is not None:
                 resp = getattr(result, "response", None)
                 status_code = getattr(resp, "status_code", None)
-                failure_details.append({
-                    "company_id": company.get("id"),
-                    "company_name": company.get("name"),
-                    "ats_platform": company.get("ats_platform"),
-                    "ats_identifier": company.get("ats_identifier"),
-                    "career_url": company.get("career_url"),
-                    "error": str(result),
-                    "status_code": status_code,
-                })
+                failure_details.append(
+                    {
+                        "company_id": company.get("id"),
+                        "company_name": company.get("name"),
+                        "ats_platform": company.get("ats_platform"),
+                        "ats_identifier": company.get("ats_identifier"),
+                        "career_url": company.get("career_url"),
+                        "error": str(result),
+                        "status_code": status_code,
+                    }
+                )
         else:
             all_jobs.extend(result)
     return all_jobs, failures
@@ -85,6 +88,7 @@ async def scrape_all(companies: list[Company | dict],
 
 async def run_pipeline(args) -> int:
     import config
+
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
     companies = queries.get_all_companies()
     logger.info("Scraping %d companies...", len(companies))
@@ -99,6 +103,7 @@ async def run_pipeline(args) -> int:
     if args.failures_file and failure_details:
         import json
         from pathlib import Path
+
         Path(args.failures_file).write_text(json.dumps(failure_details, indent=2))
         logger.info("Wrote %d failure details to %s.", len(failure_details), args.failures_file)
 
@@ -112,6 +117,7 @@ async def run_pipeline(args) -> int:
     # details only for candidates passing the cheap title/location gate so
     # country-restriction and experience checks see full text.
     from jobs.enrich import enrich_jobs, passes_prefilter
+
     candidates = [j for j in jobs if passes_prefilter(j, profile)]
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
@@ -130,12 +136,13 @@ async def run_pipeline(args) -> int:
     # Employers rarely fill structured salary fields but often paste ranges
     # into descriptions — extract for anything missing one.
     from jobs.enrich import extract_compensation
+
     for j in matches:
         if not j.get("compensation"):
             j["compensation"] = extract_compensation(j.get("description"))
     logger.info("%d jobs match profile:", len(matches))
     for j in matches[:20]:
-        logger.info("  - %s @ %s (%s)", j['title'], j['company_name'], j['location'])
+        logger.info("  - %s @ %s (%s)", j["title"], j["company_name"], j["location"])
 
     if args.dry_run:
         logger.info("[dry-run] no DB writes, no email.")
@@ -165,14 +172,10 @@ async def run_pipeline(args) -> int:
 def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="JobScanr scrape & digest runner.")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="fetch + match, no DB writes, no email")
-    parser.add_argument("--staging", action="store_true",
-                        help="use staging environment (.env.stage)")
-    parser.add_argument("--failures-file", type=str, default=None,
-                        help="path to write structured failures JSON")
-    parser.add_argument("--profile", type=str, default=None,
-                        help="path to custom profile JSON")
+    parser.add_argument("--dry-run", action="store_true", help="fetch + match, no DB writes, no email")
+    parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
+    parser.add_argument("--failures-file", type=str, default=None, help="path to write structured failures JSON")
+    parser.add_argument("--profile", type=str, default=None, help="path to custom profile JSON")
     args = parser.parse_args()
 
     return asyncio.run(run_pipeline(args))

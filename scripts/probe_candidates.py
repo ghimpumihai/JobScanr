@@ -38,9 +38,9 @@ def candidates_for(company: dict) -> dict[str, list[str]]:
     ident = company["ats_identifier"]
     base = [ident] + ALIASES.get(name.lower(), [])
     slug = slugify(name)
-    variants = list(dict.fromkeys(
-        [ident, *base, slug, slug + "hq", ident + "hq", ident.replace("-", ""), ident + "inc"]
-    ))
+    variants = list(
+        dict.fromkeys([ident, *base, slug, slug + "hq", ident + "hq", ident.replace("-", ""), ident + "inc"])
+    )
     return {company["ats_platform"]: variants[:8]}
 
 
@@ -62,9 +62,11 @@ async def ok_smartrecruiters(client: httpx.AsyncClient, ident: str) -> bool:
 async def ok_ashby(client: httpx.AsyncClient, ident: str) -> bool:
     r = await client.post(
         "https://jobs.ashbyhq.com/api/non-user-graphql",
-        json={"operationName": "ApiJobBoardWithTeams",
-              "variables": {"organizationHostedJobsPageName": ident},
-              "query": ASHBY_QUERY},
+        json={
+            "operationName": "ApiJobBoardWithTeams",
+            "variables": {"organizationHostedJobsPageName": ident},
+            "query": ASHBY_QUERY,
+        },
     )
     if r.status_code != 200:
         return False
@@ -72,8 +74,7 @@ async def ok_ashby(client: httpx.AsyncClient, ident: str) -> bool:
     return board is not None
 
 
-CHECKS = {"greenhouse": ok_greenhouse, "lever": ok_lever,
-          "smartrecruiters": ok_smartrecruiters, "ashby": ok_ashby}
+CHECKS = {"greenhouse": ok_greenhouse, "lever": ok_lever, "smartrecruiters": ok_smartrecruiters, "ashby": ok_ashby}
 
 
 async def recover(client: httpx.AsyncClient, company: dict) -> dict | None:
@@ -82,8 +83,12 @@ async def recover(client: httpx.AsyncClient, company: dict) -> dict | None:
         for ident in candidates:
             try:
                 if await check(client, ident):
-                    return {"company_name": company["company_name"], "career_url": company["career_url"],
-                            "ats_platform": platform, "ats_identifier": ident}
+                    return {
+                        "company_name": company["company_name"],
+                        "career_url": company["career_url"],
+                        "ats_platform": platform,
+                        "ats_identifier": ident,
+                    }
             except Exception:
                 continue
     return None

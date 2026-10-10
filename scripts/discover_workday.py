@@ -35,14 +35,53 @@ TIMEOUT = 10.0
 SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
 
 DEFAULT_CANDIDATES = [
-    "nvidia", "asml", "motorolasolutions", "qualcomm", "amd", "accenture",
-    "philips", "hp", "siemens", "keysight", "purestorage", "nutanix",
-    "f5", "iqvia", "genesys", "ptc", "commvault", "analogdevices",
-    "kla", "trimble", "marvell", "boeing", "gresearch", "cboe",
-    "zoom", "thales", "cohesity", "abb", "netflix", "klarna",
-    "deliveryhero", "atlassian", "booking", "airbus", "revolut",
-    "ocado", "asos", "king", "ubisoft", "nokia", "ericsson",
-    "capgemini", "vmware", "wayfair", "instacart", "doordash", "lyft",
+    "nvidia",
+    "asml",
+    "motorolasolutions",
+    "qualcomm",
+    "amd",
+    "accenture",
+    "philips",
+    "hp",
+    "siemens",
+    "keysight",
+    "purestorage",
+    "nutanix",
+    "f5",
+    "iqvia",
+    "genesys",
+    "ptc",
+    "commvault",
+    "analogdevices",
+    "kla",
+    "trimble",
+    "marvell",
+    "boeing",
+    "gresearch",
+    "cboe",
+    "zoom",
+    "thales",
+    "cohesity",
+    "abb",
+    "netflix",
+    "klarna",
+    "deliveryhero",
+    "atlassian",
+    "booking",
+    "airbus",
+    "revolut",
+    "ocado",
+    "asos",
+    "king",
+    "ubisoft",
+    "nokia",
+    "ericsson",
+    "capgemini",
+    "vmware",
+    "wayfair",
+    "instacart",
+    "doordash",
+    "lyft",
 ]
 
 
@@ -89,7 +128,7 @@ async def qualify_workday(
     early_career_only: bool = True,
 ) -> tuple[dict, list[dict]] | None:
     """Test if a Workday board has matching early-career or tech jobs.
-    
+
     Returns (company_dict, matched_jobs) where company_dict strictly adheres
     to the seed/companies.json schema.
     """
@@ -158,12 +197,16 @@ async def discover_tenant(
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Discover and qualify Workday career boards.")
-    parser.add_argument("--candidates", nargs="*", default=None,
-                        help="specific candidate tenant names to probe (default: all curated candidates)")
-    parser.add_argument("--all-roles", action="store_true",
-                        help="qualify if any software role exists, not strictly early-career")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="probe and print without writing to disk or database")
+    parser.add_argument(
+        "--candidates",
+        nargs="*",
+        default=None,
+        help="specific candidate tenant names to probe (default: all curated candidates)",
+    )
+    parser.add_argument(
+        "--all-roles", action="store_true", help="qualify if any software role exists, not strictly early-career"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="probe and print without writing to disk or database")
     args = parser.parse_args()
 
     candidates = args.candidates if args.candidates else DEFAULT_CANDIDATES
@@ -213,6 +256,7 @@ async def main() -> int:
 
         try:
             from db import queries
+
             written = queries.upsert_companies(new_companies)
             print(f"Synchronized {written} new companies to database ({DB_ENV}).")
         except Exception as exc:

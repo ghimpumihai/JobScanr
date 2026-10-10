@@ -99,9 +99,7 @@ def matches_profile(job: JobPosting | dict, profile: dict | None = None) -> bool
     # "Remote" alone isn't EU-remote: "Remote - United States" is not
     # applicable. Only count it when the posting doesn't restrict to
     # non-EU countries (and no concrete EU location was named).
-    eu_loc_named = any(
-        loc != "remote" and loc in location for loc in map(_normalize, p["locations"])
-    )
+    eu_loc_named = any(loc != "remote" and loc in location for loc in map(_normalize, p["locations"]))
     if "remote" in location and not eu_loc_named and US_RESTRICTED_RE.search(location):
         return False
     if _any_word(p.get("excluded_title_keywords", []), title):
@@ -111,8 +109,7 @@ def matches_profile(job: JobPosting | dict, profile: dict | None = None) -> bool
         return False
     if p.get("excluded_keywords") and _any_word(p["excluded_keywords"], text):
         return False
-    if any(re.search(pat, text, re.IGNORECASE)
-           for pat in p.get("excluded_description_patterns", [])):
+    if any(re.search(pat, text, re.IGNORECASE) for pat in p.get("excluded_description_patterns", [])):
         return False
     if YEARS_EXPERIENCE_RE.search(text):
         return False

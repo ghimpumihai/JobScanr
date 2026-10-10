@@ -5,7 +5,8 @@ Public unauthenticated API returning paginated job postings.
 Detail descriptions are fetched per candidate via get_job_detail during enrichment.
 """
 
-from scrapers.base import BaseClient, strip_html
+from models import JobPosting
+from scrapers.base import BaseClient
 
 
 def _format_location(location_dict: dict | None) -> str | None:
@@ -28,11 +29,11 @@ def _format_location(location_dict: dict | None) -> str | None:
 
 
 class SmartRecruitersClient(BaseClient):
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         base_url = f"https://api.smartrecruiters.com/v1/companies/{ats_identifier}/postings"
         offset = 0
         limit = 100
-        jobs = []
+        jobs: list[JobPosting] = []
 
         while True:
             r = await self.request_with_retry(
@@ -51,14 +52,16 @@ class SmartRecruitersClient(BaseClient):
                 location = _format_location(posting.get("location"))
                 url = f"https://jobs.smartrecruiters.com/{ats_identifier}/{posting_id}"
 
-                jobs.append({
-                    "external_id": posting_id,
-                    "title": title,
-                    "location": location,
-                    "department": department,
-                    "url": url,
-                    "description": None,
-                })
+                jobs.append(
+                    {
+                        "external_id": posting_id,
+                        "title": title,
+                        "location": location,
+                        "department": department,
+                        "url": url,
+                        "description": None,
+                    }
+                )
 
             total_found = data.get("totalFound", 0)
             offset += len(postings)
@@ -87,4 +90,3 @@ class SmartRecruitersClient(BaseClient):
             "descriptionHtml": description_html if description_html else None,
             "externalUrl": data.get("postingUrl") or data.get("applyUrl"),
         }
-

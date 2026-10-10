@@ -92,8 +92,7 @@ async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]
 async def check_workday(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
     tenant, wd, site = ident.split("|")
     url = f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
-    r = await client.post(url, json={"appliedFacets": {}, "limit": 20,
-                                     "offset": 0, "searchText": ""})
+    r = await client.post(url, json={"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": ""})
     if r.status_code != 200:
         return False, f"HTTP {r.status_code}"
     total = r.json().get("total")
@@ -104,8 +103,7 @@ async def check_workday(client: httpx.AsyncClient, ident: str) -> tuple[bool, st
 
 async def check_google(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
     first = ident.split("|")[0]
-    r = await client.get("https://www.google.com/about/careers/applications/jobs/results/",
-                         params={"location": first})
+    r = await client.get("https://www.google.com/about/careers/applications/jobs/results/", params={"location": first})
     if r.status_code != 200:
         return False, f"HTTP {r.status_code}"
     n = len(re.findall(r"jobs/results/[0-9A-Za-z_-]+\?", r.text))
@@ -144,9 +142,7 @@ SIGNATURES = [
     ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-zA-Z0-9_-]+)")),
     (
         "workday",
-        re.compile(
-            r"https://([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([a-zA-Z0-9_-]+)"
-        ),
+        re.compile(r"https://([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([a-zA-Z0-9_-]+)"),
     ),
     ("smartrecruiters", re.compile(r"careers\.smartrecruiters\.com/([a-zA-Z0-9_-]+)")),
     ("teamtailor", re.compile(r"([a-zA-Z0-9_-]+)\.teamtailor\.com")),

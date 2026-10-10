@@ -1,9 +1,10 @@
 import asyncio
 from unittest.mock import patch
+
 import httpx
 import pytest
 
-from scrapers.ashby import AshbyClient, normalize_description, GRAPHQL_URL
+from scrapers.ashby import GRAPHQL_URL, AshbyClient, normalize_description
 
 SAMPLE_BOARD_DATA = {
     "data": {
@@ -43,9 +44,7 @@ SAMPLE_DETAIL_DATA = {
         "jobPosting": {
             "descriptionHtml": "<p>We are seeking a <strong>Software Engineer</strong> to join us.</p>",
             "applicationDeadline": "2026-12-31",
-            "compensationTiers": [
-                {"tierSummary": "€70,000 - €85,000"}
-            ],
+            "compensationTiers": [{"tierSummary": "€70,000 - €85,000"}],
         }
     }
 }

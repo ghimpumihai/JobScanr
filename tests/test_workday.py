@@ -1,7 +1,7 @@
 import asyncio
 from unittest.mock import patch
+
 import httpx
-import pytest
 
 from scrapers.workday import WorkdayClient, normalize_description
 
@@ -61,6 +61,7 @@ def test_workday_get_jobs_pagination():
 
     def handler(request: httpx.Request) -> httpx.Response:
         import json
+
         payload = json.loads(request.content)
         offset = payload.get("offset")
         offsets.append(offset)

@@ -9,7 +9,6 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import re
 import sys
 from collections import Counter
@@ -20,8 +19,7 @@ import httpx
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.validate_companies import (
-    CHECKS,
+from scripts.validate_companies import (  # noqa: E402
     SIGNATURES,
     construct_career_url,
     validate_company,
@@ -88,9 +86,7 @@ async def harvest(limit: int | None = None, concurrency: int = 25) -> list[dict]
         except Exception as exc:
             logger.error("Could not read %s: %s", SEED_FILE, exc)
 
-    seen_keys = {
-        (c["ats_platform"], c["ats_identifier"]) for c in existing_companies
-    }
+    seen_keys = {(c["ats_platform"], c["ats_identifier"]) for c in existing_companies}
     logger.info("Loaded %d existing companies from %s", len(existing_companies), SEED_FILE)
 
     async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": UA}) as client:

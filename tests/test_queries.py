@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 import config
@@ -122,12 +123,26 @@ def test_upsert_jobs_empty_list():
 
 def test_upsert_jobs_inserts_and_returns_new_jobs():
     jobs = [
-        {"external_id": "job1", "company_id": 1, "title": "Software Engineer",
-         "location": "Berlin", "department": "Eng", "url": "http://example.com/1",
-         "compensation": None, "application_deadline": None},
-        {"external_id": "job2", "company_id": 1, "title": "Junior Dev",
-         "location": "London", "department": "Eng", "url": "http://example.com/2",
-         "compensation": "€60k", "application_deadline": "2026-12-31"},
+        {
+            "external_id": "job1",
+            "company_id": 1,
+            "title": "Software Engineer",
+            "location": "Berlin",
+            "department": "Eng",
+            "url": "http://example.com/1",
+            "compensation": None,
+            "application_deadline": None,
+        },
+        {
+            "external_id": "job2",
+            "company_id": 1,
+            "title": "Junior Dev",
+            "location": "London",
+            "department": "Eng",
+            "url": "http://example.com/2",
+            "compensation": "€60k",
+            "application_deadline": "2026-12-31",
+        },
     ]
 
     mock_conn = MagicMock()
@@ -248,7 +263,12 @@ def test_upsert_companies():
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
     companies = [
-        {"company_name": "Acme", "ats_platform": "greenhouse", "ats_identifier": "acme", "career_url": "http://acme.com"},
+        {
+            "company_name": "Acme",
+            "ats_platform": "greenhouse",
+            "ats_identifier": "acme",
+            "career_url": "http://acme.com",
+        },
         {"company_name": "Beta", "ats_platform": "lever", "ats_identifier": "beta", "career_url": "http://beta.com"},
     ]
 

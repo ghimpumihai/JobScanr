@@ -13,6 +13,7 @@ Identifier format: pipe-separated location names, matching the site's
 import asyncio
 import re
 
+from models import JobPosting
 from scrapers.base import BaseClient
 
 BASE = "https://www.google.com/about/careers/applications"
@@ -30,7 +31,7 @@ def _tokens(window: str) -> list[str]:
     return [x.strip() for x in t.split("|") if x.strip()]
 
 
-def parse_card(window: str, path: str, title: str) -> dict | None:
+def parse_card(window: str, path: str, title: str) -> JobPosting | None:
     """Extract locations + experience level from the markup preceding a card's
     link. Uses the CLOSEST place/bar_chart pair so tightly-packed cards don't
     inherit their neighbour's data."""
@@ -44,7 +45,7 @@ def parse_card(window: str, path: str, title: str) -> dict | None:
     if not starts_before:
         return None
     start = starts_before[-1]
-    locations = [t for t in toks[start + 1:end] if not t.startswith("+")]
+    locations = [t for t in toks[start + 1 : end] if not t.startswith("+")]
     level = toks[end + 1] if end + 1 < len(toks) else None
     if not title or not path:
         return None
@@ -63,17 +64,16 @@ def parse_card(window: str, path: str, title: str) -> dict | None:
 class GoogleClient(BaseClient):
     MAX_PAGES = 6
 
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         locations = [x for x in ats_identifier.split("|") if x]
-        jobs: dict[str, dict] = {}
+        jobs: dict[str, JobPosting] = {}
         for location in locations:
             prev_ids: set[str] = set()
             for page in range(1, self.MAX_PAGES + 1):
                 params = {"location": location}
                 if page > 1:
                     params["page"] = str(page)
-                r = await self.request_with_retry(
-                    "GET", RESULTS_URL, params=params)
+                r = await self.request_with_retry("GET", RESULTS_URL, params=params)
                 r.raise_for_status()
                 html = r.text
                 new_on_page = 0
@@ -82,8 +82,7 @@ class GoogleClient(BaseClient):
                     if path in jobs:
                         continue
                     # Card content precedes its "Learn more" link.
-                    card = parse_card(html[max(0, m.start() - 4000):m.start()],
-                                      path, title)
+                    card = parse_card(html[max(0, m.start() - 4000) : m.start()], path, title)
                     if card is None:
                         continue
                     card["ats_identifier"] = ats_identifier
@@ -96,4 +95,3 @@ class GoogleClient(BaseClient):
                 await asyncio.sleep(0.8)
             await asyncio.sleep(1.0)  # politeness across location queries
         return list(jobs.values())
-

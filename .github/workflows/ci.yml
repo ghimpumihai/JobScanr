@@ -5,9 +5,12 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    if: github.event_name == 'pull_request'
+  lint-and-typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -16,11 +19,56 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: python -m pytest tests/ -v
+      - name: Install linters and type checkers
+        run: pip install ruff mypy httpx psycopg[binary,pool] python-dotenv
+      - name: Run Ruff Lint
+        run: ruff check .
+      - name: Run Ruff Format Check
+        run: ruff format --check .
+      - name: Run MyPy Type Check
+        run: mypy models.py config.py scrapers/
+
+  validate-seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate seed/companies.json schema
+        run: python -m scripts.validate_seed_schema
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run tests with coverage
+        run: python -m pytest tests/ -v --cov=.
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit production dependencies
+        run: pip-audit -r requirements.txt
 
   sync-db:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint-and-typecheck, validate-seed, test]
     runs-on: ubuntu-latest
     environment: sync-db
     timeout-minutes: 5

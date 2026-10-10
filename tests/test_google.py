@@ -3,12 +3,13 @@ real careers-page HTML: it embeds third-party tokens and bloats the repo."""
 
 import asyncio
 from unittest.mock import patch
+
 import httpx
 import pytest
 
 from scrapers.google import CARD_RE, GoogleClient, parse_card
 
-SYNTHETIC_PAGE = '''
+SYNTHETIC_PAGE = """
 <div class=card>
   <h2>Software Engineer Intern, Summer 2027</h2>
   <span>corporate_fare</span><span>Google</span>
@@ -24,7 +25,7 @@ SYNTHETIC_PAGE = '''
   <a href="jobs/results/222222222222222-research-scientist-phd-intern-2028?location=Germany"
      aria-label="Learn more about Research Scientist PhD Intern, 2027">Learn more</a>
 </div>
-'''
+"""
 
 
 def _parse_all():
@@ -34,7 +35,7 @@ def _parse_all():
         if path in seen:
             continue
         seen.add(path)
-        card = parse_card(SYNTHETIC_PAGE[max(0, m.start() - 4000):m.start()], path, title)
+        card = parse_card(SYNTHETIC_PAGE[max(0, m.start() - 4000) : m.start()], path, title)
         if card:
             cards.append(card)
     return cards
@@ -46,8 +47,10 @@ def test_parses_cards_from_synthetic_page():
     swe = cards[0]
     assert swe["title"] == "Software Engineer Intern, Summer 2027"
     assert "Munich, Germany" in swe["location"]
-    assert swe["url"] == ("https://www.google.com/about/careers/applications/"
-                          "jobs/results/111111111111111-software-engineer-intern-summer-2027")
+    assert swe["url"] == (
+        "https://www.google.com/about/careers/applications/"
+        "jobs/results/111111111111111-software-engineer-intern-summer-2027"
+    )
 
 
 def test_locations_include_accented_cities():
@@ -58,6 +61,7 @@ def test_locations_include_accented_cities():
 
 def test_google_client_get_jobs_mocked():
     """Unit test verifying GoogleClient.get_jobs parsing and deduplication without network calls."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=SYNTHETIC_PAGE)
 
