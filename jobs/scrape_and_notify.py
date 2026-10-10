@@ -85,8 +85,10 @@ async def run_pipeline(args) -> int:
     failure_details: list[dict] = []
     jobs, failures = await scrape_all(companies, failure_details=failure_details)
 
-    for failure in failures:
-        logger.warning("FAIL %s", failure)
+    if failures:
+        logger.info("Scrape finished with %d failures across %d companies.", len(failures), len(companies))
+        for failure in failures:
+            logger.debug("FAIL %s", failure)
 
     if args.failures_file and failure_details:
         import json

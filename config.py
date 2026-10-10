@@ -19,6 +19,9 @@ def setup_logging(level: int | str = logging.INFO) -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
         force=True,
     )
+    # Suppress verbose per-request HTTP logs that flood scrape output
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def load_environment(staging: bool | None = None) -> str:
