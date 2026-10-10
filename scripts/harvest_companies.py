@@ -30,7 +30,6 @@ from scripts.validate_companies import (
 logger = logging.getLogger("harvest_companies")
 
 SEED_FILE = PROJECT_ROOT / "seed" / "companies.json"
-ROOT_SEED_FILE = PROJECT_ROOT / "seed.json"
 
 SOURCES = [
     "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json",
@@ -148,9 +147,6 @@ async def harvest(limit: int | None = None, concurrency: int = 25) -> list[dict]
     SEED_FILE.parent.mkdir(parents=True, exist_ok=True)
     SEED_FILE.write_text(json.dumps(combined, indent=2) + "\n")
     logger.info("Saved %d total companies to %s", len(combined), SEED_FILE)
-
-    ROOT_SEED_FILE.write_text(json.dumps(combined, indent=2) + "\n")
-    logger.info("Saved %d total companies to %s", len(combined), ROOT_SEED_FILE)
 
     by_plat = Counter(c["ats_platform"] for c in combined)
     print("\n" + "=" * 50)

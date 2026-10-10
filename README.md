@@ -190,7 +190,7 @@ Preview digest emails without modifying the database.
 Validates that every company in `seed/companies.json` has an active public ATS feed. Exits with code 1 if >5% of feeds fail.
 
 ### `python -m scripts.search_and_seed_companies`
-Searches, validates, and adds companies hosted on supported ATS platforms (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Teamtailor) into `seed/companies.json` and `seed.json`.
+Searches, validates, and adds companies hosted on supported ATS platforms (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Teamtailor) into `seed/companies.json`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -200,7 +200,7 @@ Searches, validates, and adds companies hosted on supported ATS platforms (Green
 | `--limit <int>` | `0` | Maximum number of new verified companies to add. |
 | `--min-jobs <int>` | `1` | Require at least this many active postings on the feed to qualify. |
 | `--concurrency <int>` | `30` | Number of concurrent validation probes. |
-| `--dry-run` | `False` | Probe and display found feeds without modifying `seed/companies.json` or `seed.json`. |
+| `--dry-run` | `False` | Probe and display found feeds without modifying `seed/companies.json`. |
 | `--seed-file <path>` | `seed/companies.json` | Path to seed file. |
 
 ---

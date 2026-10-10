@@ -5,7 +5,6 @@ Supports:
 - Keyword/name search across all supported ATS platforms.
 - Active feed validation matching JobScanr's production scrapers.
 - Automatic company name resolution, canonical career URL formatting, deduplication, and alphabetical sorting.
-- Keeping both seed/companies.json and seed.json synchronized.
 
 Usage:
   # Reach 1500+ total active companies:
@@ -47,7 +46,6 @@ from scripts.validate_companies import (
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.parent
-SEED_JSON_ROOT = ROOT_DIR / "seed.json"
 DEFAULT_CONCURRENCY = 30
 TIMEOUT = 12.0
 UA = "JobScanr/0.1 (personal job alert; contact: local-user)"
@@ -312,12 +310,6 @@ def save_seed(seed_path: Path, companies: list[dict]) -> None:
     content = json.dumps(deduped, indent=2, ensure_ascii=False) + "\n"
     seed_path.write_text(content, encoding="utf-8")
 
-    # Also sync seed.json in repo root and seed/seed.json if applicable
-    try:
-        SEED_JSON_ROOT.write_text(content, encoding="utf-8")
-    except Exception as exc:
-        logger.warning("Could not sync root seed.json: %s", exc)
-
 
 async def main_async() -> int:
     parser = argparse.ArgumentParser(
@@ -493,7 +485,7 @@ async def main_async() -> int:
         current_seed.extend(newly_validated)
         save_seed(args.seed_file, current_seed)
         final_count = len(load_seed(args.seed_file))
-        print(f"Updated {args.seed_file} and {SEED_JSON_ROOT} successfully.")
+        print(f"Updated {args.seed_file} successfully.")
         print(f"New total company count: {final_count}")
         return 0
 
