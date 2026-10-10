@@ -30,13 +30,15 @@ build/
 
 # ─── AI assistants & agent tooling ────────────────────────────────
 AGENTS.md
-CLAUDE.md
+CLAUDE.local.md
 GEMINI.md
 .cursorrules
 .windsurfrules
 .mcp.json
 .aider*
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .codex/
 .clinerules/
 .codeium/
