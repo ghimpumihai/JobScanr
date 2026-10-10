@@ -215,10 +215,6 @@ Things we learned the hard way, now encoded as tests:
 - **Filter before persistence.** The database is an archive of matches only (~15 rows/day, not ~20,000), which keeps it tiny and makes dedup semantics obvious.
 - **Descriptions are scraped but never stored** — they're consumed in-memory during matching and discarded.
 
-## Not doing (yet)
-
-- Workday tenant auto-discovery at scale ·  LLM relevance scoring · a mobile app
-
 ---
 
 <div align="center">
