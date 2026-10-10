@@ -16,6 +16,7 @@ import httpx
 
 from config import PROFILE
 from jobs.match import _any_word, _normalize
+from models import EnrichedJobPosting, JobPosting
 from scrapers.base import strip_html
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ def extract_compensation(text: str | None) -> str | None:
     return None
 
 
-def passes_prefilter(job: dict, p: dict | None = None) -> bool:
+def passes_prefilter(job: JobPosting | dict, p: dict | None = None) -> bool:
     """Cheap gate mirroring matches_profile's first three checks: whether a
     description-less listing is worth an enrichment request.
 
@@ -100,11 +101,11 @@ def passes_prefilter(job: dict, p: dict | None = None) -> bool:
     return True
 
 
-def _needs_enrichment(job: dict) -> bool:
+def _needs_enrichment(job: JobPosting | dict) -> bool:
     return job.get("description") is None and job.get("ats_identifier") is not None
 
 
-async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
+async def _fetch_detail(job: JobPosting | dict, client: httpx.AsyncClient) -> dict | None:
     ident = job["ats_identifier"]
     # Detail endpoints throttle intermittently right after big scrapes;
     # back off patiently — candidates are few and links no longer depend
@@ -138,8 +139,8 @@ async def _fetch_detail(job: dict, client: httpx.AsyncClient) -> dict | None:
     return None
 
 
-async def enrich_jobs(jobs: list[dict], client: httpx.AsyncClient,
-                      p: dict | None = None) -> list[dict]:
+async def enrich_jobs(jobs: list[JobPosting | dict], client: httpx.AsyncClient,
+                      p: dict | None = None) -> list[JobPosting | dict]:
     """Fill descriptions for candidates lacking them. Failures are silent:
     an unenriched job still gets matched on title/location."""
     targets = [j for j in jobs if passes_prefilter(j, p) and _needs_enrichment(j)]

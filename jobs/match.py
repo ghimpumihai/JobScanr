@@ -13,6 +13,7 @@ import re
 import unicodedata
 
 from config import PROFILE
+from models import JobPosting
 
 US_RESTRICTED_RE = re.compile(r"\b(united states|usa|u\.s\.|us|canada)\b")
 
@@ -79,7 +80,7 @@ def _foreign_country_restriction(job: dict, p: dict) -> bool:
     return False
 
 
-def matches_profile(job: dict, profile: dict | None = None) -> bool:
+def matches_profile(job: JobPosting | dict, profile: dict | None = None) -> bool:
     p = profile or PROFILE
     # Titles and locations are structured fields; descriptions are prose.
     # Matching titles against prose caused false positives ("remote-first

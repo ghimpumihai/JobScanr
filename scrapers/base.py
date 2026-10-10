@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from models import JobPosting
+
 USER_AGENT = "JobScanr/0.1 (personal job alert)"
 MAX_RETRIES = 3
 TAG_RE = re.compile(r"<[^>]+>")
@@ -49,7 +51,7 @@ class BaseClient(ABC):
         self.http = client
 
     @abstractmethod
-    async def get_jobs(self, ats_identifier: str) -> list[dict]:
+    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
         """Return jobs in the normalized shape:
         {external_id, title, location, department, url, description}
         """
