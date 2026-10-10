@@ -1,10 +1,15 @@
 """Card-parsing tests using a minimal synthetic page — never commit
 real careers-page HTML: it embeds third-party tokens and bloats the repo."""
 
-from scrapers.google import CARD_RE, parse_card
+import asyncio
+from unittest.mock import patch
+import httpx
+import pytest
+
+from scrapers.google import CARD_RE, GoogleClient, parse_card
 
 SYNTHETIC_PAGE = '''
-<div class="card">
+<div class=card>
   <h2>Software Engineer Intern, Summer 2027</h2>
   <span>corporate_fare</span><span>Google</span>
   <span>place</span>Munich, Germany<span>; Berlin, Germany</span><span>+2 more</span>
@@ -12,11 +17,11 @@ SYNTHETIC_PAGE = '''
   <a href="jobs/results/111111111111111-software-engineer-intern-summer-2027?location=Germany"
      aria-label="Learn more about Software Engineer Intern, Summer 2027">Learn more</a>
 </div>
-<div class="card">
+<div class=card>
   <h2>Research Scientist PhD Intern, 2027</h2>
   <span>place</span>Zürich, Switzerland<span>; Munich, Germany</span>
   <span>bar_chart</span><span>Mid</span>
-  <a href="jobs/results/222222222222222-research-scientist-phd-intern-2027?location=Germany"
+  <a href="jobs/results/222222222222222-research-scientist-phd-intern-2028?location=Germany"
      aria-label="Learn more about Research Scientist PhD Intern, 2027">Learn more</a>
 </div>
 '''
@@ -51,13 +56,32 @@ def test_locations_include_accented_cities():
     assert zurich_card, "accented city must survive parsing"
 
 
+def test_google_client_get_jobs_mocked():
+    """Unit test verifying GoogleClient.get_jobs parsing and deduplication without network calls."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=SYNTHETIC_PAGE)
+
+    transport = httpx.MockTransport(handler)
+
+    async def run():
+        async with httpx.AsyncClient(transport=transport) as http:
+            with patch("asyncio.sleep", return_value=None):
+                client = GoogleClient(http)
+                return await client.get_jobs("Germany")
+
+    jobs = asyncio.run(run())
+    assert len(jobs) == 2
+    titles = [j["title"] for j in jobs]
+    assert "Software Engineer Intern, Summer 2027" in titles
+    assert "Research Scientist PhD Intern, 2027" in titles
+    assert all(j["ats_identifier"] == "Germany" for j in jobs)
+
+
+@pytest.mark.integration
+@pytest.mark.network
 def test_real_page_still_parses_end_to_end():
     """Integration smoke against the live site (single polite request)."""
-    import asyncio
-    import httpx
-
     from scrapers.base import make_http_client
-    from scrapers.google import GoogleClient
 
     async def run():
         async with make_http_client() as http:
