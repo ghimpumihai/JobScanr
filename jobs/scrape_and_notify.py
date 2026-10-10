@@ -8,13 +8,16 @@ Usage:
 
 import argparse
 import asyncio
+import logging
 import sys
 
-from config import PROFILE
+from config import PROFILE, setup_logging
 from db import queries
 from jobs.match import matches_profile
 from scrapers import get_client
 from scrapers.base import make_http_client
+
+logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
 
@@ -77,24 +80,24 @@ async def run_pipeline(args) -> int:
     import config
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
     companies = queries.get_all_companies()
-    print(f"Scraping {len(companies)} companies...")
+    logger.info("Scraping %d companies...", len(companies))
     failure_details: list[dict] = []
     jobs, failures = await scrape_all(companies, failure_details=failure_details)
 
     for failure in failures:
-        print(f"  FAIL {failure}")
+        logger.warning("FAIL %s", failure)
 
     if args.failures_file and failure_details:
         import json
         from pathlib import Path
         Path(args.failures_file).write_text(json.dumps(failure_details, indent=2))
-        print(f"Wrote {len(failure_details)} failure details to {args.failures_file}.")
+        logger.info("Wrote %d failure details to %s.", len(failure_details), args.failures_file)
 
     if len(failures) > len(companies) * FAILURE_RATE_LIMIT:
-        print("Failure rate too high — aborting.")
+        logger.error("Failure rate too high — aborting.")
         return 1
 
-    print(f"Fetched {len(jobs)} live job postings.")
+    logger.info("Fetched %d live job postings.", len(jobs))
 
     # Ashby/SmartRecruiters-style listings ship without descriptions; fetch
     # details only for candidates passing the cheap title/location gate so
@@ -108,7 +111,7 @@ async def run_pipeline(args) -> int:
 
         async with make_http_client() as http:
             await enrich_jobs(candidates, http)
-        print(f"Enriched {len(candidates)} description-less candidates.")
+        logger.info("Enriched %d description-less candidates.", len(candidates))
 
     # Filter BEFORE persisting: the DB is an archive of matches only.
     # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
@@ -121,36 +124,37 @@ async def run_pipeline(args) -> int:
     for j in matches:
         if not j.get("compensation"):
             j["compensation"] = extract_compensation(j.get("description"))
-    print(f"{len(matches)} jobs match profile:")
+    logger.info("%d jobs match profile:", len(matches))
     for j in matches[:20]:
-        print(f"  - {j['title']} @ {j['company_name']} ({j['location']})")
+        logger.info("  - %s @ %s (%s)", j['title'], j['company_name'], j['location'])
 
     if args.dry_run:
-        print("[dry-run] no DB writes, no email.")
+        logger.info("[dry-run] no DB writes, no email.")
         return 0
 
     new_matches = queries.upsert_jobs(matches)
     stale = queries.delete_stale_jobs(days=30)
-    print(f"Stored {len(new_matches)} new / {len(matches)} matched; pruned {stale} stale.")
+    logger.info("Stored %d new / %d matched; pruned %d stale.", len(new_matches), len(matches), stale)
 
     if not new_matches:
-        print("Nothing to notify.")
+        logger.info("Nothing to notify.")
         return 0
 
     from jobs.notify import email_configured, send_email_digest
 
     if not email_configured():
         # Leave notified_at NULL so the next configured run retries these.
-        print("Matches found but no delivery channel — they will be retried.")
+        logger.warning("Matches found but no delivery channel — they will be retried.")
         return 1
 
     message_id = send_email_digest(new_matches)
     queries.mark_notified([j["id"] for j in new_matches])
-    print(f"Email digest sent ({message_id}) for {len(new_matches)} jobs.")
+    logger.info("Email digest sent (%s) for %d jobs.", message_id, len(new_matches))
     return 0
 
 
 def main() -> int:
+    setup_logging()
     parser = argparse.ArgumentParser(description="JobScanr scrape & digest runner.")
     parser.add_argument("--dry-run", action="store_true",
                         help="fetch + match, no DB writes, no email")

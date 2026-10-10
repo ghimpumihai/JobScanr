@@ -1,6 +1,7 @@
 """Central config: user profile configuration + env-driven secrets."""
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
+
+
+def setup_logging(level: int | str = logging.INFO) -> None:
+    """Configure standard application logging format."""
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
 
 
 def load_environment(staging: bool | None = None) -> str:

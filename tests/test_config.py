@@ -37,6 +37,17 @@ def test_explicit_load_environment(monkeypatch):
     assert config.DB_ENV == "staging"
 
 
+def test_setup_logging():
+    import logging
+    import config
+
+    config.setup_logging(level=logging.DEBUG)
+    root = logging.getLogger()
+    assert root.level == logging.DEBUG
+    assert len(root.handlers) > 0
+    formatter = root.handlers[0].formatter
+    assert "%(asctime)s" in formatter._fmt
+    assert "%(levelname)s" in formatter._fmt
 
 
 def test_default_profile_loaded():
@@ -93,3 +104,4 @@ def test_load_profile_missing_fallback(tmp_path):
     missing = tmp_path / "non_existent.json"
     loaded = config.load_profile(missing)
     assert loaded == config.DEFAULT_PROFILE
+
