@@ -99,6 +99,13 @@ def passes_prefilter(job: JobPosting | dict, p: dict | None = None) -> bool:
     return True
 
 
+def passes_prefilter_multiuser(job: JobPosting | dict, active_users: list[dict]) -> bool:
+    """Evaluate whether a description-less job passes prefilter for ANY active user."""
+    if not active_users:
+        return passes_prefilter(job)
+    return any(passes_prefilter(job, u.get("profile_filters") or u) for u in active_users)
+
+
 def _needs_enrichment(job: JobPosting | dict) -> bool:
     return job.get("description") is None and job.get("ats_identifier") is not None
 
