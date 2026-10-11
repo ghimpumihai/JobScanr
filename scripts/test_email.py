@@ -30,43 +30,69 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Preview digest email.")
     parser.add_argument("--limit", type=int, default=5, help="how many recent postings to include")
     parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
-    parser.add_argument("--personalized", action="store_true", help="preview personalized 4-section digest")
+    parser.add_argument("--personalized", action="store_true", help="preview personalized digest")
+    parser.add_argument("--heartbeat", action="store_true", help="preview zero-match heartbeat telemetry email")
+    parser.add_argument("--save-html", type=str, default="", help="save rendered HTML to a file instead of sending")
+    parser.add_argument("--simulate-volume", type=int, default=0, help="simulate N jobs to preview high-volume bridge")
     args = parser.parse_args()
 
     import config
 
     config.load_environment(staging=args.staging)
 
-    jobs = fetch_sample(args.limit)
-    if not jobs:
-        logger.warning("No rows to sample.")
-        return 1
+    from jobs.notify import build_html_digest, build_personalized_html_digest, send_email_digest, send_user_digest
 
-    from jobs.notify import send_email_digest, send_user_digest
+    recipient = config.DIGEST_EMAIL or "stefan@example.com"
+    sample_user = {"email": recipient}
 
-    recipient = config.DIGEST_EMAIL
+    if args.heartbeat:
+        jobs = []
+    elif args.simulate_volume > 0:
+        # Generate N synthetic jobs for high-volume preview
+        companies = ["Revolut", "Spotify", "Datadog", "Cloudflare", "Amazon", "Monzo", "Wise", "Scale AI"]
+        jobs = [
+            {
+                "title": f"Software Engineer Role {i + 1}",
+                "company_name": companies[i % len(companies)],
+                "location": "London, UK" if i % 2 == 0 else "Paris, France",
+                "compensation": "€55,000 – €65,000 / yr",
+                "ats_platform": "greenhouse" if i % 2 == 0 else "lever",
+                "url": "https://example.com/job",
+            }
+            for i in range(args.simulate_volume)
+        ]
+    else:
+        jobs = fetch_sample(args.limit)
+        if not jobs:
+            logger.warning("No rows to sample.")
+            return 1
+
     logger.info("Previewing %d rows -> %s", len(jobs), recipient)
 
-    if args.personalized:
-        sample_user = {"email": recipient}
-        sample_activity = {
-            "submitted_today": [
-                {"title": "Junior Software Engineer", "company_name": "Datadog", "confirmation": "APP-98214"}
-            ],
-            "needs_review": [
-                {"title": "Backend Developer", "company_name": "Scale AI", "url": "https://scale.com/careers"}
-            ],
-            "manual_apply": [
-                {
-                    "title": "Software Engineer Intern",
-                    "company_name": "Salesforce (Workday)",
-                    "location": "London, UK",
-                    "compensation": "£52,000",
-                    "url": "https://salesforce.wd1.myworkdayjobs.com/careers",
-                }
-            ],
-        }
-        send_user_digest(sample_user, jobs, sample_activity)
+    if args.save_html:
+        if args.personalized or args.heartbeat or args.simulate_volume:
+            html_body = build_personalized_html_digest(sample_user, jobs)
+        else:
+            html_body = build_html_digest(jobs)
+
+        wrapper = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobScanr Digest Preview</title>
+</head>
+<body style="margin:0;padding:24px 12px;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  {html_body}
+</body>
+</html>"""
+        with open(args.save_html, "w", encoding="utf-8") as f:
+            f.write(wrapper)
+        logger.info("Saved preview HTML to %s", args.save_html)
+        return 0
+
+    if args.personalized or args.heartbeat or args.simulate_volume:
+        send_user_digest(sample_user, jobs, send_heartbeat=args.heartbeat)
     else:
         send_email_digest(jobs)
 

@@ -155,53 +155,87 @@ def test_mark_user_matches_notified():
 # ---------------------------------------------------------------------------
 
 
-def test_build_personalized_html_digest_sections_and_isolation():
+def test_build_personalized_html_digest_standard_and_high_volume():
     user = {"email": "alice@example.com"}
-    matches = [
+
+    # 1. Standard day: 3 roles (<= EMAIL_MAX_INLINE_JOBS)
+    matches_standard = [
         {
             "title": "Junior Python Dev",
             "company_name": "PyCorp",
             "location": "London",
             "url": "https://pycorp.com/job/1",
             "compensation": "£45k",
-            "application_deadline": "2026-12-01",
-        }
+            "ats_platform": "greenhouse",
+        },
+        {
+            "title": "Backend Dev",
+            "company_name": "Datadog",
+            "location": "Paris",
+            "url": "https://datadog.com/job/2",
+            "compensation": "€60k",
+            "ats_platform": "lever",
+        },
     ]
-    activity = {
-        "submitted_today": [{"title": "Software Eng", "company_name": "Alpha Inc", "confirmation": "ALPHA-99"}],
-        "needs_review": [{"title": "Fullstack Eng", "company_name": "Beta Co", "url": "https://beta.com/form"}],
-        "manual_apply": [
-            {
-                "title": "Backend Eng",
-                "company_name": "Gamma Ltd",
-                "location": "Remote",
-                "compensation": "€60k",
-                "url": "https://gamma.com/workday",
-            }
-        ],
-    }
 
-    html = notify.build_personalized_html_digest(user, matches, activity)
+    html_std = notify.build_personalized_html_digest(user, matches_standard)
+    assert "alice@example.com" in html_std
+    assert "2 new matching early-career roles" in html_std
+    assert "PyCorp" in html_std
+    assert "Datadog" in html_std
+    assert "Apply &rarr;" in html_std
+    assert "£45k" in html_std
+    assert "via Greenhouse" in html_std
+    # No bridge card on standard volume
+    assert "more matching roles on your JobScanr portal" not in html_std
 
-    assert "alice@example.com" in html
-    # Section 1
-    assert "Applications Submitted Today (1)" in html
-    assert "ALPHA-99" in html
-    # Section 2
-    assert "Actions Required (1)" in html
-    assert "Complete Review &rarr;" in html
-    # Section 3
-    assert "1-Click Manual Apply Roles (1)" in html
-    assert "Gamma Ltd" in html
-    # Section 4
-    assert "Newly Discovered Matching Postings (1)" in html
-    assert "PyCorp" in html
+    # 2. High-volume day: 16 roles (> EMAIL_MAX_INLINE_JOBS = 4)
+    companies = ["Revolut", "Spotify", "Datadog", "Cloudflare", "Amazon", "Monzo", "Wise", "Scale AI"]
+    matches_high = [
+        {
+            "title": f"Software Engineer {i + 1}",
+            "company_name": companies[i % len(companies)],
+            "location": "London, UK",
+            "url": f"https://example.com/job/{i + 1}",
+            "compensation": "€60,000 / yr",
+            "ats_platform": "greenhouse",
+        }
+        for i in range(16)
+    ]
+
+    html_hv = notify.build_personalized_html_digest(user, matches_high)
+    assert "16 new matching early-career roles" in html_hv
+    # Displays top 4 inline
+    assert "Software Engineer 1" in html_hv
+    assert "Software Engineer 4" in html_hv
+    # Bridges the remaining 12 roles
+    assert "+12 more matching roles on your JobScanr portal" in html_hv
+    assert "View all 16 matches on JobScanr &rarr;" in html_hv
+    assert "Amazon" in html_hv
+    assert "Monzo" in html_hv
+
+    # 3. Zero-match day: Heartbeat telemetry
+    html_empty = notify.build_personalized_html_digest(user, [])
+    assert "All systems healthy — 388 boards checked" in html_empty
+    assert "● Radar Active" in html_empty
+    assert "388 / 388" in html_empty
+    assert "0 errors" in html_empty
 
 
 def test_send_user_digest_empty():
     user = {"email": "bob@example.com"}
-    res = notify.send_user_digest(user, [], {"submitted_today": [], "needs_review": [], "manual_apply": []})
+    res = notify.send_user_digest(user, [], send_heartbeat=False)
     assert res is None
+
+
+def test_send_user_digest_heartbeat():
+    user = {"email": "bob@example.com"}
+    with patch("jobs.notify._send_email", return_value="MSG-HEARTBEAT") as mock_send:
+        res = notify.send_user_digest(user, [], send_heartbeat=True)
+        assert res == "MSG-HEARTBEAT"
+        mock_send.assert_called_once()
+        subject = mock_send.call_args[1]["subject"]
+        assert "Radar Active" in subject
 
 
 # ---------------------------------------------------------------------------
