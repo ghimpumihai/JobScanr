@@ -113,12 +113,28 @@ async def run_pipeline(args) -> int:
 
     logger.info("Fetched %d live job postings.", len(jobs))
 
-    # Ashby/SmartRecruiters-style listings ship without descriptions; fetch
-    # details only for candidates passing the cheap title/location gate so
-    # country-restriction and experience checks see full text.
-    from jobs.enrich import enrich_jobs, passes_prefilter
+    active_users: list[dict] = []
+    if not getattr(args, "profile", None):
+        try:
+            active_users = queries.get_active_users()
+        except Exception as e:
+            logger.debug("Could not fetch active users from DB, falling back to profile.json: %s", e)
 
-    candidates = [j for j in jobs if passes_prefilter(j, profile)]
+    if not active_users:
+        active_users = [
+            {
+                "id": None,
+                "email": config.DIGEST_EMAIL,
+                "profile_filters": profile,
+                "auto_apply_mode": "disabled",
+            }
+        ]
+
+    # Ashby/SmartRecruiters-style listings ship without descriptions; fetch
+    # details only for candidates passing the union prefilter across active users.
+    from jobs.enrich import enrich_jobs, extract_compensation, passes_prefilter_multiuser
+
+    candidates = [j for j in jobs if passes_prefilter_multiuser(j, active_users)]
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
         # let the window cool before enriching.
@@ -128,44 +144,103 @@ async def run_pipeline(args) -> int:
             await enrich_jobs(candidates, http)
         logger.info("Enriched %d description-less candidates.", len(candidates))
 
-    # Filter BEFORE persisting: the DB is an archive of matches only.
-    # Dedup (UNIQUE constraint + is_new) still suppresses re-notifications,
-    # and failed sends stay unnotified for retry on the next run.
-    matches = [j for j in jobs if matches_profile(j, profile)]
-
-    # Employers rarely fill structured salary fields but often paste ranges
-    # into descriptions — extract for anything missing one.
-    from jobs.enrich import extract_compensation
-
-    for j in matches:
-        if not j.get("compensation"):
+    # Extract compensation for any postings containing description text
+    for j in jobs:
+        if j.get("description") and not j.get("compensation"):
             j["compensation"] = extract_compensation(j.get("description"))
-    logger.info("%d jobs match profile:", len(matches))
-    for j in matches[:20]:
-        logger.info("  - %s @ %s (%s)", j["title"], j["company_name"], j["location"])
+
+    # Evaluate matches per active user and collect unique matched jobs to store
+    user_match_map: dict[int | None, list[dict]] = {}
+    all_matched_jobs_map: dict[tuple[str, int | None], dict] = {}
+
+    for u in active_users:
+        u_filters = u.get("profile_filters") or profile
+        u_matches = [j for j in jobs if matches_profile(j, u_filters)]
+        u_key = u.get("id")
+        user_match_map[u_key] = u_matches
+        for j in u_matches:
+            k = (j["external_id"], j.get("company_id"))
+            all_matched_jobs_map[k] = j
+
+    all_matched_jobs = list(all_matched_jobs_map.values())
+    logger.info(
+        "Found %d unique job posting(s) matching across %d active user(s).",
+        len(all_matched_jobs),
+        len(active_users),
+    )
 
     if args.dry_run:
+        for u in active_users:
+            u_matches = user_match_map.get(u.get("id"), [])
+            logger.info("[dry-run] User %s matches %d job(s).", u.get("email"), len(u_matches))
         logger.info("[dry-run] no DB writes, no email.")
         return 0
 
-    new_matches = queries.upsert_jobs(matches)
+    new_jobs = queries.upsert_jobs(all_matched_jobs)
     stale = queries.delete_stale_jobs(days=30)
-    logger.info("Stored %d new / %d matched; pruned %d stale.", len(new_matches), len(matches), stale)
+    logger.info("Stored %d new / %d total matched; pruned %d stale.", len(new_jobs), len(all_matched_jobs), stale)
 
-    if not new_matches:
-        logger.info("Nothing to notify.")
-        return 0
+    # Build lookup by (external_id, company_id) to resolve database IDs
+    job_id_lookup: dict[tuple[str, int | None], int] = {}
+    for j in all_matched_jobs:
+        if j.get("id"):
+            job_id_lookup[(j["external_id"], j.get("company_id"))] = j["id"]
 
-    from jobs.notify import email_configured, send_email_digest
+    # Record user matches and stage applications
+    for u in active_users:
+        uid = u.get("id")
+        if not uid:
+            continue
+        u_matches = user_match_map.get(uid, [])
+        match_records = []
+        app_stage_items = []
+        auto_mode = u.get("auto_apply_mode", "disabled")
+
+        for j in u_matches:
+            jid = j.get("id") or job_id_lookup.get((j["external_id"], j.get("company_id")))
+            if not jid:
+                continue
+            match_records.append({"job_posting_id": jid, "match_score": 1.0})
+
+            if auto_mode != "disabled":
+                plat = (j.get("ats_platform") or "").lower()
+                if plat in ("greenhouse", "lever"):
+                    status = "queued" if auto_mode == "auto_submit" else "pending_approval"
+                else:
+                    status = "manual_apply"
+                app_stage_items.append({"job_posting_id": jid, "status": status})
+
+        if match_records:
+            queries.upsert_user_matches(uid, match_records)
+        if app_stage_items:
+            queries.stage_user_applications(uid, app_stage_items)
+
+    from jobs.notify import email_configured, send_email_digest, send_user_digest
 
     if not email_configured():
-        # Leave notified_at NULL so the next configured run retries these.
         logger.warning("Matches found but no delivery channel — they will be retried.")
         return 1
 
-    message_id = send_email_digest(new_matches)
-    queries.mark_notified([j["id"] for j in new_matches])
-    logger.info("Email digest sent (%s) for %d jobs.", message_id, len(new_matches))
+    sent_count = 0
+    for u in active_users:
+        uid = u.get("id")
+        if uid:
+            unnotified = queries.get_user_unnotified_matches(uid)
+            activity = queries.get_user_recent_application_activity(uid)
+            msg_id = send_user_digest(u, unnotified, activity)
+            if msg_id:
+                sent_count += 1
+                if unnotified:
+                    queries.mark_user_matches_notified(uid, [j["id"] for j in unnotified])
+                logger.info("Personalized digest sent to %s (%d new matches).", u.get("email"), len(unnotified))
+        else:
+            if new_jobs:
+                send_email_digest(new_jobs)
+                queries.mark_notified([j["id"] for j in new_jobs])
+                sent_count += 1
+                logger.info("Email digest sent for %d jobs.", len(new_jobs))
+
+    logger.info("Notification stage finished. Digests sent: %d.", sent_count)
     return 0
 
 
