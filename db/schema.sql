@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS users (
     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     auth_user_id            UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     email                   TEXT UNIQUE NOT NULL,
+    resume_storage_path     TEXT,
+    resume_filename         TEXT,
+    resume_content_type     TEXT,
+    resume_uploaded_at      TIMESTAMPTZ,
     resume_data             JSONB NOT NULL DEFAULT '{}'::jsonb,
     profile_filters         JSONB NOT NULL,
     screening_defaults      JSONB NOT NULL,
@@ -63,6 +67,12 @@ CREATE TABLE IF NOT EXISTS users (
     gdpr_consent_at         TIMESTAMPTZ NOT NULL,
     created_at              TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column migrations for existing deployments
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_storage_path TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_filename TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_content_type TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_uploaded_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS user_job_matches (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -186,3 +196,74 @@ CREATE TRIGGER trg_protect_application_queue_fields
     BEFORE UPDATE ON applications
     FOR EACH ROW
     EXECUTE FUNCTION protect_application_queue_fields();
+
+-- Supabase Storage 'resumes' bucket definition (idempotent, safe for non-Supabase environments)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.schemata WHERE schema_name = 'storage'
+    ) AND EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'buckets'
+    ) THEN
+        INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+        VALUES (
+            'resumes',
+            'resumes',
+            false,
+            2097152, -- 2 MB
+            ARRAY[
+                'application/pdf',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/msword'
+            ]
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            file_size_limit = EXCLUDED.file_size_limit,
+            allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+        -- RLS Policies on storage.objects for authenticated users
+        IF EXISTS (
+            SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'objects'
+        ) THEN
+            DROP POLICY IF EXISTS "resumes_insert_own" ON storage.objects;
+            CREATE POLICY "resumes_insert_own" ON storage.objects
+                FOR INSERT TO authenticated
+                WITH CHECK (
+                    bucket_id = 'resumes' AND
+                    (storage.foldername(name))[1] = (auth.uid())::text
+                );
+
+            DROP POLICY IF EXISTS "resumes_select_own" ON storage.objects;
+            CREATE POLICY "resumes_select_own" ON storage.objects
+                FOR SELECT TO authenticated
+                USING (
+                    bucket_id = 'resumes' AND
+                    (storage.foldername(name))[1] = (auth.uid())::text
+                );
+
+            DROP POLICY IF EXISTS "resumes_update_own" ON storage.objects;
+            CREATE POLICY "resumes_update_own" ON storage.objects
+                FOR UPDATE TO authenticated
+                USING (
+                    bucket_id = 'resumes' AND
+                    (storage.foldername(name))[1] = (auth.uid())::text
+                );
+
+            DROP POLICY IF EXISTS "resumes_delete_own" ON storage.objects;
+            CREATE POLICY "resumes_delete_own" ON storage.objects
+                FOR DELETE TO authenticated
+                USING (
+                    bucket_id = 'resumes' AND
+                    (storage.foldername(name))[1] = (auth.uid())::text
+                );
+        END IF;
+    END IF;
+EXCEPTION
+    WHEN insufficient_privilege THEN
+        NULL;
+    WHEN undefined_function THEN
+        NULL;
+    WHEN undefined_table THEN
+        NULL;
+END $$;
+

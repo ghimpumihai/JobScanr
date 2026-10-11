@@ -227,7 +227,8 @@ def get_active_users() -> list[dict]:
         cur.execute(
             """
             SELECT id, auth_user_id, email, resume_data, profile_filters, screening_defaults,
-                   auto_apply_mode, max_daily_applications, max_apps_per_company, gdpr_consent_at, created_at
+                   auto_apply_mode, max_daily_applications, max_apps_per_company, gdpr_consent_at, created_at,
+                   resume_storage_path, resume_filename, resume_content_type, resume_uploaded_at
             FROM users
             WHERE auto_apply_mode != 'disabled'
             ORDER BY id
@@ -251,9 +252,35 @@ def get_active_users() -> list[dict]:
                     "max_apps_per_company": r[8],
                     "gdpr_consent_at": r[9],
                     "created_at": r[10],
+                    "resume_storage_path": r[11] if len(r) > 11 else None,
+                    "resume_filename": r[12] if len(r) > 12 else None,
+                    "resume_content_type": r[13] if len(r) > 13 else None,
+                    "resume_uploaded_at": r[14] if len(r) > 14 else None,
                 }
             )
         return users
+
+
+def update_user_resume_metadata(
+    user_id: int,
+    storage_path: str,
+    filename: str,
+    content_type: str,
+) -> bool:
+    """Update user's active resume file metadata and upload timestamp."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE users
+            SET resume_storage_path = %s,
+                resume_filename = %s,
+                resume_content_type = %s,
+                resume_uploaded_at = NOW()
+            WHERE id = %s
+            """,
+            (storage_path, filename, content_type, user_id),
+        )
+        return cur.rowcount > 0
 
 
 def upsert_user_matches(user_id: int, matches: list[dict]) -> int:
