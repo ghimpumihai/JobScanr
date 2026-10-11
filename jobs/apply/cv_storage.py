@@ -62,8 +62,8 @@ def download_resume_stream(
     Returns:
         tuple[io.BytesIO, str, str]: (in_memory_stream, filename, content_type)
     """
-    base_url = (supabase_url or config.SUPABASE_URL).rstrip("/")
-    api_key = service_role_key or config.SUPABASE_SERVICE_ROLE_KEY
+    base_url = (config.SUPABASE_URL if supabase_url is None else supabase_url).rstrip("/")
+    api_key = config.SUPABASE_SERVICE_ROLE_KEY if service_role_key is None else service_role_key
 
     if not base_url or not api_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for storage operations")
@@ -107,8 +107,8 @@ def upload_resume_bytes(
     service_role_key: str | None = None,
 ) -> bool:
     """Upload resume bytes to Supabase Storage in-memory."""
-    base_url = (supabase_url or config.SUPABASE_URL).rstrip("/")
-    api_key = service_role_key or config.SUPABASE_SERVICE_ROLE_KEY
+    base_url = (config.SUPABASE_URL if supabase_url is None else supabase_url).rstrip("/")
+    api_key = config.SUPABASE_SERVICE_ROLE_KEY if service_role_key is None else service_role_key
 
     if not base_url or not api_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for storage operations")
