@@ -1,7 +1,7 @@
 # Feature Specification: Greenhouse and Lever Submitters with Question Schema Mapping
 
 **Feature Slug**: `greenhouse-lever-submitters`  
-**Status**: Draft  
+**Status**: Converged (2026-10-11)  
 **Issue Reference**: #51 (Downstream of #49, #63; Upstream of #52, #48)  
 **Created**: 2026-10-11  
 

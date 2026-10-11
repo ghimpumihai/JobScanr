@@ -2,7 +2,7 @@
 
 **Feature Slug**: `greenhouse-lever-submitters`  
 **Spec Reference**: [.specify/specs/greenhouse-lever-submitters/spec.md](./spec.md)  
-**Status**: Executing  
+**Status**: Converged (2026-10-11)  
 
 ---
 
