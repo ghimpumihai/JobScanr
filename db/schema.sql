@@ -2,11 +2,22 @@
 -- Idempotent: safe to re-run.
 
 -- Ensure auth schema and auth.users stub exist for non-Supabase environments
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE TABLE IF NOT EXISTS auth.users (
-    id UUID PRIMARY KEY,
-    email TEXT
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth'
+    ) THEN
+        EXECUTE 'CREATE SCHEMA auth';
+        EXECUTE 'CREATE TABLE auth.users (id UUID PRIMARY KEY, email TEXT)';
+    ELSIF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users'
+    ) THEN
+        EXECUTE 'CREATE TABLE auth.users (id UUID PRIMARY KEY, email TEXT)';
+    END IF;
+EXCEPTION
+    WHEN insufficient_privilege THEN
+        NULL; -- Schema auth and auth.users are already managed by Supabase
+END $$;
 
 CREATE TABLE IF NOT EXISTS companies (
     id              SERIAL PRIMARY KEY,

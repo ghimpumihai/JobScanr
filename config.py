@@ -35,12 +35,12 @@ def load_environment(staging: bool | None = None) -> str:
     if is_staging:
         DB_ENV = "staging"
         env_file = BASE_DIR / ".env.stage" if (BASE_DIR / ".env.stage").is_file() else BASE_DIR / ".env"
-        load_dotenv(env_file, override=False)
+        load_dotenv(env_file, override=True)
         DATABASE_URL = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_STAGING") or "").strip()
         DIGEST_EMAIL = (os.environ.get("DIGEST_EMAIL_TEST") or os.environ.get("DIGEST_EMAIL") or "").strip()
     else:
         DB_ENV = "production"
-        load_dotenv(BASE_DIR / ".env", override=False)
+        load_dotenv(BASE_DIR / ".env", override=True)
         DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
         DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
     return DB_ENV
