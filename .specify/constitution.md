@@ -15,9 +15,9 @@ Every feature, plan, and pull request must strictly comply with the following in
 - **Session Pooler Mandatory**: The production and staging database is Supabase PostgreSQL. Direct host (`db.<ref>.supabase.co`) is IPv6-only. All connections must use the AWS Session Pooler (`aws-0-*.pooler.supabase.com:5432`) to prevent connection timeouts in IPv4-only and container environments.
 - **Connection Release During Long Operations**: Database connection pool connections must NEVER be held open during long-running HTTP operations, external API calls, or worker backoff sleeps (`SELECT ... FOR UPDATE SKIP LOCKED` transactions must release immediately after claiming a row).
 
-### 1.2 In-Memory PDF Lifecycle (Zero-Disk Storage)
-- **Zero Temporary Disk Writes**: Tailored resumes compiled via ReportLab (`jobs/apply/pdf_generator.py`) must be created directly in memory (`io.BytesIO`).
-- **Direct Multipart Streaming**: File uploads to ATS endpoints or storage streams must read directly from the in-memory buffer. Temporary files on disk (`/tmp`, workspace root) are prohibited to ensure stateless execution and data privacy.
+### 1.2 In-Memory PDF Lifecycle & CV Storage (Zero-Disk Storage)
+- **Zero Temporary Disk Writes**: Authentic candidate resumes (.pdf, .docx, .doc) retrieved from Supabase Storage (`jobs/apply/cv_storage.py`) must be loaded and processed directly in memory (`io.BytesIO`).
+- **Direct Multipart Streaming**: File uploads to ATS endpoints (Greenhouse, Lever) must stream directly from the in-memory buffer. Temporary files on disk (`/tmp`, workspace root) are prohibited to ensure stateless execution and candidate data privacy.
 
 ### 1.3 Job Description Storage
 - **No Description Persistence in Database**: Job descriptions are never stored in the PostgreSQL database to conserve storage. They are inspected in-memory during scraping, matching, and enrichment.
