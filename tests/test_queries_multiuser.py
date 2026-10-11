@@ -357,6 +357,39 @@ def test_queue_status_protection_trigger_logic():
     assert simulate_trigger("service_role", old, service_update) == service_update
 
 
+def test_schema_sql_has_resume_columns_and_storage_bucket():
+    schema_text = queries.SCHEMA_PATH.read_text()
+    assert "resume_storage_path     TEXT" in schema_text
+    assert "resume_filename         TEXT" in schema_text
+    assert "resume_content_type     TEXT" in schema_text
+    assert "resume_uploaded_at      TIMESTAMPTZ" in schema_text
+    assert "INSERT INTO storage.buckets" in schema_text
+    assert "'resumes'" in schema_text
+    assert "2097152" in schema_text  # 2MB limit
+    assert "'application/pdf'" in schema_text
+
+
+def test_update_user_resume_metadata():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 1
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        res = queries.update_user_resume_metadata(
+            user_id=42,
+            storage_path="auth-123/cv.pdf",
+            filename="cv.pdf",
+            content_type="application/pdf",
+        )
+        assert res is True
+        mock_cur.execute.assert_called_once()
+        query_sql, params = mock_cur.execute.call_args[0]
+        assert "UPDATE users" in query_sql
+        assert params == ("auth-123/cv.pdf", "cv.pdf", "application/pdf", 42)
+
+
 # ---------------------------------------------------------------------------
 # migrate_to_multiuser script tests
 # ---------------------------------------------------------------------------

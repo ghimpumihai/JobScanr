@@ -4,11 +4,33 @@ import json
 import logging
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
+
+
+def _derive_supabase_url(db_url: str) -> str:
+    """Derive https://<project-ref>.supabase.co from a direct or pooler DATABASE_URL."""
+    if not db_url:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(db_url)
+        # 1. Pooler format: postgres.<project_ref>@aws-0-...pooler.supabase.com
+        if parsed.username and "." in parsed.username:
+            parts = parsed.username.split(".", 1)
+            if len(parts) == 2 and parts[1]:
+                return f"https://{parts[1]}.supabase.co"
+        # 2. Direct format: db.<project_ref>.supabase.co
+        if parsed.hostname and "supabase.co" in parsed.hostname:
+            parts = parsed.hostname.split(".")
+            if len(parts) >= 3 and parts[0] == "db":
+                return f"https://{parts[1]}.supabase.co"
+    except Exception:
+        pass
+    return ""
 
 
 def setup_logging(level: int | str = logging.INFO) -> None:
@@ -26,7 +48,7 @@ def setup_logging(level: int | str = logging.INFO) -> None:
 
 def load_environment(staging: bool | None = None) -> str:
     """Load the appropriate environment configuration without clobbering preset variables."""
-    global DB_ENV, DATABASE_URL, DIGEST_EMAIL
+    global DB_ENV, DATABASE_URL, DIGEST_EMAIL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
     if staging is None:
         is_staging = os.environ.get("DB_ENV") == "staging" or (hasattr(sys, "argv") and "--staging" in sys.argv)
     else:
@@ -43,6 +65,9 @@ def load_environment(staging: bool | None = None) -> str:
         load_dotenv(BASE_DIR / ".env", override=True)
         DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
         DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
+
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or _derive_supabase_url(DATABASE_URL)
+    SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     return DB_ENV
 
 
@@ -50,6 +75,8 @@ def load_environment(staging: bool | None = None) -> str:
 DB_ENV = "production"
 DATABASE_URL = ""
 DIGEST_EMAIL = ""
+SUPABASE_URL = ""
+SUPABASE_SERVICE_ROLE_KEY = ""
 load_environment()
 
 # Built-in fallback profile for early-career software engineering roles
