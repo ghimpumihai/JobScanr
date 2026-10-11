@@ -26,7 +26,7 @@ def setup_logging(level: int | str = logging.INFO) -> None:
 
 def load_environment(staging: bool | None = None) -> str:
     """Load the appropriate environment configuration without clobbering preset variables."""
-    global DB_ENV, DATABASE_URL, DIGEST_EMAIL
+    global DB_ENV, DATABASE_URL, DIGEST_EMAIL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
     if staging is None:
         is_staging = os.environ.get("DB_ENV") == "staging" or (hasattr(sys, "argv") and "--staging" in sys.argv)
     else:
@@ -43,6 +43,9 @@ def load_environment(staging: bool | None = None) -> str:
         load_dotenv(BASE_DIR / ".env", override=True)
         DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
         DIGEST_EMAIL = os.environ.get("DIGEST_EMAIL", "").strip()
+
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+    SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     return DB_ENV
 
 
@@ -50,6 +53,8 @@ def load_environment(staging: bool | None = None) -> str:
 DB_ENV = "production"
 DATABASE_URL = ""
 DIGEST_EMAIL = ""
+SUPABASE_URL = ""
+SUPABASE_SERVICE_ROLE_KEY = ""
 load_environment()
 
 # Built-in fallback profile for early-career software engineering roles

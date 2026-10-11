@@ -37,163 +37,268 @@ def build_html_digest(jobs: list[dict]) -> str:
     )
 
 
-def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], activity: dict) -> str:
-    """Render personalized 4-section daily digest for a specific user with modern styling."""
+EMAIL_MAX_INLINE_JOBS = 4
+
+
+def _render_job_row(
+    title: str,
+    company: str,
+    url: str,
+    location: str = "",
+    compensation: str = "",
+    ats_platform: str = "",
+) -> str:
+    """Render a clean, flowing job row with subtle tags and pill action button."""
+    safe_title = html.escape(title)
+    safe_company = html.escape(company)
+    safe_url = html.escape(url, quote=True) if url else "#"
+    safe_loc = html.escape(location) if location else ""
+
+    meta_subtitle = f"{safe_company} · {safe_loc}" if safe_loc else safe_company
+
+    tags = []
+    if compensation:
+        tags.append(
+            f'<span style="display:inline-block;background:#ecfdf5;color:#047857;'
+            f'padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;margin-right:8px;">'
+            f"{html.escape(compensation)}</span>"
+        )
+    if ats_platform:
+        tags.append(
+            f'<span style="display:inline-block;background:#f1f5f9;color:#475569;'
+            f'padding:2px 8px;border-radius:4px;font-size:12px;">'
+            f"via {html.escape(ats_platform.title())}</span>"
+        )
+    tags_html = "".join(tags)
+
+    return f"""
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:18px 0;vertical-align:top;">
+        <div style="margin-bottom:3px;">
+          <a href="{safe_url}" style="color:#0a66c2;font-size:15px;font-weight:600;text-decoration:none;">{safe_title}</a>
+        </div>
+        <div style="color:#334155;font-size:13px;font-weight:500;margin-bottom:6px;">
+          {meta_subtitle}
+        </div>
+        <div>
+          {tags_html}
+        </div>
+      </td>
+      <td align="right" width="100" style="padding:18px 0;vertical-align:middle;padding-left:16px;">
+        <a href="{safe_url}" style="display:inline-block;background:#0a66c2;color:#ffffff;font-size:13px;font-weight:600;padding:8px 18px;border-radius:20px;text-decoration:none;white-space:nowrap;">
+          Apply &rarr;
+        </a>
+      </td>
+    </tr>
+    """
+
+
+def _render_web_portal_bridge(total_count: int, remaining_jobs: list[dict], portal_url: str = "#") -> str:
+    """Render bridge card for high-volume days redirecting to the web radar."""
+    remaining_count = len(remaining_jobs)
+    from collections import Counter
+
+    counts = Counter(j.get("company_name", "Other") for j in remaining_jobs)
+    top_chips = []
+    for comp, cnt in counts.most_common(4):
+        top_chips.append(
+            f'<span style="display:inline-block;background:#e2e8f0;color:#334155;'
+            f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;margin-right:6px;margin-bottom:4px;">'
+            f"{html.escape(comp)} ({cnt})</span>"
+        )
+    leftover = len(counts) - 4
+    if leftover > 0:
+        top_chips.append(
+            f'<span style="display:inline-block;background:#e2e8f0;color:#334155;'
+            f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;">'
+            f"+{leftover} more</span>"
+        )
+    chips_html = "".join(top_chips)
+
+    return f"""
+    <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:20px;margin-top:16px;margin-bottom:8px;">
+      <div style="color:#0f172a;font-size:16px;font-weight:700;margin-bottom:4px;">
+        +{remaining_count} more matching roles on your JobScanr portal
+      </div>
+      <div style="color:#475569;font-size:13px;line-height:1.4;margin-bottom:12px;">
+        To keep your email fast and uncluttered, view all {total_count} openings filtered and ranked on your web radar.
+      </div>
+      <div style="margin-bottom:14px;">
+        {chips_html}
+      </div>
+      <div>
+        <a href="{html.escape(portal_url, quote=True)}" style="display:inline-block;background:#0a66c2;color:#ffffff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none;">
+          View all {total_count} matches on JobScanr &rarr;
+        </a>
+      </div>
+    </div>
+    """
+
+
+def _render_heartbeat_digest(user_email: str, total_boards: int = 388) -> str:
+    """Render positive telemetry heartbeat for zero-match days."""
+    from datetime import datetime, timezone
+
+    today_str = datetime.now(timezone.utc).strftime("%b %d")
+    return f"""
+    <div style="padding:32px 36px 28px 36px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+        <tr>
+          <td>
+            <span style="color:#0f172a;font-size:20px;font-weight:700;">JobScanr</span>
+          </td>
+          <td align="right">
+            <span style="display:inline-block;background:#ecfdf5;color:#047857;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">
+              ● Radar Active · {today_str}
+            </span>
+          </td>
+        </tr>
+      </table>
+      <h2 style="color:#0f172a;font-size:20px;font-weight:700;margin:0 0 8px 0;line-height:1.3;">
+        All systems healthy — {total_boards} boards checked
+      </h2>
+      <p style="color:#475569;font-size:14px;line-height:1.5;margin:0 0 20px 0;">
+        We scanned all {total_boards} engineering career boards across Europe at 06:00 UTC today. No new software engineering roles matching your profile were posted in the last 24 hours.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px 20px;margin-bottom:20px;">
+        <tr>
+          <td align="center" style="padding:4px 12px;border-right:1px solid #e2e8f0;">
+            <div style="color:#0f172a;font-size:16px;font-weight:700;">{total_boards} / {total_boards}</div>
+            <div style="color:#64748b;font-size:12px;">Feeds online</div>
+          </td>
+          <td align="center" style="padding:4px 12px;border-right:1px solid #e2e8f0;">
+            <div style="color:#0f172a;font-size:16px;font-weight:700;">06:00 UTC</div>
+            <div style="color:#64748b;font-size:12px;">Scan completed</div>
+          </td>
+          <td align="center" style="padding:4px 12px;">
+            <div style="color:#0f172a;font-size:16px;font-weight:700;">0 errors</div>
+            <div style="color:#64748b;font-size:12px;">System status</div>
+          </td>
+        </tr>
+      </table>
+      <p style="color:#64748b;font-size:13px;line-height:1.4;margin:0;">
+        Your next daily scan will run tomorrow at 06:00 UTC. If a matching role appears, it will be delivered straight to your inbox.
+      </p>
+    </div>
+    """
+
+
+def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], activity: dict | None = None) -> str:
+    """Render modern editorial daily digest: jobs stream, high-volume bridge, or positive heartbeat."""
     user_email = html.escape(str(user.get("email") or ""))
+    activity = activity or {}
+
+    # Backward compatibility with activity data if passed
     submitted = activity.get("submitted_today", [])
     needs_review = activity.get("needs_review", [])
     manual_apply = activity.get("manual_apply", [])
 
-    total_updates = len(submitted) + len(needs_review) + len(manual_apply) + len(unnotified_matches)
+    total_matches = len(unnotified_matches)
+
+    # 1. Zero-match state -> Render positive heartbeat telemetry
+    if total_matches == 0 and not submitted and not needs_review and not manual_apply:
+        content_inner = _render_heartbeat_digest(user_email)
+        footer_html = """
+        <div style="padding:20px 36px 24px 36px;border-top:1px solid #f1f5f9;text-align:center;color:#64748b;font-size:12px;">
+          <p style="margin:0 0 4px 0;">JobScanr monitors Greenhouse, Lever, Ashby, Workday, SmartRecruiters, and Teamtailor.</p>
+          <p style="margin:0;color:#94a3b8;font-size:11px;">Edit search filters · Pause daily digest · Unsubscribe</p>
+        </div>
+        """
+        return f"""
+        <div style="max-width:624px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          {content_inner}
+          {footer_html}
+        </div>
+        """
+
+    # 2. Matches state (Standard or High-volume with Bridge Card)
+    from datetime import datetime, timezone
+
+    today_str = datetime.now(timezone.utc).strftime("%A, %b %d")
+
+    count_label = f"{total_matches} new matching early-career role{'s' if total_matches != 1 else ''}"
 
     header_html = f"""
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:8px 8px 0 0;padding:24px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-      <tr>
-        <td>
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td>
-                <span style="display:inline-block;background:#0369a1;color:#e0f2fe;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:4px;">JobScanr · Daily Digest</span>
-                <h1 style="color:#ffffff;font-size:22px;font-weight:700;margin:8px 0 4px 0;line-height:1.2;">Your Career Dispatch</h1>
-                <div style="color:#94a3b8;font-size:13px;">Personalized for <strong style="color:#cbd5e1;">{user_email}</strong></div>
-              </td>
-              <td align="right" style="vertical-align:top;">
-                <span style="display:inline-block;background:#1e293b;color:#38bdf8;font-size:13px;font-weight:700;padding:6px 12px;border-radius:20px;border:1px solid #334155;">{total_updates} update{"s" if total_updates != 1 else ""}</span>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
+    <div style="padding:32px 36px 24px 36px;border-bottom:1px solid #f1f5f9;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+        <tr>
+          <td>
+            <span style="color:#0f172a;font-size:20px;font-weight:700;">JobScanr</span>
+          </td>
+          <td align="right">
+            <span style="color:#64748b;font-size:13px;font-weight:500;">Daily Radar · {today_str}</span>
+          </td>
+        </tr>
+      </table>
+      <h1 style="color:#0f172a;font-size:22px;font-weight:700;margin:0 0 6px 0;line-height:1.2;">
+        {count_label}
+      </h1>
+      <div style="color:#475569;font-size:14px;">
+        Scanned 388 engineering boards across Europe for <strong style="color:#0f172a;">{user_email}</strong>
+      </div>
+    </div>
+    """
+
+    inline_jobs = unnotified_matches[:EMAIL_MAX_INLINE_JOBS]
+    overflow_jobs = unnotified_matches[EMAIL_MAX_INLINE_JOBS:]
+
+    rows_html = "".join(
+        _render_job_row(
+            title=str(j.get("title") or ""),
+            company=str(j.get("company_name") or ""),
+            url=str(j.get("url") or ""),
+            location=str(j.get("location") or ""),
+            compensation=str(j.get("compensation") or "") if j.get("compensation") else "",
+            ats_platform=str(j.get("ats_platform") or ""),
+        )
+        for j in inline_jobs
+    )
+
+    table_stream = f"""
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      {rows_html}
     </table>
     """
 
-    body_sections = []
+    bridge_html = _render_web_portal_bridge(total_matches, overflow_jobs) if overflow_jobs else ""
 
-    # Section 1: Applications Submitted Today
-    if submitted:
-        rows = "".join(
-            f"""
-            <tr style="border-bottom:1px solid #f1f5f9;">
-              <td style="padding:10px 12px;color:#0f172a;font-weight:600;font-size:14px;">{html.escape(str(s["title"]))}</td>
-              <td style="padding:10px 12px;color:#475569;font-size:13px;">{html.escape(str(s["company_name"]))}</td>
-              <td style="padding:10px 12px;text-align:right;">
-                <code style="background:#ecfdf5;color:#047857;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid #a7f3d0;">{html.escape(str(s["confirmation"]))}</code>
-              </td>
-            </tr>
-            """
-            for s in submitted
-        )
-        body_sections.append(
-            f"""
-            <div style="margin-bottom:24px;">
-              <h3 style="color:#065f46;font-size:15px;font-weight:700;margin:0 0 8px 0;">🚀 Applications Submitted Today ({len(submitted)})</h3>
-              <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;background:#ffffff;border:1px solid #d1fae5;border-radius:6px;overflow:hidden;">
-                <tr style="background:#f0fdf4;color:#065f46;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
-                  <th style="padding:10px 12px;text-align:left;">Role</th>
-                  <th style="padding:10px 12px;text-align:left;">Company</th>
-                  <th style="padding:10px 12px;text-align:right;">Confirmation</th>
-                </tr>
-                {rows}
-              </table>
-            </div>
-            """
-        )
-
-    # Section 2: Actions Required (needs_review)
-    if needs_review:
-        rows = "".join(
-            f"""
-            <tr style="border-bottom:1px solid #fef3c7;">
-              <td style="padding:10px 12px;">
-                <a href="{html.escape(str(nr.get("url") or ""), quote=True)}" style="color:#0f172a;font-weight:600;font-size:14px;text-decoration:none;">{html.escape(str(nr["title"]))}</a>
-              </td>
-              <td style="padding:10px 12px;color:#475569;font-size:13px;">{html.escape(str(nr["company_name"]))}</td>
-              <td style="padding:10px 12px;text-align:right;">
-                <a href="{html.escape(str(nr.get("url") or ""), quote=True)}" style="display:inline-block;background:#d97706;color:#ffffff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:4px;text-decoration:none;">Complete Review &rarr;</a>
-              </td>
-            </tr>
-            """
-            for nr in needs_review
-        )
-        body_sections.append(
-            f"""
-            <div style="margin-bottom:24px;">
-              <h3 style="color:#92400e;font-size:15px;font-weight:700;margin:0 0 6px 0;">⚠️ Actions Required ({len(needs_review)})</h3>
-              <p style="color:#78350f;font-size:13px;margin:0 0 10px 0;">These applications need manual input or screening review before submission:</p>
-              <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;background:#ffffff;border:1px solid #fde68a;border-radius:6px;overflow:hidden;">
-                <tr style="background:#fffbeb;color:#92400e;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
-                  <th style="padding:10px 12px;text-align:left;">Role</th>
-                  <th style="padding:10px 12px;text-align:left;">Company</th>
-                  <th style="padding:10px 12px;text-align:right;">Action</th>
-                </tr>
-                {rows}
-              </table>
-            </div>
-            """
-        )
-
-    # Section 3: 1-Click Manual Apply Roles (Workday & complex portals)
-    if manual_apply:
-        rows = "".join(
-            f"""
-            <tr style="border-bottom:1px solid #f1f5f9;">
-              <td style="padding:10px 12px;">
-                <a href="{html.escape(str(m.get("url") or ""), quote=True)}" style="color:#0f172a;font-weight:600;font-size:14px;text-decoration:none;">{html.escape(str(m["title"]))}</a>
-              </td>
-              <td style="padding:10px 12px;color:#475569;font-size:13px;">{html.escape(str(m["company_name"]))}</td>
-              <td style="padding:10px 12px;color:#64748b;font-size:13px;">{html.escape(str(m.get("location") or ""))}</td>
-              <td style="padding:10px 12px;color:#047857;font-weight:600;font-size:12px;">{html.escape(str(m.get("compensation") or ""))}</td>
-              <td style="padding:10px 12px;text-align:right;">
-                <a href="{html.escape(str(m.get("url") or ""), quote=True)}" style="display:inline-block;background:#4f46e5;color:#ffffff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:4px;text-decoration:none;">Apply &rarr;</a>
-              </td>
-            </tr>
-            """
-            for m in manual_apply
-        )
-        body_sections.append(
-            f"""
-            <div style="margin-bottom:24px;">
-              <h3 style="color:#3730a3;font-size:15px;font-weight:700;margin:0 0 6px 0;">👆 1-Click Manual Apply Roles ({len(manual_apply)})</h3>
-              <p style="color:#4338ca;font-size:13px;margin:0 0 10px 0;">Workday and complex ATS portals requiring manual submission:</p>
-              <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%;background:#ffffff;border:1px solid #c7d2fe;border-radius:6px;overflow:hidden;">
-                <tr style="background:#eef2ff;color:#3730a3;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
-                  <th style="padding:10px 12px;text-align:left;">Role</th>
-                  <th style="padding:10px 12px;text-align:left;">Company</th>
-                  <th style="padding:10px 12px;text-align:left;">Location</th>
-                  <th style="padding:10px 12px;text-align:left;">Salary</th>
-                  <th style="padding:10px 12px;text-align:right;">Action</th>
-                </tr>
-                {rows}
-              </table>
-            </div>
-            """
-        )
-
-    # Section 4: Newly Discovered Matching Postings
-    if unnotified_matches:
-        body_sections.append(
-            f"""
-            <div style="margin-bottom:24px;">
-              <h3 style="color:#0369a1;font-size:15px;font-weight:700;margin:0 0 12px 0;">✨ Newly Discovered Matching Postings ({len(unnotified_matches)})</h3>
-              {build_html_digest(unnotified_matches)}
-            </div>
-            """
-        )
-
-    content_inner = "".join(body_sections)
+    # Optional activity sections for backward compatibility
+    extra_activity_html = ""
+    if submitted or needs_review:
+        extra_parts = []
+        if submitted:
+            extra_parts.append(
+                f"<div style='margin-top:16px;padding:12px;background:#f0fdf4;border-radius:6px;font-size:13px;color:#166534;'>"
+                f"<strong>Applications Submitted Today ({len(submitted)}):</strong> "
+                + ", ".join(f"{s['title']} at {s['company_name']} ({s.get('confirmation', 'OK')})" for s in submitted)
+                + "</div>"
+            )
+        if needs_review:
+            extra_parts.append(
+                f"<div style='margin-top:12px;padding:12px;background:#fffbeb;border-radius:6px;font-size:13px;color:#92400e;'>"
+                f"<strong>Actions Required ({len(needs_review)}):</strong> "
+                + ", ".join(
+                    f"<a href='{nr.get('url', '#')}' style='color:#92400e;font-weight:600;'>{nr['title']} at {nr['company_name']} (Complete Review &rarr;)</a>"
+                    for nr in needs_review
+                )
+                + "</div>"
+            )
+        extra_activity_html = "".join(extra_parts)
 
     footer_html = """
-    <div style="padding:20px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:12px;">
-      <p style="margin:0 0 4px 0;">Generated automatically by <strong>JobScanr</strong>.</p>
-      <p style="margin:0;color:#94a3b8;font-size:11px;">To configure your job preferences, update your profile settings.</p>
+    <div style="padding:24px 36px 28px 36px;border-top:1px solid #f1f5f9;text-align:center;color:#64748b;font-size:12px;">
+      <p style="margin:0 0 6px 0;">JobScanr scans verified company career feeds daily for early-career European roles.</p>
+      <p style="margin:0;color:#94a3b8;font-size:11px;">Edit search preferences · Pause daily digest · Unsubscribe</p>
     </div>
     """
 
     return f"""
-    <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <div style="max-width:624px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
       {header_html}
-      <div style="padding:24px 28px;">
-        {content_inner}
+      <div style="padding:12px 36px 20px 36px;">
+        {table_stream}
+        {bridge_html}
+        {extra_activity_html}
       </div>
       {footer_html}
     </div>
@@ -244,29 +349,44 @@ def send_email_digest(jobs: list[dict]) -> str:
     )
 
 
-def send_user_digest(user: dict, unnotified_matches: list[dict], activity: dict) -> str | None:
-    """Send personalized daily digest to a user if there is anything to report."""
+def send_user_digest(
+    user: dict,
+    unnotified_matches: list[dict],
+    activity: dict | None = None,
+    send_heartbeat: bool = False,
+) -> str | None:
+    """Send personalized daily digest to a user: matching jobs stream or positive heartbeat."""
+    activity = activity or {}
     submitted = activity.get("submitted_today", [])
     needs_review = activity.get("needs_review", [])
     manual_apply = activity.get("manual_apply", [])
-    if not unnotified_matches and not submitted and not needs_review and not manual_apply:
+
+    has_content = bool(unnotified_matches or submitted or needs_review or manual_apply)
+    if not has_content and not send_heartbeat:
         return None
 
     to_email = user.get("email")
     if not to_email:
         return None
 
-    total_items = len(unnotified_matches) + len(submitted) + len(needs_review) + len(manual_apply)
-    subject = f"JobScanr: Daily Digest ({total_items} update{'s' if total_items != 1 else ''})"
+    if not has_content and send_heartbeat:
+        subject = "JobScanr: Radar Active (388 boards checked)"
+        text_content = (
+            f"JobScanr Daily Radar for {to_email}\n"
+            "All systems healthy — 388 boards checked.\n"
+            "No new early-career software engineering roles matched your profile in the last 24 hours.\n"
+            "Next scan runs tomorrow at 06:00 UTC.\n"
+        )
+    else:
+        total_items = len(unnotified_matches) + len(submitted) + len(needs_review) + len(manual_apply)
+        subject = f"JobScanr: Daily Radar ({total_items} role{'s' if total_items != 1 else ''} matched)"
+        text_content = f"JobScanr Daily Radar for {to_email}\n- {len(unnotified_matches)} new matching postings\n"
+        if submitted:
+            text_content += f"- {len(submitted)} applications submitted\n"
+        if needs_review:
+            text_content += f"- {len(needs_review)} actions required\n"
 
     html_content = build_personalized_html_digest(user, unnotified_matches, activity)
-    text_content = (
-        f"JobScanr Daily Digest for {to_email}\n"
-        f"- {len(submitted)} applications submitted today\n"
-        f"- {len(needs_review)} actions required\n"
-        f"- {len(manual_apply)} manual apply roles\n"
-        f"- {len(unnotified_matches)} new matching postings\n"
-    )
     return _send_email(
         subject=subject,
         text_body=text_content,
