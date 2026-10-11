@@ -93,10 +93,12 @@ def test_delete_stale_jobs_default_days():
         mock_get_conn.return_value.__enter__.return_value = mock_conn
         deleted = queries.delete_stale_jobs()
 
-        mock_cur.execute.assert_called_once_with(
-            "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
-            (30,),
-        )
+        mock_cur.execute.assert_called_once()
+        sql, params = mock_cur.execute.call_args[0]
+        assert "DELETE FROM job_postings" in sql
+        assert "NOT EXISTS" in sql
+        assert "SELECT 1 FROM applications" in sql
+        assert params == (30,)
         assert deleted == 42
 
 
@@ -110,10 +112,12 @@ def test_delete_stale_jobs_custom_days():
         mock_get_conn.return_value.__enter__.return_value = mock_conn
         deleted = queries.delete_stale_jobs(days=14)
 
-        mock_cur.execute.assert_called_once_with(
-            "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
-            (14,),
-        )
+        mock_cur.execute.assert_called_once()
+        sql, params = mock_cur.execute.call_args[0]
+        assert "DELETE FROM job_postings" in sql
+        assert "NOT EXISTS" in sql
+        assert "SELECT 1 FROM applications" in sql
+        assert params == (14,)
         assert deleted == 5
 
 
@@ -232,6 +236,10 @@ def test_apply_schema():
         sql = mock_cur.execute.call_args[0][0]
         assert "CREATE TABLE IF NOT EXISTS companies" in sql
         assert "CREATE TABLE IF NOT EXISTS job_postings" in sql
+        assert "CREATE TABLE IF NOT EXISTS users" in sql
+        assert "CREATE TABLE IF NOT EXISTS user_job_matches" in sql
+        assert "CREATE TABLE IF NOT EXISTS applications" in sql
+        assert "CREATE TABLE IF NOT EXISTS application_events" in sql
 
 
 def test_get_all_companies():
