@@ -79,6 +79,24 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Apply idempotent database schema (db/schema.sql)
+        run: python -m scripts.apply_schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  sync-companies:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [sync-db]
+    runs-on: ubuntu-latest
+    environment: sync-db
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
       - name: Sync companies and prune removed to database
         run: python -m seed.seed
         env:
