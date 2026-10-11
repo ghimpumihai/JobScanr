@@ -18,6 +18,8 @@ ruff format .                                             # apply formatting
 mypy models.py config.py scrapers/                        # type check core modules (as in CI)
 
 # Validation & maintenance scripts
+python -m scripts.apply_schema                            # apply db/schema.sql to production
+python -m scripts.apply_schema --staging                  # apply db/schema.sql to staging
 python -m scripts.validate_seed_schema                   # validate seed/companies.json
 python -m jobs.scrape_and_notify --dry-run               # scrape pipeline without DB writes or email
 python -m seed.seed --staging                             # sync companies to staging database

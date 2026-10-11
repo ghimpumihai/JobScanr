@@ -83,7 +83,7 @@ cp .env.example .env          # fill in DATABASE_URL + SMTP values
 ```
 
 ```bash
-python -c "import sys; sys.path.insert(0,'.'); from db import queries; queries.apply_schema()"
+python -m scripts.apply_schema
 python -m seed.seed
 python -m jobs.scrape_and_notify --dry-run
 ```
@@ -92,15 +92,15 @@ python -m jobs.scrape_and_notify --dry-run
 
 ### Environment isolation
 
-| | production | staging | sync-db |
-|--|-----------|---------|---------|
-| trigger | cron (06:00 UTC) + dispatches from `main` | you, locally | push / merge to `main` |
-| scope | live scrape & daily email digest | safe offline testing | company catalog DB sync |
-| CLI flag | *(default)* | `--staging` | `python -m seed.seed` |
-| env file | `.env` | `.env.stage` | `.env` |
-| inbox | `DIGEST_EMAIL` | `DIGEST_EMAIL_TEST` | N/A |
+| | production | staging | sync-db | sync-companies |
+|--|-----------|---------|---------|----------------|
+| trigger | cron (06:00 UTC) + dispatches from `main` | you, locally | push / merge to `main` | push / merge to `main` (after sync-db) |
+| scope | live scrape & daily email digest | safe offline testing | database schema migration | company catalog DB sync |
+| CLI flag | *(default)* | `--staging` | `python -m scripts.apply_schema` | `python -m seed.seed` |
+| env file | `.env` | `.env.stage` | `.env` | `.env` |
+| inbox | `DIGEST_EMAIL` | `DIGEST_EMAIL_TEST` | N/A | N/A |
 
-Experiments can never pollute production state or spam the real reader. GitHub Actions also cleanly isolates **`sync-db`** deployments (company catalog changes) from **`production`** deployments (daily scraping and email delivery).
+Experiments can never pollute production state or spam the real reader. GitHub Actions also cleanly isolates **`sync-db`** schema migrations and **`sync-companies`** deployments (company catalog changes) from **`production`** deployments (daily scraping and email delivery).
 
 ```bash
 # Example staging runs:
@@ -129,6 +129,7 @@ When career URLs break (e.g. companies migrate ATS, rename boards, or shut down)
 
 ```
 scripts/
+  apply_schema.py          apply idempotent database schema (db/schema.sql)
   scan_and_fix_links.py    self-healing repair pipeline (deterministic + AI triage)
   ai_fixer.py              DuckDuckGo web search + Groq LLM discovery & verification
   validate_companies.py    health-check every board (exit 1 if >5% dead)
