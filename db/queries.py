@@ -121,11 +121,12 @@ def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, arrays)
         for job_id, external_id, company_id, is_new in cur.fetchall():
-            if is_new:
-                src = job_map.get((external_id, company_id))
-                if src is not None:
-                    out.append({**src, "id": job_id})
-    return out
+            src = job_map.get((external_id, company_id))
+            if src is not None:
+                src["id"] = job_id
+                if is_new:
+                    out.append(src)
+        return out
 
 
 def delete_stale_jobs(days: int = 30) -> int:
@@ -285,19 +286,149 @@ def upsert_user_matches(user_id: int, matches: list[dict]) -> int:
         return cur.rowcount
 
 
-def queue_user_applications(user_id: int, job_ids: list[int]) -> int:
-    """Queue application submissions for a user (skips already existing)."""
-    if not job_ids:
+def stage_user_applications(user_id: int, items: list[dict]) -> int:
+    """Stage applications with specific status (skips already existing)."""
+    if not items:
+        return 0
+    rows = []
+    for it in items:
+        jid = it.get("job_posting_id") or it.get("job_id") or it.get("id")
+        status = it.get("status", "queued")
+        if jid:
+            rows.append((user_id, jid, status))
+    if not rows:
         return 0
     with get_connection() as conn, conn.cursor() as cur:
-        rows = [(user_id, jid) for jid in job_ids]
         cur.executemany(
             """
             INSERT INTO applications (user_id, job_posting_id, status)
-            VALUES (%s, %s, 'queued')
+            VALUES (%s, %s, %s)
             ON CONFLICT (user_id, job_posting_id) DO NOTHING
             """,
             rows,
+        )
+        return cur.rowcount
+
+
+def queue_user_applications(user_id: int, job_ids: list[int], status: str = "queued") -> int:
+    """Queue application submissions for a user (skips already existing)."""
+    return stage_user_applications(user_id, [{"job_id": jid, "status": status} for jid in job_ids])
+
+
+def get_user_unnotified_matches(user_id: int) -> list[dict]:
+    """Fetch unnotified matching job postings for a specific user."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT jp.id, jp.title, c.name AS company_name, jp.location, jp.url,
+                   jp.compensation, jp.application_deadline, jp.ats_platform, ujm.match_score
+            FROM user_job_matches ujm
+            JOIN job_postings jp ON jp.id = ujm.job_posting_id
+            JOIN companies c ON c.id = jp.company_id
+            WHERE ujm.user_id = %s AND ujm.notified_at IS NULL
+            ORDER BY jp.first_seen_at DESC
+            """,
+            (user_id,),
+        )
+        cols = (
+            "id",
+            "title",
+            "company_name",
+            "location",
+            "url",
+            "compensation",
+            "application_deadline",
+            "ats_platform",
+            "match_score",
+        )
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def get_user_recent_application_activity(user_id: int) -> dict[str, list[dict]]:
+    """Fetch recent applications grouped by status for personalized daily digest."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.id, jp.title, c.name AS company_name, a.submitted_payload, a.created_at
+            FROM applications a
+            JOIN job_postings jp ON jp.id = a.job_posting_id
+            JOIN companies c ON c.id = jp.company_id
+            WHERE a.user_id = %s AND a.status = 'submitted' AND a.created_at >= CURRENT_DATE
+            ORDER BY a.created_at DESC
+            """,
+            (user_id,),
+        )
+        submitted = []
+        for r in cur.fetchall():
+            payload = r[3] if isinstance(r[3], dict) else (json.loads(r[3]) if r[3] else {})
+            confirmation = (payload or {}).get("confirmation_id") or f"APP-{r[0]}"
+            submitted.append(
+                {
+                    "application_id": r[0],
+                    "title": r[1],
+                    "company_name": r[2],
+                    "confirmation": confirmation,
+                    "created_at": r[4],
+                }
+            )
+
+        cur.execute(
+            """
+            SELECT a.id, jp.title, c.name AS company_name, jp.url
+            FROM applications a
+            JOIN job_postings jp ON jp.id = a.job_posting_id
+            JOIN companies c ON c.id = jp.company_id
+            WHERE a.user_id = %s AND a.status = 'needs_review'
+            ORDER BY a.created_at DESC
+            """,
+            (user_id,),
+        )
+        needs_review = [
+            {"application_id": r[0], "title": r[1], "company_name": r[2], "url": r[3]} for r in cur.fetchall()
+        ]
+
+        cur.execute(
+            """
+            SELECT a.id, jp.title, c.name AS company_name, jp.location, jp.url, jp.compensation
+            FROM applications a
+            JOIN job_postings jp ON jp.id = a.job_posting_id
+            JOIN companies c ON c.id = jp.company_id
+            WHERE a.user_id = %s AND a.status = 'manual_apply' AND a.created_at >= CURRENT_DATE
+            ORDER BY a.created_at DESC
+            """,
+            (user_id,),
+        )
+        manual_apply = [
+            {
+                "application_id": r[0],
+                "title": r[1],
+                "company_name": r[2],
+                "location": r[3],
+                "url": r[4],
+                "compensation": r[5],
+            }
+            for r in cur.fetchall()
+        ]
+
+        return {
+            "submitted_today": submitted,
+            "needs_review": needs_review,
+            "manual_apply": manual_apply,
+        }
+
+
+def mark_user_matches_notified(user_id: int, job_ids: list[int]) -> int:
+    """Mark specific job matches as notified for a user."""
+    if not job_ids:
+        return 0
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE user_job_matches
+            SET notified_at = NOW()
+            WHERE user_id = %s AND job_posting_id = ANY(%s)
+            """,
+            (user_id, job_ids),
         )
         return cur.rowcount
 
