@@ -284,6 +284,8 @@ class LeverSubmitter(BaseSubmitter):
         for k, v in payload.items():
             if isinstance(v, bool):
                 data[k] = "true" if v else "false"
+            elif isinstance(v, (list, tuple)):
+                data[k] = [str(item) for item in v]
             else:
                 data[k] = str(v)
 

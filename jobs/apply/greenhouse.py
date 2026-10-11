@@ -10,7 +10,7 @@ from __future__ import annotations
 import io
 import logging
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -42,15 +42,22 @@ def extract_greenhouse_identifiers(posting: JobPosting) -> tuple[str, str]:
     if url:
         parsed = urlparse(url)
         path_parts = [p for p in parsed.path.strip("/").split("/") if p]
-        # Example: https://boards.greenhouse.io/stripe/jobs/123456
+        # Example: https://boards.greenhouse.io/stripe/jobs/123456 or /embed/job_app?for=stripe&token=123456
         if "greenhouse.io" in parsed.netloc:
-            if len(path_parts) >= 3 and path_parts[1] == "jobs":
-                if not board_token:
+            query_params = parse_qs(parsed.query)
+            if "for" in query_params and not board_token:
+                board_token = query_params["for"][0]
+            if "token" in query_params and not job_id:
+                job_id = query_params["token"][0]
+
+            if not (board_token and job_id):
+                if len(path_parts) >= 3 and path_parts[1] == "jobs":
+                    if not board_token:
+                        board_token = path_parts[0]
+                    if not job_id:
+                        job_id = path_parts[2]
+                elif len(path_parts) >= 1 and not board_token and path_parts[0] != "embed":
                     board_token = path_parts[0]
-                if not job_id:
-                    job_id = path_parts[2]
-            elif len(path_parts) >= 1 and not board_token:
-                board_token = path_parts[0]
 
     return board_token, job_id
 
@@ -225,11 +232,13 @@ class GreenhouseSubmitter(BaseSubmitter):
             "resume": (filename, resume_bytes, content_type),
         }
 
-        # Convert boolean / integer values to string format for form-data
+        # Convert boolean / integer values to string format for form-data, preserving lists
         data: dict[str, Any] = {}
         for k, v in payload.items():
             if isinstance(v, bool):
                 data[k] = "true" if v else "false"
+            elif isinstance(v, (list, tuple)):
+                data[k] = [str(item) for item in v]
             else:
                 data[k] = str(v)
 

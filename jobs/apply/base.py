@@ -127,10 +127,10 @@ def get_candidate_url(user: User, platform: str) -> str:
 def _match_select_option(options: list[QuestionOption], desired_text: str | bool) -> QuestionOption | None:
     """Find the best matching option for a given boolean or string target."""
     if isinstance(desired_text, bool):
-        target_labels = ("yes", "true") if desired_text else ("no", "false")
+        pattern = r"\b(yes|true)\b" if desired_text else r"\b(no|false)\b"
         for opt in options:
             clean = opt.label.strip().lower()
-            if any(tl in clean for tl in target_labels):
+            if re.search(pattern, clean):
                 return opt
         return None
 

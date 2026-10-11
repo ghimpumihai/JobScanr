@@ -24,6 +24,8 @@ from jobs.apply import (
     get_submitter,
     map_screening_question,
 )
+from jobs.apply.base import _match_select_option
+from jobs.apply.greenhouse import extract_greenhouse_identifiers
 from models import JobPosting, User
 
 
@@ -636,3 +638,52 @@ def test_lever_submit_404_closed(sample_user: User, sample_lever_posting: JobPos
     resp = asyncio.run(run())
     assert resp.status == "stale_closed"
     assert resp.reason == "posting_closed"
+
+
+def test_match_select_option_word_boundaries():
+    options = [
+        QuestionOption(id="1", label="Not authorized to work"),
+        QuestionOption(id="2", label="No, I require sponsorship"),
+        QuestionOption(id="3", label="Yes, I am authorized"),
+    ]
+    # "Not authorized" must not match false ("no"/"false") as a substring
+    opt_no = _match_select_option(options, False)
+    assert opt_no is not None
+    assert opt_no.id == "2"
+
+    opt_yes = _match_select_option(options, True)
+    assert opt_yes is not None
+    assert opt_yes.id == "3"
+
+
+def test_extract_greenhouse_identifiers_embed_url():
+    posting: JobPosting = {
+        "external_id": "",
+        "title": "Engineer",
+        "url": "https://boards.greenhouse.io/embed/job_app?for=stripe&token=998877",
+        "description": "",
+    }
+    board, job_id = extract_greenhouse_identifiers(posting)
+    assert board == "stripe"
+    assert job_id == "998877"
+
+
+def test_greenhouse_submit_preserves_multiselect_lists(sample_user: User, sample_greenhouse_posting: JobPosting):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read().decode("latin1")
+        # Ensure list items were passed individually and not as a python repr "['opt_a', 'opt_b']"
+        assert "opt_a" in body
+        assert "opt_b" in body
+        assert "['opt_a'" not in body
+        return httpx.Response(200, json={"id": 111, "redirect": None})
+
+    async def run():
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as http:
+            submitter = GreenhouseSubmitter(client=http)
+            payload = {"skills[]": ["opt_a", "opt_b"]}
+            stream = io.BytesIO(b"%PDF-mock")
+            return await submitter.submit(sample_user, sample_greenhouse_posting, payload, stream, "resume.pdf")
+
+    resp = asyncio.run(run())
+    assert resp.status == "submitted"
