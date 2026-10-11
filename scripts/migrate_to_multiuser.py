@@ -135,6 +135,9 @@ def main() -> int:
     profile_data = config.load_profile(args.profile) if args.profile else config.PROFILE
 
     try:
+        if not args.dry_run:
+            logger.info("Applying database schema to %s environment...", config.DB_ENV)
+            queries.apply_schema()
         migrate_profile_to_user(
             profile_data=profile_data,
             email=args.email,
