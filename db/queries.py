@@ -321,7 +321,7 @@ def get_user_unnotified_matches(user_id: int) -> list[dict]:
         cur.execute(
             """
             SELECT jp.id, jp.title, c.name AS company_name, jp.location, jp.url,
-                   jp.compensation, jp.application_deadline, jp.ats_platform, ujm.match_score
+                   jp.compensation, jp.application_deadline, c.ats_platform, ujm.match_score
             FROM user_job_matches ujm
             JOIN job_postings jp ON jp.id = ujm.job_posting_id
             JOIN companies c ON c.id = jp.company_id
