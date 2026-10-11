@@ -38,3 +38,17 @@ python -m scripts.test_email --limit 5                    # preview email digest
 - **Safety Circuit Breakers**:
   - `scrape_and_notify.py` aborts if company scrape failures exceed 20% (`FAILURE_RATE_LIMIT = 0.2`).
   - `scan_and_fix_links.py` caps pruning defunct companies at 15% (`--max-remove-pct 0.15`).
+
+## Spec-Driven Development (SDD) Workflow
+
+This repository uses [GitHub Spec Kit](https://github.com/github/spec-kit) standards for structured agentic development:
+
+- **Constitution**: `.specify/constitution.md` documents repository invariants and non-negotiables.
+- **Workflow Skills**:
+  - `/spec-specify`: Draft functional specifications in `.specify/specs/<slug>/spec.md`.
+  - `/spec-plan`: Design technical architecture and data flow in `.specify/specs/<slug>/plan.md`.
+  - `/spec-tasks`: Break down plans into ordered checklists in `.specify/specs/<slug>/tasks.md`.
+  - `/spec-implement`: Execute implementation step-by-step against `tasks.md`.
+  - `/spec-converge`: Verify implementation against specification, tests, and linters.
+  - `/spec-bug`: Structured bug assessment, reproduction, root-cause patch, and regression tests.
+
