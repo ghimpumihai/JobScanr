@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from config import DIGEST_EMAIL, setup_logging  # noqa: E402
+from config import setup_logging  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +30,46 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Preview digest email.")
     parser.add_argument("--limit", type=int, default=5, help="how many recent postings to include")
     parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
+    parser.add_argument("--personalized", action="store_true", help="preview personalized 4-section digest")
     args = parser.parse_args()
+
+    import config
+
+    config.load_environment(staging=args.staging)
 
     jobs = fetch_sample(args.limit)
     if not jobs:
         logger.warning("No rows to sample.")
         return 1
 
-    logger.info("Previewing %d rows -> %s", len(jobs), DIGEST_EMAIL)
-    from jobs.notify import send_email_digest
+    from jobs.notify import send_email_digest, send_user_digest
 
-    send_email_digest(jobs)
+    recipient = config.DIGEST_EMAIL
+    logger.info("Previewing %d rows -> %s", len(jobs), recipient)
+
+    if args.personalized:
+        sample_user = {"email": recipient}
+        sample_activity = {
+            "submitted_today": [
+                {"title": "Junior Software Engineer", "company_name": "Datadog", "confirmation": "APP-98214"}
+            ],
+            "needs_review": [
+                {"title": "Backend Developer", "company_name": "Scale AI", "url": "https://scale.com/careers"}
+            ],
+            "manual_apply": [
+                {
+                    "title": "Software Engineer Intern",
+                    "company_name": "Salesforce (Workday)",
+                    "location": "London, UK",
+                    "compensation": "£52,000",
+                    "url": "https://salesforce.wd1.myworkdayjobs.com/careers",
+                }
+            ],
+        }
+        send_user_digest(sample_user, jobs, sample_activity)
+    else:
+        send_email_digest(jobs)
+
     logger.info("Preview digest sent (no DB writes).")
     return 0
 
