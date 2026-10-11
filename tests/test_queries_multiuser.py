@@ -198,7 +198,7 @@ def test_queue_user_applications_executes():
         sql, rows = mock_cur.executemany.call_args[0]
         assert "INSERT INTO applications" in sql
         assert "ON CONFLICT (user_id, job_posting_id) DO NOTHING" in sql
-        assert rows == [(1, 10), (1, 20), (1, 30)]
+        assert rows == [(1, 10, "queued"), (1, 20, "queued"), (1, 30, "queued")]
 
 
 # ---------------------------------------------------------------------------

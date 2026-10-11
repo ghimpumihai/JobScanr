@@ -37,6 +37,67 @@ def build_html_digest(jobs: list[dict]) -> str:
     )
 
 
+def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], activity: dict) -> str:
+    """Render personalized 4-section daily digest for a specific user."""
+    sections = []
+    user_email = html.escape(str(user.get("email") or ""))
+    sections.append(f"<h2>JobScanr Daily Digest for {user_email}</h2>")
+
+    # Section 1: Applications Submitted Today
+    submitted = activity.get("submitted_today", [])
+    if submitted:
+        rows = "".join(
+            f"<tr><td>{html.escape(str(s['title']))}</td><td>{html.escape(str(s['company_name']))}</td>"
+            f"<td><code>{html.escape(str(s['confirmation']))}</code></td></tr>"
+            for s in submitted
+        )
+        sections.append(
+            f"<h3>🚀 Applications Submitted Today ({len(submitted)})</h3>"
+            f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
+            f"<tr><th>Role</th><th>Company</th><th>Confirmation</th></tr>{rows}</table>"
+        )
+
+    # Section 2: Actions Required (needs_review)
+    needs_review = activity.get("needs_review", [])
+    if needs_review:
+        rows = "".join(
+            f'<tr><td><a href="{html.escape(str(nr.get("url") or ""), quote=True)}">{html.escape(str(nr["title"]))}</a></td>'
+            f"<td>{html.escape(str(nr['company_name']))}</td>"
+            f'<td><a href="{html.escape(str(nr.get("url") or ""), quote=True)}">Complete Review &rarr;</a></td></tr>'
+            for nr in needs_review
+        )
+        sections.append(
+            f"<h3>⚠️ Actions Required ({len(needs_review)})</h3>"
+            f"<p>These applications need manual input or screening review before submission:</p>"
+            f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
+            f"<tr><th>Role</th><th>Company</th><th>Action</th></tr>{rows}</table>"
+        )
+
+    # Section 3: 1-Click Manual Apply Roles (Workday & complex portals)
+    manual_apply = activity.get("manual_apply", [])
+    if manual_apply:
+        rows = "".join(
+            f'<tr><td><a href="{html.escape(str(m.get("url") or ""), quote=True)}">{html.escape(str(m["title"]))}</a></td>'
+            f"<td>{html.escape(str(m['company_name']))}</td><td>{html.escape(str(m.get('location') or ''))}</td>"
+            f"<td>{html.escape(str(m.get('compensation') or ''))}</td>"
+            f'<td><a href="{html.escape(str(m.get("url") or ""), quote=True)}">Apply &rarr;</a></td></tr>'
+            for m in manual_apply
+        )
+        sections.append(
+            f"<h3>👆 1-Click Manual Apply Roles ({len(manual_apply)})</h3>"
+            f"<p>Workday and complex ATS portals requiring manual submission:</p>"
+            f'<table border="1" cellpadding="6" style="border-collapse:collapse">'
+            f"<tr><th>Role</th><th>Company</th><th>Location</th><th>Salary</th><th>Action</th></tr>{rows}</table>"
+        )
+
+    # Section 4: Newly Discovered Matching Postings
+    if unnotified_matches:
+        sections.append(f"<h3>✨ Newly Discovered Matching Postings ({len(unnotified_matches)})</h3>")
+        sections.append(build_html_digest(unnotified_matches))
+
+    return "".join(sections)
+
+
 def _send_email(subject: str, text_body: str, html_body: str, to_email: str | None = None) -> str:
     host = os.environ["SMTP_HOST"]
     port = int(os.environ.get("SMTP_PORT", "587"))
@@ -66,6 +127,37 @@ def send_email_digest(jobs: list[dict]) -> str:
         text_body=plain_body,
         html_body=build_html_digest(jobs),
         to_email=DIGEST_EMAIL,
+    )
+
+
+def send_user_digest(user: dict, unnotified_matches: list[dict], activity: dict) -> str | None:
+    """Send personalized daily digest to a user if there is anything to report."""
+    submitted = activity.get("submitted_today", [])
+    needs_review = activity.get("needs_review", [])
+    manual_apply = activity.get("manual_apply", [])
+    if not unnotified_matches and not submitted and not needs_review and not manual_apply:
+        return None
+
+    to_email = user.get("email")
+    if not to_email:
+        return None
+
+    total_items = len(unnotified_matches) + len(submitted) + len(needs_review) + len(manual_apply)
+    subject = f"JobScanr: Daily Digest ({total_items} update{'s' if total_items != 1 else ''})"
+
+    html_content = build_personalized_html_digest(user, unnotified_matches, activity)
+    text_content = (
+        f"JobScanr Daily Digest for {to_email}\n"
+        f"- {len(submitted)} applications submitted today\n"
+        f"- {len(needs_review)} actions required\n"
+        f"- {len(manual_apply)} manual apply roles\n"
+        f"- {len(unnotified_matches)} new matching postings\n"
+    )
+    return _send_email(
+        subject=subject,
+        text_body=text_content,
+        html_body=html_content,
+        to_email=to_email,
     )
 
 
