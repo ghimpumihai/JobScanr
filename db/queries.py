@@ -1,5 +1,6 @@
 """All DB operations in one place (plan Phase 3)."""
 
+import json
 from contextlib import AbstractContextManager
 from pathlib import Path
 
@@ -130,7 +131,13 @@ def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
 def delete_stale_jobs(days: int = 30) -> int:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
-            "DELETE FROM job_postings WHERE last_seen_at < NOW() - make_interval(days => %s)",
+            """
+            DELETE FROM job_postings
+            WHERE last_seen_at < NOW() - make_interval(days => %s)
+              AND NOT EXISTS (
+                  SELECT 1 FROM applications a WHERE a.job_posting_id = job_postings.id
+              )
+            """,
             (days,),
         )
         return cur.rowcount
@@ -211,3 +218,100 @@ def get_recent_job_samples(limit: int = 5) -> list[dict]:
             (limit,),
         )
         return [dict(zip(("title", "company_name", "location", "url"), r)) for r in cur.fetchall()]
+
+
+def get_active_users() -> list[dict]:
+    """Fetch all users whose auto_apply_mode is not disabled."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, auth_user_id, email, resume_data, profile_filters, screening_defaults,
+                   auto_apply_mode, max_daily_applications, max_apps_per_company, gdpr_consent_at, created_at
+            FROM users
+            WHERE auto_apply_mode != 'disabled'
+            ORDER BY id
+            """
+        )
+        users = []
+        for r in cur.fetchall():
+            resume_data = (r[3] if isinstance(r[3], dict) else (json.loads(r[3]) if r[3] else {})) or {}
+            profile_filters = (r[4] if isinstance(r[4], dict) else (json.loads(r[4]) if r[4] else {})) or {}
+            screening_defaults = (r[5] if isinstance(r[5], dict) else (json.loads(r[5]) if r[5] else {})) or {}
+            users.append(
+                {
+                    "id": r[0],
+                    "auth_user_id": str(r[1]),
+                    "email": r[2],
+                    "resume_data": resume_data,
+                    "profile_filters": profile_filters,
+                    "screening_defaults": screening_defaults,
+                    "auto_apply_mode": r[6],
+                    "max_daily_applications": r[7],
+                    "max_apps_per_company": r[8],
+                    "gdpr_consent_at": r[9],
+                    "created_at": r[10],
+                }
+            )
+        return users
+
+
+def upsert_user_matches(user_id: int, matches: list[dict]) -> int:
+    """Upsert match scores and notification timestamps for a user."""
+    if not matches:
+        return 0
+    rows = []
+    for m in matches:
+        job_id = m.get("job_posting_id") or m.get("job_id") or m.get("id")
+        if not job_id:
+            continue
+        score = m.get("match_score")
+        notified = m.get("notified_at")
+        rows.append((user_id, job_id, score, notified))
+
+    if not rows:
+        return 0
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO user_job_matches (user_id, job_posting_id, match_score, notified_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id, job_posting_id) DO UPDATE
+                SET match_score = COALESCE(EXCLUDED.match_score, user_job_matches.match_score),
+                    notified_at = COALESCE(EXCLUDED.notified_at, user_job_matches.notified_at)
+            """,
+            rows,
+        )
+        return cur.rowcount
+
+
+def queue_user_applications(user_id: int, job_ids: list[int]) -> int:
+    """Queue application submissions for a user (skips already existing)."""
+    if not job_ids:
+        return 0
+    with get_connection() as conn, conn.cursor() as cur:
+        rows = [(user_id, jid) for jid in job_ids]
+        cur.executemany(
+            """
+            INSERT INTO applications (user_id, job_posting_id, status)
+            VALUES (%s, %s, 'queued')
+            ON CONFLICT (user_id, job_posting_id) DO NOTHING
+            """,
+            rows,
+        )
+        return cur.rowcount
+
+
+def record_application_event(app_id: int, from_status: str | None, to_status: str, reason: str | None = None) -> int:
+    """Record an immutable audit event for an application status change."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO application_events (application_id, from_status, to_status, reason)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
+            (app_id, from_status, to_status, reason),
+        )
+        row = cur.fetchone()
+        return row[0] if row else 0

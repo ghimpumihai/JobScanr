@@ -44,3 +44,57 @@ class EnrichedJobPosting(JobPosting):
     description: str | None
     compensation: NotRequired[str | None]
     application_deadline: NotRequired[str | None]
+
+
+class User(TypedDict):
+    """User profile and configuration."""
+
+    id: NotRequired[int]
+    auth_user_id: str
+    email: str
+    resume_data: dict
+    profile_filters: dict
+    screening_defaults: dict
+    auto_apply_mode: NotRequired[str]
+    max_daily_applications: NotRequired[int]
+    max_apps_per_company: NotRequired[int]
+    gdpr_consent_at: NotRequired[str]
+    created_at: NotRequired[str]
+
+
+class UserJobMatch(TypedDict):
+    """Match record between a user and a job posting."""
+
+    id: NotRequired[int]
+    user_id: int
+    job_posting_id: int
+    match_score: NotRequired[float | None]
+    notified_at: NotRequired[str | None]
+    created_at: NotRequired[str]
+
+
+class Application(TypedDict):
+    """Application record tracking submission pipeline status."""
+
+    id: NotRequired[int]
+    user_id: int
+    job_posting_id: int
+    status: NotRequired[str]
+    attempt_token: NotRequired[str | None]
+    attempts: NotRequired[int]
+    locked_at: NotRequired[str | None]
+    next_attempt_at: NotRequired[str | None]
+    resume_snapshot: NotRequired[dict | None]
+    submitted_payload: NotRequired[dict | None]
+    created_at: NotRequired[str]
+
+
+class ApplicationEvent(TypedDict):
+    """Audit log event for application status transitions."""
+
+    id: NotRequired[int]
+    application_id: int
+    from_status: str | None
+    to_status: str
+    reason: NotRequired[str | None]
+    created_at: NotRequired[str]
