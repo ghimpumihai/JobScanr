@@ -82,7 +82,7 @@ async def harvest(limit: int | None = None, concurrency: int = 25) -> list[dict]
     existing_companies = []
     if SEED_FILE.exists():
         try:
-            existing_companies = json.loads(SEED_FILE.read_text())
+            existing_companies = json.loads(SEED_FILE.read_text(encoding="utf-8"))
         except Exception as exc:
             logger.error("Could not read %s: %s", SEED_FILE, exc)
 
@@ -141,7 +141,7 @@ async def harvest(limit: int | None = None, concurrency: int = 25) -> list[dict]
     combined.sort(key=lambda x: x["company_name"].lower())
 
     SEED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SEED_FILE.write_text(json.dumps(combined, indent=2) + "\n")
+    SEED_FILE.write_text(json.dumps(combined, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     logger.info("Saved %d total companies to %s", len(combined), SEED_FILE)
 
     by_plat = Counter(c["ats_platform"] for c in combined)
