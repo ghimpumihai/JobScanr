@@ -6,6 +6,8 @@ from scripts.ai_fixer import (
     analyze_with_groq,
     detect_unsupported_ats_in_results,
     extract_ats_candidates_from_results,
+    is_plausible_candidate,
+    is_vendor_self_board,
     triage_company_with_ai,
 )
 from scripts.scan_and_fix_links import remove_companies_from_seed
@@ -152,3 +154,96 @@ def test_remove_companies_from_seed():
     assert count == 1
     assert len(filtered) == 1
     assert filtered[0]["company_name"] == "KeepMe"
+
+
+def test_is_vendor_self_board():
+    # Non-vendor company should not match vendor board
+    assert is_vendor_self_board("Egra", "workday", "workday|wd5|Workday") is True
+    assert is_vendor_self_board("Acme", "greenhouse", "greenhouse") is True
+    assert is_vendor_self_board("Acme", "lever", "lever") is True
+    assert is_vendor_self_board("Acme", "ashby", "ashbyhq") is True
+
+    # Vendor itself SHOULD match its own board without being flagged as third-party self-board
+    assert is_vendor_self_board("Workday", "workday", "workday|wd5|Workday") is False
+    assert is_vendor_self_board("Greenhouse Software", "greenhouse", "greenhouse-software") is False
+    assert is_vendor_self_board("Lever", "lever", "lever") is False
+
+    # Normal company board
+    assert is_vendor_self_board("Acme", "lever", "acme") is False
+    assert is_vendor_self_board("Acme", "workday", "acme|wd1|jobs") is False
+
+
+def test_is_plausible_candidate():
+    # Vendor self board should be rejected
+    assert is_plausible_candidate("Egra", "workday", "workday|wd5|Workday") is False
+
+    # Direct name match or substring
+    assert is_plausible_candidate("Spotify", "lever", "spotify") is True
+    assert is_plausible_candidate("Acme Corp", "greenhouse", "acme") is True
+    assert is_plausible_candidate("Acme", "workday", "acmecorp|wd1|careers") is True
+
+    # Alias match
+    assert is_plausible_candidate("Cursor", "lever", "anysphere") is True
+    assert is_plausible_candidate("Turso", "lever", "chiselstrike") is True
+
+    # Word match (> 3 chars)
+    assert is_plausible_candidate("Awesome Global Technologies", "ashby", "awesome") is True
+
+    # Completely unrelated company
+    assert is_plausible_candidate("Egra", "lever", "spotify") is False
+    assert is_plausible_candidate("Egra", "workday", "walmart|wd5|careers") is False
+
+    # Empty values
+    assert is_plausible_candidate("", "lever", "acme") is False
+    assert is_plausible_candidate("Acme", "lever", "") is False
+
+
+@pytest.mark.anyio
+async def test_triage_company_with_ai_rejects_vendor_self_board_candidate():
+    client = AsyncMock()
+    company = {
+        "company_name": "Egra",
+        "ats_platform": "workday",
+        "ats_identifier": "egra|wd3|careers",
+    }
+
+    # Search returns Workday's own board
+    fake_search = [
+        {
+            "title": "Careers at Workday",
+            "href": "https://workday.wd5.myworkdayjobs.com/Workday",
+            "body": "Join Workday",
+        }
+    ]
+
+    with patch("scripts.ai_fixer.search_duckduckgo", return_value=fake_search):
+        # Even if verify_ats returns True (e.g. 374 jobs found on Workday's board)
+        with patch("scripts.ai_fixer.verify_ats", new=AsyncMock(return_value=(True, "374 jobs"))):
+            with patch("scripts.ai_fixer.analyze_with_groq", new=AsyncMock(return_value=None)):
+                res = await triage_company_with_ai(client, company)
+                # Must NOT recover as Egra -> Workday
+                assert res["status"] != "recovered_by_ai"
+                assert res["new_ident"] != "workday|wd5|Workday"
+
+
+@pytest.mark.anyio
+async def test_triage_company_with_ai_rejects_llm_vendor_self_board():
+    client = AsyncMock()
+    company = {
+        "company_name": "Egra",
+        "ats_platform": "workday",
+        "ats_identifier": "egra|wd3|careers",
+    }
+
+    fake_groq = {
+        "supported_ats_found": True,
+        "platform": "workday",
+        "identifier": "workday|wd5|Workday",
+        "reason": "Found Workday board",
+    }
+
+    with patch("scripts.ai_fixer.search_duckduckgo", return_value=[]):
+        with patch("scripts.ai_fixer.analyze_with_groq", new=AsyncMock(return_value=fake_groq)):
+            with patch("scripts.ai_fixer.verify_ats", new=AsyncMock(return_value=(True, "374 jobs"))):
+                res = await triage_company_with_ai(client, company)
+                assert res["status"] != "recovered_by_ai"
