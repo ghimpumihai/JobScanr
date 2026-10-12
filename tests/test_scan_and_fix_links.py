@@ -383,3 +383,83 @@ def test_generate_report_markdown_ai_and_removal():
     assert "FixedAI" in report
     assert "## Removed Companies (Pruned from `seed/companies.json`)" in report
     assert "PrunedComp" in report
+
+
+@pytest.mark.anyio
+async def test_main_async_preserves_unicode_characters(tmp_path):
+    import argparse
+
+    from scripts.scan_and_fix_links import main_async
+
+    companies_file = tmp_path / "companies.json"
+    companies_file.write_text(
+        json.dumps(
+            [
+                {
+                    "company_name": "AtkinsRéalis",
+                    "career_url": "https://slihrms.wd3.myworkdayjobs.com/careers",
+                    "ats_platform": "workday",
+                    "ats_identifier": "slihrms|wd3|careers",
+                },
+                {
+                    "company_name": "BrokenCorp",
+                    "career_url": "https://boards.greenhouse.io/broken",
+                    "ats_platform": "greenhouse",
+                    "ats_identifier": "broken",
+                },
+            ],
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    failures_file = tmp_path / "failures.json"
+    failures_file.write_text(
+        json.dumps(
+            [
+                {
+                    "company_name": "BrokenCorp",
+                    "ats_platform": "greenhouse",
+                    "ats_identifier": "broken",
+                    "error": "404 Not Found",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report_file = tmp_path / "report.md"
+
+    args = argparse.Namespace(
+        companies_file=str(companies_file),
+        failures_file=str(failures_file),
+        log_file=None,
+        report_file=str(report_file),
+        dry_run=False,
+        no_email=True,
+        sync_db=False,
+        ai=False,
+        prune=False,
+    )
+
+    with patch(
+        "scripts.scan_and_fix_links.recover_company",
+        new=AsyncMock(
+            return_value={
+                "company_name": "BrokenCorp",
+                "old_platform": "greenhouse",
+                "old_ident": "broken",
+                "status": "recovered",
+                "new_platform": "lever",
+                "new_ident": "brokenfixed",
+                "new_career_url": "https://jobs.lever.co/brokenfixed",
+                "verification_detail": "1 job",
+            }
+        ),
+    ):
+        code = await main_async(args)
+        assert code == 0
+
+        raw_content = companies_file.read_text(encoding="utf-8")
+        assert "AtkinsRéalis" in raw_content
+        assert "\\u00e9" not in raw_content

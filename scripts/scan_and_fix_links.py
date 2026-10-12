@@ -370,7 +370,7 @@ async def main_async(args) -> int:
     if not companies_path.exists():
         print(f"Error: companies file not found at {companies_path}", file=sys.stderr)
         return 1
-    companies = json.loads(companies_path.read_text())
+    companies = json.loads(companies_path.read_text(encoding="utf-8"))
     comp_by_name = {c["company_name"].lower(): c for c in companies}
     comp_by_ident = {(c["ats_platform"], c["ats_identifier"]): c for c in companies}
 
@@ -486,7 +486,7 @@ async def main_async(args) -> int:
                     print(f"Successfully pruned {removed_count} company/companies with no supported ATS from seed.")
 
         if fixed_count > 0 or removed_count > 0:
-            companies_path.write_text(json.dumps(companies, indent=2) + "\n")
+            companies_path.write_text(json.dumps(companies, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             print(f"Updated {companies_path} ({fixed_count} fixed, {removed_count} pruned).")
 
             # Optional DB sync
