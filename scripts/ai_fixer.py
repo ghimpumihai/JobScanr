@@ -66,6 +66,7 @@ def is_plausible_candidate(company_name: str, platform: str, ident: str) -> bool
     words = [re.sub(r"[^a-z0-9]", "", w) for w in company_name.lower().split() if len(w) > 3]
     return any(w in tenant_slug for w in words)
 
+
 UNSUPPORTED_ATS_KEYWORDS = [
     "personio",
     "bamboohr",
@@ -315,11 +316,7 @@ async def triage_company_with_ai(
     )
 
     if llm_analysis:
-        if (
-            llm_analysis.get("supported_ats_found")
-            and llm_analysis.get("platform")
-            and llm_analysis.get("identifier")
-        ):
+        if llm_analysis.get("supported_ats_found") and llm_analysis.get("platform") and llm_analysis.get("identifier"):
             plat = llm_analysis["platform"]
             ident = llm_analysis["identifier"]
             if not is_vendor_self_board(name, plat, ident):
