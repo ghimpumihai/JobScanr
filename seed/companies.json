@@ -3307,9 +3307,9 @@
   },
   {
     "company_name": "Breeze Airways",
-    "career_url": "https://job-boards.greenhouse.io/breezeairways",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "breezeairways"
+    "career_url": "https://flybreeze.wd503.myworkdayjobs.com/Breeze_Airways",
+    "ats_platform": "workday",
+    "ats_identifier": "flybreeze|wd503|Breeze_Airways"
   },
   {
     "company_name": "Brevium",
@@ -5734,12 +5734,6 @@
     "career_url": "https://dealertire.wd5.myworkdayjobs.com/DealerTireLLC-Careers",
     "ats_platform": "workday",
     "ats_identifier": "dealertire|wd5|DealerTireLLC-Careers"
-  },
-  {
-    "company_name": "DebtBook",
-    "career_url": "https://job-boards.greenhouse.io/debtbook",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "debtbook"
   },
   {
     "company_name": "Decagon",
