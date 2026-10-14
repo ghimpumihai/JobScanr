@@ -5515,9 +5515,9 @@
   },
   {
     "company_name": "Cybereason",
-    "career_url": "https://boards.greenhouse.io/cybereason",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "cybereason"
+    "career_url": "https://careers.smartrecruiters.com/Cybereason",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Cybereason"
   },
   {
     "company_name": "Cybernetic Labs",
@@ -6448,12 +6448,6 @@
     "career_url": "https://job-boards.greenhouse.io/efficientcomputer",
     "ats_platform": "greenhouse",
     "ats_identifier": "efficientcomputer"
-  },
-  {
-    "company_name": "Egra",
-    "career_url": "https://jobs.ashbyhq.com/egra",
-    "ats_platform": "ashby",
-    "ats_identifier": "egra"
   },
   {
     "company_name": "Eight Sleep",
