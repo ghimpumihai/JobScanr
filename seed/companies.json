@@ -14533,8 +14533,8 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/paradigm",
+    "ats_platform": "ashby",
     "ats_identifier": "paradigm"
   },
   {
@@ -16177,9 +16177,9 @@
   },
   {
     "company_name": "Remote",
-    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "career_url": "https://job-boards.greenhouse.io/remote",
     "ats_platform": "greenhouse",
-    "ats_identifier": "remotecom"
+    "ats_identifier": "remote"
   },
   {
     "company_name": "Renaissance",
@@ -20707,9 +20707,9 @@
   },
   {
     "company_name": "Visier Solutions",
-    "career_url": "https://job-boards.greenhouse.io/visiersolutionsinc",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "visiersolutionsinc"
+    "career_url": "https://viavisolutions.wd1.myworkdayjobs.com/careers",
+    "ats_platform": "workday",
+    "ats_identifier": "viavisolutions|wd1|careers"
   },
   {
     "company_name": "Vistra",
