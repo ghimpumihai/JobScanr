@@ -1,7 +1,9 @@
 """All DB operations in one place (plan Phase 3)."""
 
 import json
+import uuid
 from contextlib import AbstractContextManager
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -473,3 +475,174 @@ def record_application_event(app_id: int, from_status: str | None, to_status: st
         )
         row = cur.fetchone()
         return row[0] if row else 0
+
+
+def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | None:
+    """Atomically claim the next eligible queued application using SELECT ... FOR UPDATE OF a SKIP LOCKED.
+
+    Enforces:
+    - 60s domain throttle: Excludes applications whose company board had an active lock within domain_throttle_seconds.
+    - User daily cap: Submissions today for user < user.max_daily_applications (default 10).
+    - User per-company cap: Submissions for user at company < user.max_apps_per_company (default 2).
+
+    Atomically updates status = 'submitting', attempt_token, locked_at = NOW(), and increments attempts.
+    Logs 'queued' -> 'submitting' event in application_events.
+    Commits and releases database connection immediately before returning.
+    """
+    attempt_token = str(uuid.uuid4())
+    sql = """
+        WITH candidate AS (
+            SELECT a.id
+            FROM applications a
+            JOIN job_postings jp ON a.job_posting_id = jp.id
+            JOIN companies c ON jp.company_id = c.id
+            JOIN users u ON a.user_id = u.id
+            WHERE a.status = 'queued'
+              AND (a.next_attempt_at IS NULL OR a.next_attempt_at <= NOW())
+              AND u.auto_apply_mode != 'disabled'
+              AND NOT EXISTS (
+                  SELECT 1 FROM applications active_apps
+                  JOIN job_postings active_jp ON active_apps.job_posting_id = active_jp.id
+                  WHERE active_jp.company_id = jp.company_id
+                    AND active_apps.locked_at > NOW() - make_interval(secs => %(throttle_secs)s)
+              )
+              AND (
+                  SELECT COUNT(*) FROM applications u_apps
+                  WHERE u_apps.user_id = a.user_id
+                    AND u_apps.status IN ('submitting', 'submitted')
+                    AND u_apps.locked_at >= CURRENT_DATE
+              ) < COALESCE(u.max_daily_applications, 10)
+              AND (
+                  SELECT COUNT(*) FROM applications uc_apps
+                  JOIN job_postings uc_jp ON uc_apps.job_posting_id = uc_jp.id
+                  WHERE uc_apps.user_id = a.user_id
+                    AND uc_jp.company_id = jp.company_id
+                    AND uc_apps.status IN ('submitting', 'submitted')
+              ) < COALESCE(u.max_apps_per_company, 2)
+            ORDER BY a.created_at ASC
+            FOR UPDATE OF a SKIP LOCKED
+            LIMIT 1
+        ),
+        updated AS (
+            UPDATE applications a
+            SET status = 'submitting',
+                attempt_token = %(attempt_token)s::uuid,
+                locked_at = NOW(),
+                attempts = COALESCE(a.attempts, 0) + 1
+            FROM candidate c_cand
+            WHERE a.id = c_cand.id
+            RETURNING a.id, a.user_id, a.job_posting_id, a.attempt_token, a.attempts
+        )
+        SELECT u_app.id, u_app.user_id, u_app.job_posting_id, jp.company_id, comp.name AS company_name,
+               comp.ats_platform, comp.ats_identifier, jp.url AS job_url, jp.title AS job_title,
+               u_app.attempt_token, u_app.attempts,
+               usr.screening_defaults, usr.resume_data, usr.resume_storage_path, usr.resume_filename, usr.resume_content_type
+        FROM updated u_app
+        JOIN job_postings jp ON u_app.job_posting_id = jp.id
+        JOIN companies comp ON jp.company_id = comp.id
+        JOIN users usr ON u_app.user_id = usr.id
+    """
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, {"throttle_secs": domain_throttle_seconds, "attempt_token": attempt_token})
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        screening_defaults = (row[11] if isinstance(row[11], dict) else (json.loads(row[11]) if row[11] else {})) or {}
+        resume_data = (row[12] if isinstance(row[12], dict) else (json.loads(row[12]) if row[12] else {})) or {}
+
+        claim = {
+            "id": row[0],
+            "user_id": row[1],
+            "job_posting_id": row[2],
+            "company_id": row[3],
+            "company_name": row[4],
+            "ats_platform": row[5],
+            "ats_identifier": row[6],
+            "job_url": row[7],
+            "job_title": row[8],
+            "attempt_token": str(row[9]),
+            "attempts": row[10],
+            "screening_defaults": screening_defaults,
+            "resume_data": resume_data,
+            "resume_storage_path": row[13],
+            "resume_filename": row[14],
+            "resume_content_type": row[15],
+        }
+
+        cur.execute(
+            """
+            INSERT INTO application_events (application_id, from_status, to_status, reason)
+            VALUES (%s, 'queued', 'submitting', 'claimed_by_worker')
+            """,
+            (claim["id"],),
+        )
+        return claim
+
+
+def transition_application_status(
+    application_id: int,
+    to_status: str,
+    from_status: str | None = None,
+    reason: str | None = None,
+    submitted_payload: dict | None = None,
+    next_attempt_at: datetime | None = None,
+) -> bool:
+    """Update application status, optional payload and next attempt, and record an audit event.
+
+    Commits and releases database connection immediately.
+    """
+    payload_json = json.dumps(submitted_payload) if submitted_payload is not None else None
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE applications
+            SET status = %s,
+                submitted_payload = COALESCE(%s::jsonb, submitted_payload),
+                next_attempt_at = %s
+            WHERE id = %s
+            """,
+            (to_status, payload_json, next_attempt_at, application_id),
+        )
+        if cur.rowcount == 0:
+            return False
+
+        cur.execute(
+            """
+            INSERT INTO application_events (application_id, from_status, to_status, reason)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (application_id, from_status, to_status, reason),
+        )
+        return True
+
+
+def reap_stalled_applications(stalled_threshold_seconds: int = 300) -> int:
+    """Reap applications stuck in 'submitting' beyond threshold seconds.
+
+    Transitions them to 'needs_review' with reason 'worker_timeout_unconfirmed'.
+    Records corresponding application_events.
+    Returns number of reaped applications.
+    """
+    sql = """
+        WITH stalled AS (
+            SELECT id
+            FROM applications
+            WHERE status = 'submitting'
+              AND locked_at < NOW() - make_interval(secs => %s)
+            FOR UPDATE SKIP LOCKED
+        ),
+        updated AS (
+            UPDATE applications a
+            SET status = 'needs_review'
+            FROM stalled s
+            WHERE a.id = s.id
+            RETURNING a.id
+        )
+        INSERT INTO application_events (application_id, from_status, to_status, reason)
+        SELECT id, 'submitting', 'needs_review', 'worker_timeout_unconfirmed'
+        FROM updated
+    """
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, (stalled_threshold_seconds,))
+        return cur.rowcount

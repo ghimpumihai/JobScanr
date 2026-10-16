@@ -210,7 +210,7 @@ async def main() -> int:
     args = parser.parse_args()
 
     candidates = args.candidates if args.candidates else DEFAULT_CANDIDATES
-    existing_companies = json.loads(SEED_FILE.read_text()) if SEED_FILE.is_file() else []
+    existing_companies = json.loads(SEED_FILE.read_text(encoding="utf-8")) if SEED_FILE.is_file() else []
     existing_idents = {c["ats_identifier"] for c in existing_companies}
     existing_names = {c["company_name"].lower() for c in existing_companies}
 
@@ -251,7 +251,7 @@ async def main() -> int:
     if new_companies and not args.dry_run:
         updated = existing_companies + new_companies
         updated.sort(key=lambda c: c["company_name"].lower())
-        SEED_FILE.write_text(json.dumps(updated, indent=2) + "\n")
+        SEED_FILE.write_text(json.dumps(updated, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"Successfully saved {len(new_companies)} new companies to {SEED_FILE} (total: {len(updated)}).")
 
         try:
