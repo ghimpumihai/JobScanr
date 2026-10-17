@@ -294,12 +294,6 @@
     "ats_identifier": "achievers"
   },
   {
-    "company_name": "Acima",
-    "career_url": "https://upbound.wd501.myworkdayjobs.com/Acima",
-    "ats_platform": "workday",
-    "ats_identifier": "upbound|wd501|Acima"
-  },
-  {
     "company_name": "ACLU Kentucky",
     "career_url": "https://job-boards.greenhouse.io/acluinternships",
     "ats_platform": "greenhouse",
@@ -690,12 +684,6 @@
     "ats_identifier": "alarmcom"
   },
   {
-    "company_name": "Alation",
-    "career_url": "https://alation.wd503.myworkdayjobs.com/ExternalSite",
-    "ats_platform": "workday",
-    "ats_identifier": "alation|wd503|ExternalSite"
-  },
-  {
     "company_name": "Albany Medical College",
     "career_url": "https://albanymed.wd5.myworkdayjobs.com/albany_med",
     "ats_platform": "workday",
@@ -862,18 +850,6 @@
     "career_url": "https://jobs.ashbyhq.com/allica-bank",
     "ats_platform": "ashby",
     "ats_identifier": "allica-bank"
-  },
-  {
-    "company_name": "Allied Solutions",
-    "career_url": "https://alliedsolutions.wd501.myworkdayjobs.com/Allied_External",
-    "ats_platform": "workday",
-    "ats_identifier": "alliedsolutions|wd501|Allied_External"
-  },
-  {
-    "company_name": "Allied Solutions",
-    "career_url": "https://alliedsolutions.wd501.myworkdayjobs.com/allied_external",
-    "ats_platform": "workday",
-    "ats_identifier": "alliedsolutions|wd501|allied_external"
   },
   {
     "company_name": "Allina Health",
@@ -1426,12 +1402,6 @@
     "career_url": "https://applebank.wd5.myworkdayjobs.com/applebankcareers",
     "ats_platform": "workday",
     "ats_identifier": "applebank|wd5|applebankcareers"
-  },
-  {
-    "company_name": "Applied Fluid Power",
-    "career_url": "https://applied.wd501.myworkdayjobs.com/applied",
-    "ats_platform": "workday",
-    "ats_identifier": "applied|wd501|applied"
   },
   {
     "company_name": "Applied Information Sciences",
@@ -3066,12 +3036,6 @@
     "ats_identifier": "nebraskablue|wd1|BCBSNE"
   },
   {
-    "company_name": "BlueCross BlueShield of South Carolina",
-    "career_url": "https://ourhrconnect.wd501.myworkdayjobs.com/SCBlues",
-    "ats_platform": "workday",
-    "ats_identifier": "ourhrconnect|wd501|SCBlues"
-  },
-  {
     "company_name": "BlueLabs Analytics",
     "career_url": "https://job-boards.greenhouse.io/bluelabsanalyticsinc",
     "ats_platform": "greenhouse",
@@ -3172,12 +3136,6 @@
     "career_url": "https://jobs.smartrecruiters.com/BoschGroup",
     "ats_platform": "smartrecruiters",
     "ats_identifier": "BoschGroup"
-  },
-  {
-    "company_name": "Bose",
-    "career_url": "https://boseallaboutme.wd503.myworkdayjobs.com/Bose_Careers",
-    "ats_platform": "workday",
-    "ats_identifier": "boseallaboutme|wd503|Bose_Careers"
   },
   {
     "company_name": "Boson Ai",
@@ -3304,12 +3262,6 @@
     "career_url": "https://jobs.ashbyhq.com/bree",
     "ats_platform": "ashby",
     "ats_identifier": "bree"
-  },
-  {
-    "company_name": "Breeze Airways",
-    "career_url": "https://flybreeze.wd503.myworkdayjobs.com/Breeze_Airways",
-    "ats_platform": "workday",
-    "ats_identifier": "flybreeze|wd503|Breeze_Airways"
   },
   {
     "company_name": "Brevium",
@@ -3745,9 +3697,9 @@
   },
   {
     "company_name": "Candescent",
-    "career_url": "https://candescent.wd501.myworkdayjobs.com/Hiring",
+    "career_url": "https://ncr.wd1.myworkdayjobs.com/ext_digitalfirst",
     "ats_platform": "workday",
-    "ats_identifier": "candescent|wd501|Hiring"
+    "ats_identifier": "ncr|wd1|ext_digitalfirst"
   },
   {
     "company_name": "candidate fyi",
@@ -6006,12 +5958,6 @@
     "ats_identifier": "dipper"
   },
   {
-    "company_name": "Direct Supply",
-    "career_url": "https://directsupply.wd501.myworkdayjobs.com/direct-supply-careers",
-    "ats_platform": "workday",
-    "ats_identifier": "directsupply|wd501|direct-supply-careers"
-  },
-  {
     "company_name": "DIRECTV",
     "career_url": "https://directv.wd1.myworkdayjobs.com/careers",
     "ats_platform": "workday",
@@ -6840,12 +6786,6 @@
     "ats_identifier": "epicorsoftware|wd5|epicorjobs"
   },
   {
-    "company_name": "Epiq Systems",
-    "career_url": "https://epiqsystems.wd503.myworkdayjobs.com/Epiq_Careers",
-    "ats_platform": "workday",
-    "ats_identifier": "epiqsystems|wd503|Epiq_Careers"
-  },
-  {
     "company_name": "EQT Corporation",
     "career_url": "https://job-boards.greenhouse.io/eqtcorporation",
     "ats_platform": "greenhouse",
@@ -7507,9 +7447,9 @@
   },
   {
     "company_name": "First National Bank",
-    "career_url": "https://fnbcorp.wd501.myworkdayjobs.com/FNBCORP",
+    "career_url": "https://firstnational.wd12.myworkdayjobs.com/fnbocareers",
     "ats_platform": "workday",
-    "ats_identifier": "fnbcorp|wd501|FNBCORP"
+    "ats_identifier": "firstnational|wd12|fnbocareers"
   },
   {
     "company_name": "First Quality",
@@ -8616,12 +8556,6 @@
     "ats_identifier": "goosehead|wd503|Careers"
   },
   {
-    "company_name": "Gorbel",
-    "career_url": "https://gorbel.wd501.myworkdayjobs.com/gorbelcareers",
-    "ats_platform": "workday",
-    "ats_identifier": "gorbel|wd501|gorbelcareers"
-  },
-  {
     "company_name": "Gordon Food Service",
     "career_url": "https://gfs.wd5.myworkdayjobs.com/usprivate-gfs",
     "ats_platform": "workday",
@@ -9630,12 +9564,6 @@
     "ats_identifier": "humble-robotics"
   },
   {
-    "company_name": "Hunt Electric",
-    "career_url": "https://huntelec.wd501.myworkdayjobs.com/HuntElectric_Careers",
-    "ats_platform": "workday",
-    "ats_identifier": "huntelec|wd501|HuntElectric_Careers"
-  },
-  {
     "company_name": "Huntington Bancshares",
     "career_url": "https://huntington.wd12.myworkdayjobs.com/HNBcareers",
     "ats_platform": "workday",
@@ -10051,9 +9979,9 @@
   },
   {
     "company_name": "Insomniac",
-    "career_url": "https://livenation.wd503.myworkdayjobs.com/InsomniacExternalSite",
-    "ats_platform": "workday",
-    "ats_identifier": "livenation|wd503|InsomniacExternalSite"
+    "career_url": "https://job-boards.greenhouse.io/insomniac",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "insomniac"
   },
   {
     "company_name": "Insperity",
@@ -11226,12 +11154,6 @@
     "ats_identifier": "lcbcchurch"
   },
   {
-    "company_name": "Le Moyne College",
-    "career_url": "https://agilitas.wd503.myworkdayjobs.com/LMC",
-    "ats_platform": "workday",
-    "ats_identifier": "agilitas|wd503|LMC"
-  },
-  {
     "company_name": "League",
     "career_url": "https://job-boards.greenhouse.io/leagueinc",
     "ats_platform": "greenhouse",
@@ -12325,9 +12247,9 @@
   },
   {
     "company_name": "Medical College of Wisconsin",
-    "career_url": "https://mcw.wd503.myworkdayjobs.com/ExternalCareers",
-    "ats_platform": "workday",
-    "ats_identifier": "mcw|wd503|ExternalCareers"
+    "career_url": "https://careers.smartrecruiters.com/MedicalCollegeOfWI",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "MedicalCollegeOfWI"
   },
   {
     "company_name": "Medical University of South Carolina",
@@ -13626,12 +13548,6 @@
     "ats_identifier": "nordic|wd1|Nordic"
   },
   {
-    "company_name": "Nordson",
-    "career_url": "https://nordsonhcm.wd501.myworkdayjobs.com/nordsoncareers",
-    "ats_platform": "workday",
-    "ats_identifier": "nordsonhcm|wd501|nordsoncareers"
-  },
-  {
     "company_name": "Nordstrom",
     "career_url": "https://nordstrom.wd501.myworkdayjobs.com/nordstrom_careers",
     "ats_platform": "workday",
@@ -14533,8 +14449,8 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/paradigm",
+    "ats_platform": "ashby",
     "ats_identifier": "paradigm"
   },
   {
@@ -15244,12 +15160,6 @@
     "career_url": "https://jobs.ashbyhq.com/pointone",
     "ats_platform": "ashby",
     "ats_identifier": "pointone"
-  },
-  {
-    "company_name": "Polar Semiconductor",
-    "career_url": "https://polarsemi.wd501.myworkdayjobs.com/Polar",
-    "ats_platform": "workday",
-    "ats_identifier": "polarsemi|wd501|Polar"
   },
   {
     "company_name": "Polaris",
@@ -16177,9 +16087,9 @@
   },
   {
     "company_name": "Remote",
-    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "career_url": "https://job-boards.greenhouse.io/remote",
     "ats_platform": "greenhouse",
-    "ats_identifier": "remotecom"
+    "ats_identifier": "remote"
   },
   {
     "company_name": "Renaissance",
@@ -16402,12 +16312,6 @@
     "career_url": "https://job-boards.greenhouse.io/rise8",
     "ats_platform": "greenhouse",
     "ats_identifier": "rise8"
-  },
-  {
-    "company_name": "Risepoint",
-    "career_url": "https://risepoint.wd503.myworkdayjobs.com/Risepoint",
-    "ats_platform": "workday",
-    "ats_identifier": "risepoint|wd503|Risepoint"
   },
   {
     "company_name": "Rite Hite",
@@ -17142,12 +17046,6 @@
     "ats_identifier": "seic|wd1|SEI_Global_Services"
   },
   {
-    "company_name": "SEKO Logistics",
-    "career_url": "https://sekologistics.wd503.myworkdayjobs.com/Seko_Logistics",
-    "ats_platform": "workday",
-    "ats_identifier": "sekologistics|wd503|Seko_Logistics"
-  },
-  {
     "company_name": "Selene",
     "career_url": "https://pretiumenterpriseservices.wd1.myworkdayjobs.com/Selene",
     "ats_platform": "workday",
@@ -17164,12 +17062,6 @@
     "career_url": "https://jobs.ashbyhq.com/semgrep",
     "ats_platform": "ashby",
     "ats_identifier": "semgrep"
-  },
-  {
-    "company_name": "Seminole Hard Rock",
-    "career_url": "https://seminolehardrock.wd503.myworkdayjobs.com/seminolehardrockcareers",
-    "ats_platform": "workday",
-    "ats_identifier": "seminolehardrock|wd503|seminolehardrockcareers"
   },
   {
     "company_name": "Semtech",
@@ -19495,9 +19387,9 @@
   },
   {
     "company_name": "Toyota",
-    "career_url": "https://toyota.wd503.myworkdayjobs.com/tmna",
+    "career_url": "https://toyotaau.wd3.myworkdayjobs.com/Careers",
     "ats_platform": "workday",
-    "ats_identifier": "toyota|wd503|tmna"
+    "ats_identifier": "toyotaau|wd3|Careers"
   },
   {
     "company_name": "Toyota Research Institute",
@@ -20574,18 +20466,6 @@
     "ats_identifier": "versemedical"
   },
   {
-    "company_name": "Vertex Pharmaceuticals",
-    "career_url": "https://vrtx.wd501.myworkdayjobs.com/vertex_careers",
-    "ats_platform": "workday",
-    "ats_identifier": "vrtx|wd501|vertex_careers"
-  },
-  {
-    "company_name": "Vertex Pharmaceuticals",
-    "career_url": "https://vrtx.wd501.myworkdayjobs.com/vertex_intern",
-    "ats_platform": "workday",
-    "ats_identifier": "vrtx|wd501|vertex_intern"
-  },
-  {
     "company_name": "Very Good Security",
     "career_url": "https://jobs.lever.co/verygoodsecurity",
     "ats_platform": "lever",
@@ -20707,9 +20587,9 @@
   },
   {
     "company_name": "Visier Solutions",
-    "career_url": "https://job-boards.greenhouse.io/visiersolutionsinc",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "visiersolutionsinc"
+    "career_url": "https://viavisolutions.wd1.myworkdayjobs.com/careers",
+    "ats_platform": "workday",
+    "ats_identifier": "viavisolutions|wd1|careers"
   },
   {
     "company_name": "Vistra",
@@ -20848,18 +20728,6 @@
     "career_url": "https://job-boards.greenhouse.io/walleyecapital-external-fulltime",
     "ats_platform": "greenhouse",
     "ats_identifier": "walleyecapital-external-fulltime"
-  },
-  {
-    "company_name": "Walmart",
-    "career_url": "https://walmart.wd504.myworkdayjobs.com/WalmartExternal",
-    "ats_platform": "workday",
-    "ats_identifier": "walmart|wd504|WalmartExternal"
-  },
-  {
-    "company_name": "Walmart",
-    "career_url": "https://walmart.wd504.myworkdayjobs.com/Non-WorkdayInternal",
-    "ats_platform": "workday",
-    "ats_identifier": "walmart|wd504|Non-WorkdayInternal"
   },
   {
     "company_name": "Warner Bros.",
