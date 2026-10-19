@@ -14533,8 +14533,8 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/paradigm",
+    "ats_platform": "ashby",
     "ats_identifier": "paradigm"
   },
   {
@@ -16177,9 +16177,9 @@
   },
   {
     "company_name": "Remote",
-    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "career_url": "https://job-boards.greenhouse.io/remote",
     "ats_platform": "greenhouse",
-    "ats_identifier": "remotecom"
+    "ats_identifier": "remote"
   },
   {
     "company_name": "Renaissance",
@@ -16792,36 +16792,6 @@
     "career_url": "https://saks.wd1.myworkdayjobs.com/careers_at_saks",
     "ats_platform": "workday",
     "ats_identifier": "saks|wd1|careers_at_saks"
-  },
-  {
-    "company_name": "Salesforce",
-    "career_url": "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site",
-    "ats_platform": "workday",
-    "ats_identifier": "salesforce|wd12|External_Career_Site"
-  },
-  {
-    "company_name": "Salesforce",
-    "career_url": "https://salesforce.wd12.myworkdayjobs.com/Futureforce_NewGradRoles",
-    "ats_platform": "workday",
-    "ats_identifier": "salesforce|wd12|Futureforce_NewGradRoles"
-  },
-  {
-    "company_name": "Salesforce",
-    "career_url": "https://salesforce.wd12.myworkdayjobs.com/Futureforce_Internships",
-    "ats_platform": "workday",
-    "ats_identifier": "salesforce|wd12|Futureforce_Internships"
-  },
-  {
-    "company_name": "Salesforce",
-    "career_url": "https://salesforce.wd12.myworkdayjobs.com/Salesforce_Research",
-    "ats_platform": "workday",
-    "ats_identifier": "salesforce|wd12|Salesforce_Research"
-  },
-  {
-    "company_name": "Salesforce",
-    "career_url": "https://salesforce.wd12.myworkdayjobs.com/futureforce_newgradroles",
-    "ats_platform": "workday",
-    "ats_identifier": "salesforce|wd12|futureforce_newgradroles"
   },
   {
     "company_name": "Salvo Health",
@@ -20704,12 +20674,6 @@
     "career_url": "https://vishay.wd3.myworkdayjobs.com/VishayCareers",
     "ats_platform": "workday",
     "ats_identifier": "vishay|wd3|VishayCareers"
-  },
-  {
-    "company_name": "Visier Solutions",
-    "career_url": "https://job-boards.greenhouse.io/visiersolutionsinc",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "visiersolutionsinc"
   },
   {
     "company_name": "Vistra",
