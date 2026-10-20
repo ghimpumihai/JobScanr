@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     # "production" environment is branch-restricted to main in repo settings,
     # so the digest can never execute from dev or arbitrary dispatches.
     environment: production
@@ -57,6 +58,20 @@ jobs:
           python -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --ai --prune
           if [ -f fix_report.md ]; then
             cat fix_report.md >> "$GITHUB_STEP_SUMMARY"
+
+            ISSUE_TITLE="ATS Career Links Needing Manual Review"
+            EXISTING_ISSUE=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --limit 1 --json number --jq '.[0].number' 2>/dev/null || true)
+            if grep -q "## Unrecoverable Failures" fix_report.md; then
+              if [ -n "$EXISTING_ISSUE" ]; then
+                gh issue edit "$EXISTING_ISSUE" --body-file fix_report.md
+              else
+                gh issue create \
+                  --title "$ISSUE_TITLE" \
+                  --body-file fix_report.md
+              fi
+            elif [ -n "$EXISTING_ISSUE" ]; then
+              gh issue close "$EXISTING_ISSUE" --comment "All broken ATS career links have been resolved."
+            fi
           fi
           if [ -n "$(git status --porcelain seed/companies.json)" ]; then
             DATE_TAG="$(date +%Y%m%d)"
