@@ -16,12 +16,17 @@ from urllib.parse import urlparse
 
 import httpx
 
+from scripts.ai_fixer import (
+    is_plausible_candidate,
+    is_vendor_self_board,
+)
 from scripts.validate_companies import (
     ALIASES,
     CHECKS,
     SIGNATURES,
     check_workday,
     construct_career_url,
+    has_active_jobs,
 )
 
 SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
@@ -202,15 +207,20 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
         hit = await probe_career_url(client, career_url)
         if hit:
             plat, ident, final_url = hit
-            ok, detail = await verify_ats(client, plat, ident)
-            if ok:
-                res["status"] = "recovered"
-                res["new_platform"] = plat
-                res["new_ident"] = ident
-                res["new_career_url"] = final_url
-                res["verification_detail"] = detail
-                res["reason"] = f"fingerprinted from career URL ({plat}/{ident})"
+            if plat == old_platform and ident == old_ident:
+                res["status"] = "transient"
+                res["reason"] = f"old endpoint responding via career URL ({plat}/{ident})"
                 return res
+            if not is_vendor_self_board(name, plat, ident) and is_plausible_candidate(name, plat, ident):
+                ok, detail = await verify_ats(client, plat, ident)
+                if ok and has_active_jobs(detail):
+                    res["status"] = "recovered"
+                    res["new_platform"] = plat
+                    res["new_ident"] = ident
+                    res["new_career_url"] = final_url
+                    res["verification_detail"] = detail
+                    res["reason"] = f"fingerprinted from career URL ({plat}/{ident})"
+                    return res
 
     # Step 3: Probe candidate slug variants across supported platforms
     candidates = generate_candidate_identifiers(company)
@@ -227,8 +237,10 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
         for ident in candidates:
             if plat == old_platform and ident == old_ident:
                 continue
+            if is_vendor_self_board(name, plat, ident) or not is_plausible_candidate(name, plat, ident):
+                continue
             ok, detail = await verify_ats(client, plat, ident)
-            if ok:
+            if ok and has_active_jobs(detail):
                 res["status"] = "recovered"
                 res["new_platform"] = plat
                 res["new_ident"] = ident
@@ -242,15 +254,22 @@ async def recover_company(client: httpx.AsyncClient, company: dict) -> dict:
         tenant = old_ident.split("|")[0] if old_ident and "|" in old_ident else slugify(name)
         wd_ident = await probe_workday_clusters(client, tenant)
         if wd_ident:
-            ok, detail = await verify_ats(client, "workday", wd_ident)
-            if ok:
-                res["status"] = "recovered"
-                res["new_platform"] = "workday"
-                res["new_ident"] = wd_ident
-                res["new_career_url"] = construct_career_url("workday", wd_ident)
-                res["verification_detail"] = detail
-                res["reason"] = f"verified workday cluster ({wd_ident})"
+            if wd_ident == old_ident:
+                res["status"] = "transient"
+                res["reason"] = f"old workday cluster responding ({wd_ident})"
                 return res
+            if not is_vendor_self_board(name, "workday", wd_ident) and is_plausible_candidate(
+                name, "workday", wd_ident
+            ):
+                ok, detail = await verify_ats(client, "workday", wd_ident)
+                if ok and has_active_jobs(detail):
+                    res["status"] = "recovered"
+                    res["new_platform"] = "workday"
+                    res["new_ident"] = wd_ident
+                    res["new_career_url"] = construct_career_url("workday", wd_ident)
+                    res["verification_detail"] = detail
+                    res["reason"] = f"verified workday cluster ({wd_ident})"
+                    return res
 
     res["status"] = "unrecoverable"
     res["reason"] = "no live ATS coordinates could be verified"
