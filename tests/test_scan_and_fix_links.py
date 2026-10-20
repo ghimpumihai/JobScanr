@@ -562,8 +562,17 @@ async def test_recover_company_workday_cluster_self_recovery_marked_as_transient
         "career_url": "https://adobe.wd5.myworkdayjobs.com/external_experienced",
     }
 
-    # Step 1 fails, but workday cluster probe returns the exact same identifier
-    with patch("scripts.scan_and_fix_links.verify_ats", return_value=(False, "500")):
+    attempts = 0
+
+    async def mock_verify(client, plat, ident):
+        nonlocal attempts
+        attempts += 1
+        if plat == "workday" and ident == "adobe|wd5|external_experienced":
+            if attempts > 1:
+                return True, "25 jobs"
+        return False, "500"
+
+    with patch("scripts.scan_and_fix_links.verify_ats", side_effect=mock_verify):
         with patch("scripts.scan_and_fix_links.probe_career_url", new=AsyncMock(return_value=None)):
             with patch(
                 "scripts.scan_and_fix_links.probe_workday_clusters",
