@@ -14533,8 +14533,8 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/paradigm",
+    "ats_platform": "ashby",
     "ats_identifier": "paradigm"
   },
   {
@@ -16177,9 +16177,9 @@
   },
   {
     "company_name": "Remote",
-    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "career_url": "https://job-boards.greenhouse.io/remote",
     "ats_platform": "greenhouse",
-    "ats_identifier": "remotecom"
+    "ats_identifier": "remote"
   },
   {
     "company_name": "Renaissance",
@@ -17083,9 +17083,9 @@
   },
   {
     "company_name": "Scout AI",
-    "career_url": "https://job-boards.greenhouse.io/scoutai",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "scoutai"
+    "career_url": "https://jobs.ashbyhq.com/scout-ai",
+    "ats_platform": "ashby",
+    "ats_identifier": "scout-ai"
   },
   {
     "company_name": "Scout Motors",
