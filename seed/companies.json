@@ -14533,12 +14533,6 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "paradigm"
-  },
-  {
-    "company_name": "Paradigm",
     "career_url": "https://jobs.ashbyhq.com/paradigm",
     "ats_platform": "ashby",
     "ats_identifier": "paradigm"
@@ -15934,12 +15928,6 @@
     "career_url": "https://jobs.ashbyhq.com/ramp",
     "ats_platform": "ashby",
     "ats_identifier": "ramp"
-  },
-  {
-    "company_name": "Ramp Network",
-    "career_url": "https://boards.greenhouse.io/rampnetwork",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "rampnetwork"
   },
   {
     "company_name": "Range",

@@ -11,6 +11,7 @@ from scripts.scan_and_fix_links import (
     generate_report_markdown,
     parse_failures_from_log,
     recover_company,
+    remove_companies_from_seed,
     slugify,
 )
 from scripts.validate_companies import has_active_jobs
@@ -111,6 +112,47 @@ def test_apply_fixes_to_companies():
     assert updated[0]["career_url"] == "http://a.com/careers"
     assert updated[1]["ats_platform"] == "lever"
     assert updated[1]["ats_identifier"] == "comp-b"
+
+
+def test_apply_fixes_prevents_duplicate_platform_identifier():
+    companies = [
+        {
+            "company_name": "Paradigm",
+            "ats_platform": "greenhouse",
+            "ats_identifier": "paradigm",
+            "career_url": "https://boards.greenhouse.io/paradigm",
+        },
+        {
+            "company_name": "Paradigm",
+            "ats_platform": "ashby",
+            "ats_identifier": "paradigm",
+            "career_url": "https://jobs.ashbyhq.com/paradigm",
+        },
+    ]
+    recoveries = [
+        {
+            "company_name": "Paradigm",
+            "old_platform": "greenhouse",
+            "old_ident": "paradigm",
+            "status": "recovered",
+            "new_platform": "ashby",
+            "new_ident": "paradigm",
+            "verification_detail": "7 jobs",
+        }
+    ]
+
+    updated, count = apply_fixes_to_companies(companies, recoveries)
+    # Must NOT create a duplicate ('ashby', 'paradigm')
+    assert count == 0
+    assert recoveries[0]["status"] == "remove"
+    assert "pruned duplicate" in recoveries[0]["reason"]
+
+    # When pruned, only the stale greenhouse entry is removed; ashby entry stays intact
+    filtered, removed_count = remove_companies_from_seed(updated, recoveries)
+    assert removed_count == 1
+    assert len(filtered) == 1
+    assert filtered[0]["ats_platform"] == "ashby"
+    assert filtered[0]["ats_identifier"] == "paradigm"
 
 
 def test_generate_report_markdown():
