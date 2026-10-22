@@ -282,19 +282,45 @@ def apply_fixes_to_companies(companies: list[dict], recoveries: list[dict]) -> t
     """Updates companies list in-place with verified recoveries. Returns (updated_list, count)."""
     by_name = {c["company_name"].lower(): c for c in companies}
     by_ident = {(c["ats_platform"], c["ats_identifier"]): c for c in companies}
+    existing_keys = set(by_ident.keys())
 
     fixed_count = 0
     for r in recoveries:
         if r["status"] not in ("recovered", "recovered_by_ai"):
             continue
+        new_plat = r.get("new_platform")
+        new_ident = r.get("new_ident")
+        if not new_plat or not new_ident:
+            continue
+
         comp = by_ident.get((r["old_platform"], r["old_ident"])) or by_name.get(r["company_name"].lower())
-        if comp:
-            comp["ats_platform"] = r["new_platform"]
-            comp["ats_identifier"] = r["new_ident"]
-            new_url = r.get("new_career_url") or construct_career_url(r["new_platform"], r["new_ident"])
-            if new_url:
-                comp["career_url"] = new_url
-            fixed_count += 1
+        if not comp:
+            continue
+
+        target_key = (new_plat, new_ident)
+        comp_key = (comp.get("ats_platform"), comp.get("ats_identifier"))
+
+        # If target ATS coordinate is already tracked by another company entry,
+        # mutating comp would create a duplicate (platform, identifier) tuple.
+        # Instead, mark this stale entry to be pruned since the active board is already present.
+        if target_key in existing_keys and target_key != comp_key:
+            r.setdefault("old_platform", comp.get("ats_platform"))
+            r.setdefault("old_ident", comp.get("ats_identifier"))
+            r["status"] = "remove"
+            r["reason"] = f"pruned duplicate: active board already tracked as {new_plat}/{new_ident}"
+            continue
+
+        old_k = comp_key
+        comp["ats_platform"] = new_plat
+        comp["ats_identifier"] = new_ident
+        new_url = r.get("new_career_url") or construct_career_url(new_plat, new_ident)
+        if new_url:
+            comp["career_url"] = new_url
+        fixed_count += 1
+
+        existing_keys.discard(old_k)
+        existing_keys.add(target_key)
+        by_ident[target_key] = comp
     return companies, fixed_count
 
 
@@ -303,7 +329,11 @@ def remove_companies_from_seed(companies: list[dict], to_remove: list[dict]) -> 
     remove_keys = {
         (r["old_platform"], r["old_ident"]) for r in to_remove if r.get("old_platform") and r.get("old_ident")
     }
-    remove_names = {r["company_name"].lower() for r in to_remove if r.get("company_name")}
+    remove_names = {
+        r["company_name"].lower()
+        for r in to_remove
+        if r.get("company_name") and not (r.get("old_platform") and r.get("old_ident"))
+    }
 
     filtered = []
     removed_count = 0
