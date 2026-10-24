@@ -47,14 +47,13 @@
 </script>
 
 <div class="min-h-screen bg-page text-content-primary">
-  <div class="mx-auto max-w-[860px] px-4 py-6">
+  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
     <!-- Header Navigation -->
-    <header class="mb-6 flex flex-col gap-3 border-b border-border-main pb-4 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-baseline gap-2.5">
-        <a href="/matches" class="text-xl font-bold tracking-tight text-content-primary hover:opacity-90">
+    <header class="mb-8 flex flex-col gap-4 border-b border-border-main pb-5 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/matches" class="text-2xl font-bold tracking-tight text-content-primary hover:opacity-90">
           JobScanr
         </a>
-        <span class="text-xs text-content-caption">Europe Engineering Feed</span>
       </div>
 
       <nav class="flex flex-wrap gap-1 rounded-lg border border-border-main bg-subtle p-1" aria-label="Main Navigation">

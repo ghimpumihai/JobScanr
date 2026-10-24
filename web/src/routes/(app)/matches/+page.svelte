@@ -37,12 +37,12 @@
 
 <!-- Main Matches Card -->
 <div class="card overflow-hidden">
-  <div class="flex flex-col gap-4 border-b border-border-subtle p-6 sm:flex-row sm:items-start sm:justify-between">
+  <div class="flex flex-col gap-4 border-b border-border-subtle p-6 sm:flex-row sm:items-start sm:justify-between sm:p-8">
     <div>
-      <h1 class="text-lg font-bold leading-snug text-content-primary">
+      <h1 class="text-xl font-bold leading-snug text-content-primary sm:text-2xl">
         Daily Matching Roles (06:00 UTC)
       </h1>
-      <p class="mt-1 text-xs text-content-muted">
+      <p class="mt-1.5 text-xs text-content-muted sm:text-sm">
         Scanned 388 engineering career boards across Europe for
         <strong class="text-content-primary">stefan@example.com</strong>
       </p>
@@ -53,26 +53,26 @@
     </button>
   </div>
 
-  <div class="px-6 py-2">
+  <div class="px-6 py-3 sm:px-8 sm:py-4">
     <table class="w-full border-collapse">
       <tbody>
         {#each data.matches as match (match.id)}
-          <tr class="border-b border-border-subtle last:border-b-0">
-            <td class="py-4.5 align-top">
+          <tr class="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-subtle/30">
+            <td class="py-6 align-top sm:py-7">
               <div>
                 <a
                   href={match.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-[15px] font-semibold text-brand-blue hover:underline"
+                  class="text-base font-semibold text-brand-blue hover:underline sm:text-[17px]"
                 >
                   {match.title}
                 </a>
               </div>
-              <div class="mb-1.5 mt-0.5 text-xs font-medium text-content-secondary">
+              <div class="mb-2.5 mt-1 text-xs font-medium text-content-secondary sm:text-sm">
                 {match.company_name} · {match.location}
               </div>
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2.5">
                 {#if match.compensation}
                   <span class="tag-salary">{match.compensation}</span>
                 {/if}
@@ -80,7 +80,7 @@
                 <span class="tag-score">{match.match_score}% Match</span>
               </div>
             </td>
-            <td class="py-4.5 pl-4 text-right align-middle">
+            <td class="py-6 pl-6 text-right align-middle sm:py-7 sm:pl-8">
               {#if match.ats_platform === 'workday'}
                 <a
                   href={match.url}

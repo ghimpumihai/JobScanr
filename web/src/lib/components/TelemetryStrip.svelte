@@ -14,17 +14,17 @@
   }: Props = $props();
 </script>
 
-<section class="card mb-5 grid grid-cols-1 overflow-hidden sm:grid-cols-3" aria-label="Scan Telemetry">
-  <div class="border-b border-border-subtle p-3.5 sm:border-b-0 sm:border-r">
-    <div class="text-base font-bold text-content-primary">{feedsOnline} / {totalFeeds}</div>
-    <div class="mt-0.5 text-xs text-content-caption">Feeds checked · All systems healthy</div>
+<section class="card mb-8 grid grid-cols-1 overflow-hidden divide-y divide-border-subtle sm:grid-cols-3 sm:divide-y-0 sm:divide-x" aria-label="Scan Telemetry">
+  <div class="p-5 sm:p-6">
+    <div class="text-xl font-bold tracking-tight text-content-primary sm:text-2xl">{feedsOnline} / {totalFeeds}</div>
+    <div class="mt-1 text-xs text-content-caption">Feeds checked · All systems healthy</div>
   </div>
-  <div class="border-b border-border-subtle p-3.5 sm:border-b-0 sm:border-r">
-    <div class="text-base font-bold text-content-primary">{scanTime}</div>
-    <div class="mt-0.5 text-xs text-content-caption">Daily scan completed</div>
+  <div class="p-5 sm:p-6">
+    <div class="text-xl font-bold tracking-tight text-content-primary sm:text-2xl">{scanTime}</div>
+    <div class="mt-1 text-xs text-content-caption">Daily scan completed</div>
   </div>
-  <div class="p-3.5">
-    <div class="text-base font-bold text-brand-blue">{matchesCount} Matching Roles</div>
-    <div class="mt-0.5 text-xs text-content-caption">Filtered for UK, EU &amp; Remote</div>
+  <div class="p-5 sm:p-6">
+    <div class="text-xl font-bold tracking-tight text-brand-blue sm:text-2xl">{matchesCount} Matching Roles</div>
+    <div class="mt-1 text-xs text-content-caption">Filtered for UK, EU &amp; Remote</div>
   </div>
 </section>
