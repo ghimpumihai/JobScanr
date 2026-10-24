@@ -36,7 +36,8 @@
     </p>
   </div>
 
-  <div class="overflow-x-auto px-6 py-3 sm:px-8 sm:py-4">
+  <!-- Desktop Table View (Hidden on mobile, visible on sm:) -->
+  <div class="hidden overflow-x-auto px-6 py-3 sm:block sm:px-8 sm:py-4">
     <table class="w-full border-collapse text-left">
       <thead>
         <tr class="border-b border-border-main text-xs font-semibold uppercase tracking-wider text-content-caption">
@@ -122,6 +123,79 @@
         {/each}
       </tbody>
     </table>
+  </div>
+
+  <!-- Mobile Responsive Card Rows (Title & Button on same line) -->
+  <div class="divide-y divide-border-subtle px-6 py-1 sm:hidden">
+    {#each data.applications as app (app.id)}
+      <div class="py-4.5 transition-colors hover:bg-subtle/30">
+        <!-- Top line: Title on left, Action on right (same line) -->
+        <div class="flex items-start justify-between gap-3">
+          <div class="text-[15px] font-semibold leading-snug text-content-primary">
+            {app.title}
+          </div>
+          <div class="shrink-0">
+            {#if app.status === 'needs_review'}
+              <button
+                type="button"
+                class="btn-action !py-1 !text-xs whitespace-nowrap"
+                onclick={() => (selectedApp = app)}
+              >
+                Review Answers
+                <Icon name="arrow-right" size={12} />
+              </button>
+            {:else if app.status === 'submitted'}
+              <button
+                type="button"
+                class="btn-secondary !py-1 !text-xs whitespace-nowrap"
+                onclick={() => showToast(`Submission confirmed by API (Token: ${app.attempt_token || 'gh_app_7a89f0'})`)}
+              >
+                View Receipt
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn-secondary !py-1 !text-xs whitespace-nowrap"
+                onclick={() => showToast(`Queued in worker pool. Rate limit: 30 workers.`)}
+              >
+                Inspect
+              </button>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Second line: Company · Location -->
+        <div class="mb-2 mt-1 text-xs font-medium text-content-secondary">
+          {app.company_name} · {app.location}
+        </div>
+
+        <!-- Third line: Badges & Timestamp -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="tag-platform">via {app.ats_platform.charAt(0).toUpperCase() + app.ats_platform.slice(1)}</span>
+          {#if app.status === 'submitted'}
+            <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">
+              Submitted
+            </span>
+          {:else if app.status === 'needs_review'}
+            <span class="status-badge border border-signal-amber-border bg-signal-amber-bg text-signal-amber-text">
+              <Icon name="status-dot" size={6} />
+              Needs Review
+            </span>
+          {:else}
+            <span class="status-badge bg-signal-slate-bg text-signal-slate-text">
+              {app.status === 'queued' ? 'Queued' : app.status}
+            </span>
+          {/if}
+          <span class="font-mono text-xs text-content-caption">
+            {app.status === 'needs_review' ? 'Action Required' : (app.submitted_at || app.scheduled_at || '—')}
+          </span>
+        </div>
+      </div>
+    {:else}
+      <div class="py-12 text-center text-xs text-content-caption">
+        No application submissions recorded yet. Roles approved from the daily feed will appear here for audit tracking.
+      </div>
+    {/each}
   </div>
 </div>
 
