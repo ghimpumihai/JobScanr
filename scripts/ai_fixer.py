@@ -5,6 +5,7 @@ with Groq (Llama 3.3 / GPT-OSS), live-verifies candidate feeds, and triages
 unrecoverable links into verified fixes or pruning recommendations.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -194,7 +195,7 @@ def search_duckduckgo(company_name: str, max_results: int = 6) -> list[dict]:
         except ImportError:
             from duckduckgo_search import DDGS  # type: ignore
 
-        ddgs = DDGS()
+        ddgs = DDGS(timeout=8)
         queries = [
             f'"{company_name}" jobs site:greenhouse.io OR site:ashbyhq.com OR site:lever.co OR site:myworkdayjobs.com OR site:smartrecruiters.com',
             f'"{company_name}" careers jobs',
@@ -216,6 +217,8 @@ def search_duckduckgo(company_name: str, max_results: int = 6) -> list[dict]:
                         )
             except Exception as exc:
                 logger.warning(f"DuckDuckGo search error for query '{query}': {exc}")
+                if "ratelimit" in str(exc).lower() or "429" in str(exc):
+                    break
                 continue
 
     except Exception as exc:
@@ -366,8 +369,12 @@ async def triage_company_with_ai(
         "reason": None,
     }
 
-    # Step 1: Search DuckDuckGo for the company
-    results = search_duckduckgo(name)
+    # Step 1: Search DuckDuckGo for the company (offload to thread with strict timeout)
+    try:
+        results = await asyncio.wait_for(asyncio.to_thread(search_duckduckgo, name), timeout=12.0)
+    except (TimeoutError, asyncio.TimeoutError):
+        logger.warning(f"DuckDuckGo search timed out for '{name}'")
+        results = []
 
     # Step 2: Direct pattern extraction from search hits
     candidates = extract_ats_candidates_from_results(results)
