@@ -126,15 +126,13 @@
     {/if}
 
     <div class="mt-6 border-t border-border-subtle pt-4 text-center">
-      <form method="POST" action="?/demoLogin" class="inline">
-        <button
-          type="submit"
-          class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-blue hover:underline"
-        >
-          <span>Explore Demo Mode (Bypass to Matches)</span>
-          <Icon name="arrow-right" size={11} />
-        </button>
-      </form>
+      <a
+        href="/matches?demo=true"
+        class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-blue hover:underline"
+      >
+        <span>Explore Demo Mode (Bypass to Matches)</span>
+        <Icon name="arrow-right" size={11} />
+      </a>
     </div>
   </div>
 </div>

@@ -18,12 +18,48 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.user = user;
   event.locals.session = await event.locals.getSession();
 
-  // Check if user has explicitly logged out
-  const isLoggedOut = event.cookies.get('jobscanr_logged_out') === 'true';
+  // Support query param transitions (e.g. /matches?demo=true or /login?logout=true)
+  if (event.url.searchParams.get('demo') === 'true') {
+    event.cookies.delete('jobscanr_logged_out', { path: '/' });
+    event.cookies.set('jobscanr_demo_session', 'true', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7
+    });
+  }
+
+  if (event.url.searchParams.get('logout') === 'true') {
+    event.cookies.delete('jobscanr_demo_session', { path: '/' });
+    event.cookies.set('jobscanr_logged_out', 'true', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7
+    });
+  }
+
+  // Check if user is in demo mode or explicitly logged out
+  const isDemoSession =
+    event.cookies.get('jobscanr_demo_session') === 'true' || event.url.searchParams.get('demo') === 'true';
+  const isLoggedOut =
+    event.cookies.get('jobscanr_logged_out') === 'true' && event.url.searchParams.get('demo') !== 'true';
+
+  // Allow bypass when explicitly configured for local mock prototype mode, or when in active demo session
+  const mockAuth = (process.env.VITE_MOCK_AUTH === 'true' || isDemoSession) && !isLoggedOut;
 
   if (isLoggedOut) {
     event.locals.user = null;
     event.locals.session = null;
+  } else if ((mockAuth || isDemoSession) && !event.locals.user) {
+    event.locals.user = {
+      id: 'demo-user-id',
+      email: 'stefan@example.com',
+      app_metadata: {},
+      user_metadata: { full_name: 'Stefan Ghimpu' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString()
+    } as any;
   }
 
   const pathname = event.url.pathname;
@@ -32,9 +68,6 @@ export const handle: Handle = async ({ event, resolve }) => {
     pathname.startsWith('/applications') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/profile');
-
-  // Allow bypass only when explicitly configured for local mock prototype mode and not logged out
-  const mockAuth = process.env.VITE_MOCK_AUTH === 'true' && !isLoggedOut;
 
   if (isProtected && !event.locals.user && !mockAuth) {
     throw redirect(303, '/login');

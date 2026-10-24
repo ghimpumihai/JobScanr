@@ -7,6 +7,7 @@ export const actions: Actions = {
         await locals.supabase.auth.signOut();
       } catch (e) {}
     }
+    cookies.delete('jobscanr_demo_session', { path: '/' });
     cookies.set('jobscanr_logged_out', 'true', {
       path: '/',
       httpOnly: true,
@@ -18,6 +19,12 @@ export const actions: Actions = {
 
   demoLogin: async ({ cookies }) => {
     cookies.delete('jobscanr_logged_out', { path: '/' });
+    cookies.set('jobscanr_demo_session', 'true', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7
+    });
     throw redirect(303, '/matches');
   },
 

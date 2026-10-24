@@ -114,26 +114,22 @@
           >
             {userInitials}
           </div>
-          <form method="POST" action="/login?/logout" class="inline">
-            <button
-              type="submit"
-              class="btn-secondary !py-1.5 !text-xs"
-              title="Sign out of JobScanr"
-            >
-              Sign Out
-            </button>
-          </form>
+          <a
+            href="/login?logout=true"
+            class="btn-secondary !py-1.5 !text-xs"
+            title="Sign out of JobScanr"
+          >
+            Sign Out
+          </a>
         {:else}
-          <form method="POST" action="/login?/demoLogin" class="inline">
-            <button
-              type="submit"
-              class="btn-action !py-1.5 !text-xs"
-              title="Explore Demo Mode"
-            >
-              Demo Mode
-              <Icon name="arrow-right" size={11} />
-            </button>
-          </form>
+          <a
+            href="/matches?demo=true"
+            class="btn-action !py-1.5 !text-xs"
+            title="Explore Demo Mode"
+          >
+            Demo Mode
+            <Icon name="arrow-right" size={11} />
+          </a>
         {/if}
       </div>
     </header>

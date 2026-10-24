@@ -369,15 +369,13 @@
           Signed in as <strong class="text-content-primary">{data.profile.email || 'stefan@example.com'}</strong>
         </p>
       </div>
-      <form method="POST" action="/login?/logout" class="inline">
-        <button
-          type="submit"
-          class="btn-secondary !text-xs"
-          title="Sign out of JobScanr"
-        >
-          Sign Out of Account
-        </button>
-      </form>
+      <a
+        href="/login?logout=true"
+        class="btn-secondary !text-xs"
+        title="Sign out of JobScanr"
+      >
+        Sign Out of Account
+      </a>
     </div>
   </div>
 </div>
