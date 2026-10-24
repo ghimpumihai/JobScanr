@@ -498,7 +498,16 @@ async def main_async(args) -> int:
         if enable_ai:
             unresolved_indices = [i for i, r in enumerate(recoveries) if r["status"] == "unrecoverable"]
             if unresolved_indices:
-                print(f"\nInvoking AI triage for {len(unresolved_indices)} unresolved companies...")
+                # Cap the maximum number of AI triage attempts per run to protect workflow runtime
+                MAX_AI_TRIAGE_TARGETS = 25
+                triage_indices = unresolved_indices[:MAX_AI_TRIAGE_TARGETS]
+                if len(unresolved_indices) > MAX_AI_TRIAGE_TARGETS:
+                    print(
+                        f"\nCapping AI triage to {MAX_AI_TRIAGE_TARGETS} targets "
+                        f"(out of {len(unresolved_indices)} unresolved) to protect run timeout."
+                    )
+
+                print(f"\nInvoking AI triage for {len(triage_indices)} unresolved companies...")
                 from scripts.ai_fixer import triage_company_with_ai
 
                 ai_sem = asyncio.Semaphore(3)
@@ -506,10 +515,17 @@ async def main_async(args) -> int:
                 async def bounded_ai(idx):
                     async with ai_sem:
                         target_comp = targets[idx]
-                        ai_res = await triage_company_with_ai(client, target_comp)
+                        try:
+                            ai_res = await asyncio.wait_for(
+                                triage_company_with_ai(client, target_comp),
+                                timeout=30.0,
+                            )
+                        except (TimeoutError, asyncio.TimeoutError):
+                            print(f"Warning: AI triage timed out for {target_comp.get('company_name')}")
+                            ai_res = {"status": "unresolved", "reason": "AI triage timed out"}
                         return idx, ai_res
 
-                ai_results = await asyncio.gather(*(bounded_ai(i) for i in unresolved_indices))
+                ai_results = await asyncio.gather(*(bounded_ai(i) for i in triage_indices))
                 for idx, ai_res in ai_results:
                     if ai_res["status"] in ("recovered_by_ai", "remove"):
                         recoveries[idx] = ai_res

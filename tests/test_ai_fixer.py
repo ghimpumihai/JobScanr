@@ -249,6 +249,20 @@ async def test_triage_company_with_ai_rejects_llm_vendor_self_board():
                 assert res["status"] != "recovered_by_ai"
 
 
+@pytest.mark.anyio
+async def test_triage_company_with_ai_handles_search_timeout():
+    client = AsyncMock()
+    company = {
+        "company_name": "SlowCo",
+        "ats_platform": "greenhouse",
+        "ats_identifier": "slowco",
+    }
+
+    with patch("scripts.ai_fixer.search_duckduckgo", side_effect=TimeoutError("timed out")):
+        res = await triage_company_with_ai(client, company)
+        assert res["status"] == "unresolved"
+
+
 def test_is_plausible_candidate_rejects_substring_collisions():
     # Meter must not match Metergy Solutions
     assert is_plausible_candidate("Meter", "lever", "metergysolutions") is False

@@ -44,6 +44,7 @@ jobs:
 
       - name: Scan logs, verify replacement links, and open pull request
         if: always()
+        timeout-minutes: 15
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
