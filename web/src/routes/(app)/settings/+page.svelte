@@ -374,7 +374,7 @@
         class="btn-secondary !text-xs"
         title="Sign out of JobScanr"
       >
-        Sign Out of Account
+        Sign Out
       </a>
     </div>
   </div>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import '../app.css';
-  import { page } from '$app/stores';
+  import { page, navigating } from '$app/stores';
   import Icon from '$lib/components/Icon.svelte';
   import type { Snippet } from 'svelte';
   import type { LayoutData } from './$types';
@@ -54,6 +54,16 @@
 </script>
 
 <div class="min-h-screen bg-page text-content-primary">
+  {#if $navigating}
+    <div
+      class="fixed top-0 left-0 right-0 z-50 h-0.5 overflow-hidden bg-brand-blue/20"
+      role="progressbar"
+      aria-label="Loading page navigation"
+    >
+      <div class="h-full w-full bg-brand-blue animate-pulse"></div>
+    </div>
+  {/if}
+
   <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
     <!-- Header Navigation -->
     <header class="mb-8 flex flex-col gap-4 border-b border-border-main pb-5 sm:flex-row sm:items-center sm:justify-between">
