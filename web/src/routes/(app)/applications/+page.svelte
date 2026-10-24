@@ -27,7 +27,7 @@
 </svelte:head>
 
 <div class="card overflow-hidden">
-  <div class="border-b border-border-subtle p-6">
+  <div class="border-b border-border-subtle p-6 sm:p-7">
     <h1 class="text-lg font-bold leading-snug text-content-primary">
       Application Audit Tracker
     </h1>
@@ -36,28 +36,28 @@
     </p>
   </div>
 
-  <div class="overflow-x-auto px-6 py-2">
-    <table class="w-full border-collapse text-left text-xs">
+  <div class="overflow-x-auto px-6 py-3 sm:px-8 sm:py-4">
+    <table class="w-full border-collapse text-left">
       <thead>
-        <tr class="border-b border-border-main text-[11px] font-semibold uppercase tracking-wider text-content-caption">
-          <th class="py-3">Role &amp; Company</th>
-          <th class="py-3">Platform</th>
-          <th class="py-3">Status</th>
-          <th class="py-3">Submitted / Scheduled</th>
-          <th class="py-3 text-right">Action</th>
+        <tr class="border-b border-border-main text-xs font-semibold uppercase tracking-wider text-content-caption">
+          <th class="py-3.5">Role &amp; Company</th>
+          <th class="py-3.5">Platform</th>
+          <th class="py-3.5">Status</th>
+          <th class="py-3.5">Submitted / Scheduled</th>
+          <th class="py-3.5 text-right">Action</th>
         </tr>
       </thead>
       <tbody>
         {#each data.applications as app (app.id)}
-          <tr class="border-b border-border-subtle last:border-b-0 hover:bg-subtle/50">
-            <td class="py-4">
-              <div class="font-semibold text-content-primary">{app.title}</div>
-              <div class="text-[11px] text-content-caption">{app.company_name} · {app.location}</div>
+          <tr class="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-subtle/30">
+            <td class="py-5 sm:py-5.5">
+              <div class="text-[15px] font-semibold text-content-primary">{app.title}</div>
+              <div class="mb-1 mt-0.5 text-xs font-medium text-content-secondary">{app.company_name} · {app.location}</div>
             </td>
-            <td class="py-4">
+            <td class="py-5 sm:py-5.5">
               <span class="tag-platform">via {app.ats_platform.charAt(0).toUpperCase() + app.ats_platform.slice(1)}</span>
             </td>
-            <td class="py-4">
+            <td class="py-5 sm:py-5.5">
               {#if app.status === 'submitted'}
                 <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">
                   Submitted
@@ -77,18 +77,18 @@
                 </span>
               {/if}
             </td>
-            <td class="py-4 font-mono text-[11px] text-content-caption">
+            <td class="py-5 font-mono text-xs text-content-caption sm:py-5.5">
               {#if app.status === 'needs_review'}
                 <span class="font-sans font-semibold text-signal-amber-text">Action Required</span>
               {:else}
                 {app.submitted_at || app.scheduled_at || '—'}
               {/if}
             </td>
-            <td class="py-4 text-right">
+            <td class="py-5 pl-4 text-right sm:py-5.5">
               {#if app.status === 'needs_review'}
                 <button
                   type="button"
-                  class="btn-action !py-1 !text-xs"
+                  class="btn-action"
                   onclick={() => (selectedApp = app)}
                 >
                   Review Answers
@@ -97,7 +97,7 @@
               {:else if app.status === 'submitted'}
                 <button
                   type="button"
-                  class="btn-secondary !py-1 !text-xs"
+                  class="btn-secondary"
                   onclick={() => showToast(`Submission confirmed by API (Token: ${app.attempt_token || 'gh_app_7a89f0'})`)}
                 >
                   View Receipt
@@ -105,7 +105,7 @@
               {:else}
                 <button
                   type="button"
-                  class="btn-secondary !py-1 !text-xs"
+                  class="btn-secondary"
                   onclick={() => showToast(`Queued in worker pool. Rate limit: 30 workers.`)}
                 >
                   Inspect
