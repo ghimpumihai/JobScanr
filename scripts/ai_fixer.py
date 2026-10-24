@@ -8,16 +8,144 @@ unrecoverable links into verified fixes or pruning recommendations.
 import json
 import logging
 import os
+import re
 
 import httpx
 
 from scripts.validate_companies import (
+    ALIASES,
     CHECKS,
     SIGNATURES,
     construct_career_url,
+    has_active_jobs,
 )
 
 logger = logging.getLogger(__name__)
+
+VENDOR_SELF_IDENTIFIERS: dict[str, set[str]] = {
+    "workday": {"workday"},
+    "greenhouse": {"greenhouse", "greenhouseio", "greenhouse-software"},
+    "lever": {"lever", "leverco"},
+    "ashby": {"ashby", "ashbyhq"},
+    "smartrecruiters": {"smartrecruiters"},
+    "teamtailor": {"teamtailor"},
+}
+
+ALLOWED_SUFFIXES = {
+    "hq",
+    "careers",
+    "career",
+    "jobs",
+    "job",
+    "inc",
+    "corp",
+    "corporation",
+    "tech",
+    "technology",
+    "technologies",
+    "ai",
+    "app",
+    "io",
+    "co",
+    "us",
+    "uk",
+    "eu",
+    "group",
+    "software",
+    "team",
+    "global",
+    "holdings",
+    "llc",
+    "ltd",
+}
+
+ALLOWED_PREFIXES = {"get", "try", "fly", "use", "join", "meet", "weare", "go"}
+
+GENERIC_WORDS = {
+    "global",
+    "technologies",
+    "technology",
+    "solutions",
+    "services",
+    "systems",
+    "group",
+    "capital",
+    "partners",
+    "digital",
+    "media",
+    "holdings",
+    "management",
+    "international",
+    "software",
+    "network",
+    "networks",
+    "consulting",
+    "associates",
+    "corporation",
+    "company",
+    "corp",
+    "inc",
+    "llc",
+    "ltd",
+    "health",
+}
+
+
+def _is_slug_match(comp_slug: str, tenant_slug: str) -> bool:
+    if comp_slug == tenant_slug:
+        return True
+    if tenant_slug.startswith(comp_slug) and tenant_slug[len(comp_slug) :] in ALLOWED_SUFFIXES:
+        return True
+    if comp_slug.startswith(tenant_slug) and comp_slug[len(tenant_slug) :] in ALLOWED_SUFFIXES:
+        return True
+    for prefix in ALLOWED_PREFIXES:
+        if tenant_slug.startswith(prefix) and tenant_slug[len(prefix) :] == comp_slug:
+            return True
+        if comp_slug.startswith(prefix) and comp_slug[len(prefix) :] == tenant_slug:
+            return True
+    return False
+
+
+def is_vendor_self_board(company_name: str, platform: str, ident: str) -> bool:
+    """Check if the identifier belongs to the ATS platform vendor itself, not the company."""
+    vendor_slugs = VENDOR_SELF_IDENTIFIERS.get(platform, set())
+    if not vendor_slugs:
+        return False
+    target_tenant = ident.split("|")[0].lower() if platform == "workday" else ident.lower()
+    target_tenant_slug = re.sub(r"[^a-z0-9]", "", target_tenant)
+    comp_slug = re.sub(r"[^a-z0-9]", "", company_name.lower())
+    return target_tenant_slug in vendor_slugs and comp_slug not in vendor_slugs
+
+
+def is_plausible_candidate(company_name: str, platform: str, ident: str) -> bool:
+    """Check if an ATS candidate extracted from raw web search reasonably relates to the company."""
+    if is_vendor_self_board(company_name, platform, ident):
+        return False
+
+    tenant = ident.split("|")[0].lower() if platform == "workday" else ident.lower()
+    tenant_slug = re.sub(r"[^a-z0-9]", "", tenant)
+    comp_slug = re.sub(r"[^a-z0-9]", "", company_name.lower())
+
+    if not tenant_slug or not comp_slug:
+        return False
+
+    if _is_slug_match(comp_slug, tenant_slug):
+        return True
+
+    aliases = ALIASES.get(company_name.lower(), [])
+    for alias in aliases:
+        alias_slug = re.sub(r"[^a-z0-9]", "", alias.lower())
+        if alias_slug and _is_slug_match(alias_slug, tenant_slug):
+            return True
+
+    words = [re.sub(r"[^a-z0-9]", "", w) for w in company_name.lower().split() if len(w) > 3]
+    distinct_words = [w for w in words if w not in GENERIC_WORDS]
+    for w in distinct_words:
+        if _is_slug_match(w, tenant_slug):
+            return True
+
+    return False
+
 
 UNSUPPORTED_ATS_KEYWORDS = [
     "personio",
@@ -246,8 +374,10 @@ async def triage_company_with_ai(
     for plat, ident, hit_url in candidates:
         if plat == old_platform and ident == old_ident:
             continue
+        if not is_plausible_candidate(name, plat, ident):
+            continue
         ok, detail = await verify_ats(client, plat, ident)
-        if ok:
+        if ok and has_active_jobs(detail):
             res["status"] = "recovered_by_ai"
             res["new_platform"] = plat
             res["new_ident"] = ident
@@ -269,26 +399,27 @@ async def triage_company_with_ai(
         if llm_analysis.get("supported_ats_found") and llm_analysis.get("platform") and llm_analysis.get("identifier"):
             plat = llm_analysis["platform"]
             ident = llm_analysis["identifier"]
-            ok, detail = await verify_ats(client, plat, ident)
-            if ok:
-                res["status"] = "recovered_by_ai"
-                res["new_platform"] = plat
-                res["new_ident"] = ident
-                res["new_career_url"] = llm_analysis.get("career_url") or construct_career_url(plat, ident)
-                res["verification_detail"] = detail
-                res["reason"] = f"AI discovered & verified on {plat}/{ident}: {llm_analysis.get('reason', '')}"
-                return res
+            if not is_vendor_self_board(name, plat, ident) and is_plausible_candidate(name, plat, ident):
+                ok, detail = await verify_ats(client, plat, ident)
+                if ok and has_active_jobs(detail):
+                    res["status"] = "recovered_by_ai"
+                    res["new_platform"] = plat
+                    res["new_ident"] = ident
+                    res["new_career_url"] = llm_analysis.get("career_url") or construct_career_url(plat, ident)
+                    res["verification_detail"] = detail
+                    res["reason"] = f"AI discovered & verified on {plat}/{ident}: {llm_analysis.get('reason', '')}"
+                    return res
 
-        # Check if AI identified unsupported ATS or confirmed company should be removed
+        # Check if AI identified unsupported ATS (must match known unsupported ATS keywords)
         unsupported = llm_analysis.get("unsupported_ats")
         reason = llm_analysis.get("reason") or "no supported ATS board exists"
-        if unsupported and unsupported.lower() != "none" and unsupported.lower() != "null":
+        if (
+            unsupported
+            and unsupported.lower() not in ("none", "null")
+            and unsupported.lower() in UNSUPPORTED_ATS_KEYWORDS
+        ):
             res["status"] = "remove"
             res["reason"] = f"uses unsupported ATS ({unsupported}): {reason}"
-            return res
-        if not llm_analysis.get("supported_ats_found") and "inconclusive" not in reason.lower():
-            res["status"] = "remove"
-            res["reason"] = f"no supported ATS found: {reason}"
             return res
 
     # Step 4: Fallback heuristic check on search results for unsupported ATS keywords

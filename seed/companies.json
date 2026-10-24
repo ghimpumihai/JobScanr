@@ -3307,9 +3307,9 @@
   },
   {
     "company_name": "Breeze Airways",
-    "career_url": "https://job-boards.greenhouse.io/breezeairways",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "breezeairways"
+    "career_url": "https://flybreeze.wd503.myworkdayjobs.com/Breeze_Airways",
+    "ats_platform": "workday",
+    "ats_identifier": "flybreeze|wd503|Breeze_Airways"
   },
   {
     "company_name": "Brevium",
@@ -5515,9 +5515,9 @@
   },
   {
     "company_name": "Cybereason",
-    "career_url": "https://boards.greenhouse.io/cybereason",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "cybereason"
+    "career_url": "https://careers.smartrecruiters.com/Cybereason",
+    "ats_platform": "smartrecruiters",
+    "ats_identifier": "Cybereason"
   },
   {
     "company_name": "Cybernetic Labs",
@@ -5734,12 +5734,6 @@
     "career_url": "https://dealertire.wd5.myworkdayjobs.com/DealerTireLLC-Careers",
     "ats_platform": "workday",
     "ats_identifier": "dealertire|wd5|DealerTireLLC-Careers"
-  },
-  {
-    "company_name": "DebtBook",
-    "career_url": "https://job-boards.greenhouse.io/debtbook",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "debtbook"
   },
   {
     "company_name": "Decagon",
@@ -6454,12 +6448,6 @@
     "career_url": "https://job-boards.greenhouse.io/efficientcomputer",
     "ats_platform": "greenhouse",
     "ats_identifier": "efficientcomputer"
-  },
-  {
-    "company_name": "Egra",
-    "career_url": "https://jobs.ashbyhq.com/egra",
-    "ats_platform": "ashby",
-    "ats_identifier": "egra"
   },
   {
     "company_name": "Eight Sleep",
@@ -14545,12 +14533,6 @@
   },
   {
     "company_name": "Paradigm",
-    "career_url": "https://boards.greenhouse.io/paradigm",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "paradigm"
-  },
-  {
-    "company_name": "Paradigm",
     "career_url": "https://jobs.ashbyhq.com/paradigm",
     "ats_platform": "ashby",
     "ats_identifier": "paradigm"
@@ -15948,12 +15930,6 @@
     "ats_identifier": "ramp"
   },
   {
-    "company_name": "Ramp Network",
-    "career_url": "https://boards.greenhouse.io/rampnetwork",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "rampnetwork"
-  },
-  {
     "company_name": "Range",
     "career_url": "https://jobs.ashbyhq.com/range",
     "ats_platform": "ashby",
@@ -16189,9 +16165,9 @@
   },
   {
     "company_name": "Remote",
-    "career_url": "https://job-boards.greenhouse.io/remotecom",
+    "career_url": "https://job-boards.greenhouse.io/remote",
     "ats_platform": "greenhouse",
-    "ats_identifier": "remotecom"
+    "ats_identifier": "remote"
   },
   {
     "company_name": "Renaissance",
@@ -17095,9 +17071,9 @@
   },
   {
     "company_name": "Scout AI",
-    "career_url": "https://job-boards.greenhouse.io/scoutai",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "scoutai"
+    "career_url": "https://jobs.ashbyhq.com/scout-ai",
+    "ats_platform": "ashby",
+    "ats_identifier": "scout-ai"
   },
   {
     "company_name": "Scout Motors",
