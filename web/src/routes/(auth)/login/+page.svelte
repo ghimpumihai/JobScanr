@@ -105,9 +105,10 @@
             id="token"
             name="token"
             type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
             required
-            maxlength="6"
-            pattern="[0-9]{6}"
+            maxlength="10"
             placeholder="123456"
             class="w-full rounded-md border border-border-strong bg-card px-3 py-2 font-mono text-center text-sm font-bold tracking-widest text-content-primary outline-none transition-colors focus:border-brand-blue"
           />

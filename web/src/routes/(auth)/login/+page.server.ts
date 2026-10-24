@@ -75,7 +75,7 @@ export const actions: Actions = {
     cookies.delete('jobscanr_logged_out', { path: '/' });
     const formData = await request.formData();
     const email = formData.get('email')?.toString().trim();
-    const token = formData.get('token')?.toString().trim();
+    const token = formData.get('token')?.toString().replace(/\s+/g, '').trim();
 
     if (!email || !token) {
       return fail(400, { error: 'Both email and verification code are required.', email });
