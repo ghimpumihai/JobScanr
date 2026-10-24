@@ -39,7 +39,16 @@
     'C++'
   ]);
 
+  let targetKeywords = $state<string[]>([
+    'Backend',
+    'Python',
+    'Go',
+    'Distributed Systems',
+    'Platform'
+  ]);
+
   let newLocation = $state('');
+  let newTargetKeyword = $state('');
   let newKeyword = $state('');
   let toastMessage = $state<string | null>(null);
 
@@ -67,6 +76,18 @@
     if (trimmed && !locations.includes(trimmed)) {
       locations = [...locations, trimmed];
       newLocation = '';
+    }
+  }
+
+  function removeTargetKeyword(kw: string) {
+    targetKeywords = targetKeywords.filter((k) => k !== kw);
+  }
+
+  function addTargetKeyword() {
+    const trimmed = newTargetKeyword.trim();
+    if (trimmed && !targetKeywords.includes(trimmed)) {
+      targetKeywords = [...targetKeywords, trimmed];
+      newTargetKeyword = '';
     }
   }
 
@@ -214,7 +235,7 @@
               {loc}
               <button
                 type="button"
-                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center text-content-caption hover:text-signal-amber-text"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-content-caption transition-colors hover:bg-red-500/10 hover:text-red-500"
                 onclick={() => removeLocation(loc)}
                 aria-label="Remove {loc}"
               >
@@ -239,6 +260,45 @@
         </div>
       </div>
 
+      <!-- Target Keywords (Positive Match Filter) -->
+      <div>
+        <label for="addTargetKeywordInput" class="mb-1 block text-xs font-semibold text-content-primary">
+          Target Title Keywords <span class="font-normal text-content-caption">(Positive Match Filter)</span>
+        </label>
+        <div class="mb-2 flex flex-wrap gap-2">
+          {#each targetKeywords as kw}
+            <span class="inline-flex items-center gap-1.5 rounded-md border border-brand-blue/30 bg-brand-blue/5 px-2.5 py-1 text-xs font-semibold text-brand-blue">
+              {kw}
+              <button
+                type="button"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-brand-blue/70 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                onclick={() => removeTargetKeyword(kw)}
+                aria-label="Remove target keyword {kw}"
+              >
+                <Icon name="close" size={10} />
+              </button>
+            </span>
+          {/each}
+        </div>
+        <div class="flex max-w-sm gap-2">
+          <input
+            id="addTargetKeywordInput"
+            type="text"
+            placeholder="Add target keyword (e.g. Backend, Python, Go)..."
+            aria-label="Add positive title keyword to target"
+            bind:value={newTargetKeyword}
+            onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTargetKeyword())}
+            class="flex-1 rounded-md border border-border-strong bg-card px-3 py-1.5 text-xs text-content-primary outline-none focus:border-brand-blue"
+          />
+          <button type="button" class="btn-secondary !py-1 !text-xs" onclick={addTargetKeyword} aria-label="Add target keyword">
+            Add
+          </button>
+        </div>
+        <p class="mt-1 text-[11px] text-content-caption">
+          Positions matching these keywords will be prioritized in your daily radar.
+        </p>
+      </div>
+
       <!-- Excluded Keywords -->
       <div>
         <label for="addKeywordInput" class="mb-1 block text-xs font-semibold text-content-primary">
@@ -250,7 +310,7 @@
               {kw}
               <button
                 type="button"
-                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center text-content-caption hover:text-signal-amber-text"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-content-caption transition-colors hover:bg-red-500/10 hover:text-red-500"
                 onclick={() => removeKeyword(kw)}
                 aria-label="Remove {kw}"
               >

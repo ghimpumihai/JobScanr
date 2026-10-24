@@ -63,6 +63,7 @@ export interface UserProfile {
   resume_size_kb?: number;
   seniority_levels: string[];
   preferred_locations: string[];
+  target_keywords?: string[];
   excluded_keywords: string[];
   work_authorization: string;
   auto_apply_mode: AutoApplyMode;
