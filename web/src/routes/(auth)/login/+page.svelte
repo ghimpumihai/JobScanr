@@ -83,7 +83,11 @@
         class="space-y-4"
       >
         <div class="rounded-md border border-border-main bg-subtle p-3 text-xs text-content-secondary">
-          Code sent to <strong>{userEmail}</strong>. Check your inbox or enter code below:
+          {#if form?.isMock}
+            Simulated code sent to <strong>{userEmail}</strong>. (Prototype mode: enter code <strong class="text-brand-blue">123456</strong> below).
+          {:else}
+            Code sent to <strong>{userEmail}</strong>. Check your inbox or enter code below:
+          {/if}
         </div>
 
         <input type="hidden" name="email" value={userEmail} />

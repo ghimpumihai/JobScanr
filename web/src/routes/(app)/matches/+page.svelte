@@ -15,11 +15,11 @@
   }
 
   function handleReviewQueue(company: string, role: string) {
-    showToast(`Queued ${role} at ${company} for screening answer review.`);
+    showToast(`Queued ${role} at ${company} for automated application dispatch.`);
   }
 
   function handleQueueAll() {
-    showToast('Queued all 3 direct matches for review.');
+    showToast('Queued all 3 matches for dispatch.');
   }
 </script>
 
@@ -47,7 +47,7 @@
         class="btn-action shrink-0 !py-1.5 sm:!py-2 !text-xs sm:!text-[13px]"
         onclick={handleQueueAll}
       >
-        Queue All Direct (3)
+        Queue All (3)
         <Icon name="arrow-right" size={12} />
       </button>
     </div>
@@ -102,7 +102,7 @@
                   class="btn-action"
                   onclick={() => handleReviewQueue(match.company_name, match.title)}
                 >
-                  Review &amp; Queue
+                  Queue Application
                   <Icon name="arrow-right" size={12} />
                 </button>
               {/if}
@@ -149,7 +149,7 @@
                   class="btn-action !py-1 !text-xs whitespace-nowrap"
                   onclick={() => handleReviewQueue(match.company_name, match.title)}
                 >
-                  Review &amp; Queue
+                  Queue Application
                   <Icon name="arrow-right" size={12} />
                 </button>
               {/if}

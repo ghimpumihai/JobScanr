@@ -65,7 +65,6 @@
                 </span>
               {:else if app.status === 'needs_review'}
                 <span class="status-badge border border-signal-amber-border bg-signal-amber-bg text-signal-amber-text">
-                  <Icon name="status-dot" size={6} />
                   Needs Review
                 </span>
               {:else if app.status === 'queued'}
@@ -178,7 +177,6 @@
             </span>
           {:else if app.status === 'needs_review'}
             <span class="status-badge border border-signal-amber-border bg-signal-amber-bg text-signal-amber-text">
-              <Icon name="status-dot" size={6} />
               Needs Review
             </span>
           {:else}
