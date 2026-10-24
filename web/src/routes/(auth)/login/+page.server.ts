@@ -1,7 +1,28 @@
 import { fail, redirect, type Actions } from '@sveltejs/kit';
 
 export const actions: Actions = {
-  sendOtp: async ({ request, locals }) => {
+  logout: async ({ locals, cookies }) => {
+    if (locals.supabase) {
+      try {
+        await locals.supabase.auth.signOut();
+      } catch (e) {}
+    }
+    cookies.set('jobscanr_logged_out', 'true', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7
+    });
+    throw redirect(303, '/login');
+  },
+
+  demoLogin: async ({ cookies }) => {
+    cookies.delete('jobscanr_logged_out', { path: '/' });
+    throw redirect(303, '/matches');
+  },
+
+  sendOtp: async ({ request, locals, cookies }) => {
+    cookies.delete('jobscanr_logged_out', { path: '/' });
     const formData = await request.formData();
     const email = formData.get('email')?.toString().trim();
 
@@ -23,7 +44,8 @@ export const actions: Actions = {
     return { success: true, email };
   },
 
-  verifyOtp: async ({ request, locals }) => {
+  verifyOtp: async ({ request, locals, cookies }) => {
+    cookies.delete('jobscanr_logged_out', { path: '/' });
     const formData = await request.formData();
     const email = formData.get('email')?.toString().trim();
     const token = formData.get('token')?.toString().trim();

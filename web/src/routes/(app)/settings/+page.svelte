@@ -299,6 +299,27 @@
       </div>
     </div>
   </div>
+
+  <!-- Card 3: Account & Session -->
+  <div class="card overflow-hidden">
+    <div class="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-sm font-semibold text-content-primary">Account Session</h2>
+        <p class="mt-0.5 text-xs text-content-muted">
+          Signed in as <strong class="text-content-primary">{data.profile.email || 'stefan@example.com'}</strong>
+        </p>
+      </div>
+      <form method="POST" action="/login?/logout" class="inline">
+        <button
+          type="submit"
+          class="btn-secondary !text-xs"
+          title="Sign out of JobScanr"
+        >
+          Sign Out of Account
+        </button>
+      </form>
+    </div>
+  </div>
 </div>
 
 <!-- Toast Notice -->
