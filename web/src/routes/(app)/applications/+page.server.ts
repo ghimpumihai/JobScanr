@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import type { ApplicationRecord } from '$lib/types';
+import { isSupabaseConfigured } from '$lib/supabase/server';
 
 const MOCK_APPLICATIONS: ApplicationRecord[] = [
   {
@@ -41,7 +42,7 @@ const MOCK_APPLICATIONS: ApplicationRecord[] = [
 ];
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (locals.user && locals.supabase) {
+  if (locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id') {
     try {
       const { data, error } = await locals.supabase
         .from('applications')

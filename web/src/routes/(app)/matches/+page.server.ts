@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import type { JobMatch } from '$lib/types';
+import { isSupabaseConfigured } from '$lib/supabase/server';
 
 const MOCK_MATCHES: JobMatch[] = [
   {
@@ -50,7 +51,7 @@ const MOCK_MATCHES: JobMatch[] = [
 
 export const load: PageServerLoad = async ({ locals }) => {
   // If authenticated with live Supabase database, attempt query with fallback to mock data
-  if (locals.user && locals.supabase) {
+  if (locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id') {
     try {
       const { data, error } = await locals.supabase
         .from('user_job_matches')

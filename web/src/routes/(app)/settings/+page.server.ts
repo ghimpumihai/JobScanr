@@ -1,5 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import type { UserProfile } from '$lib/types';
+import { isSupabaseConfigured } from '$lib/supabase/server';
 
 const MOCK_PROFILE: UserProfile = {
   id: 1,
@@ -19,7 +20,7 @@ const MOCK_PROFILE: UserProfile = {
 };
 
 export const load: PageServerLoad = async ({ locals }) => {
-  if (locals.user && locals.supabase) {
+  if (locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id') {
     try {
       const { data, error } = await locals.supabase
         .from('users')

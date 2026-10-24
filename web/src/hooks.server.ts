@@ -1,22 +1,28 @@
-import { createSupabaseServerClient } from '$lib/supabase/server';
+import { createSupabaseServerClient, isSupabaseConfigured } from '$lib/supabase/server';
 import { redirect, type Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
   event.locals.supabase = createSupabaseServerClient(event);
+  const supabaseReady = isSupabaseConfigured();
 
   event.locals.getSession = async () => {
+    if (!supabaseReady) return null;
     const {
       data: { session }
     } = await event.locals.supabase.auth.getSession();
     return session;
   };
 
-  const {
-    data: { user }
-  } = await event.locals.supabase.auth.getUser();
-
-  event.locals.user = user;
-  event.locals.session = await event.locals.getSession();
+  if (supabaseReady) {
+    const {
+      data: { user }
+    } = await event.locals.supabase.auth.getUser();
+    event.locals.user = user;
+    event.locals.session = await event.locals.getSession();
+  } else {
+    event.locals.user = null;
+    event.locals.session = null;
+  }
 
   // Support query param transitions (e.g. /matches?demo=true or /login?logout=true)
   if (event.url.searchParams.get('demo') === 'true') {
