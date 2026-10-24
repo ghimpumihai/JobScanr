@@ -103,6 +103,12 @@
               {/if}
             </td>
           </tr>
+        {:else}
+          <tr>
+            <td colspan="2" class="py-12 text-center text-xs text-content-caption">
+              No matching positions discovered in the latest scan. Adjust your preferred locations or seniority criteria in Settings.
+            </td>
+          </tr>
         {/each}
       </tbody>
     </table>

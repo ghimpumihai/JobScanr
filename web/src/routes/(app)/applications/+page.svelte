@@ -113,6 +113,12 @@
               {/if}
             </td>
           </tr>
+        {:else}
+          <tr>
+            <td colspan="5" class="py-12 text-center text-xs text-content-caption">
+              No application submissions recorded yet. Roles approved from the daily feed will appear here for audit tracking.
+            </td>
+          </tr>
         {/each}
       </tbody>
     </table>

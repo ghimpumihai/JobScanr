@@ -11,18 +11,56 @@
   let { application, onclose, onsubmit }: Props = $props();
 
   let answerText = $state('');
+  let submitting = $state(false);
+  let drawerPanel = $state<HTMLDivElement | null>(null);
+  let previousActiveElement: HTMLElement | null = null;
 
   $effect(() => {
     if (application) {
+      submitting = false;
       answerText =
         application.drafted_answer ||
         'During my internship at Acme Cloud, our daily ingestion workers faced 429 rate limit drops on GraphQL endpoints. I implemented serialized asyncio pacing locks, which restored 100% throughput without worker crash loops.';
+
+      if (typeof document !== 'undefined') {
+        previousActiveElement = document.activeElement as HTMLElement | null;
+        requestAnimationFrame(() => {
+          const textarea = drawerPanel?.querySelector('textarea');
+          if (textarea) {
+            textarea.focus();
+          }
+        });
+      }
+    } else if (previousActiveElement) {
+      previousActiveElement.focus?.();
+      previousActiveElement = null;
     }
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && application) {
+    if (!application) return;
+
+    if (e.key === 'Escape') {
       onclose();
+      return;
+    }
+
+    if (e.key === 'Tab' && drawerPanel) {
+      const focusable = drawerPanel.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
 
@@ -33,7 +71,8 @@
   }
 
   function handleSubmit() {
-    if (application) {
+    if (application && !submitting) {
+      submitting = true;
       onsubmit(application, answerText);
     }
   }
@@ -51,6 +90,7 @@
   >
     <!-- Drawer Panel -->
     <div
+      bind:this={drawerPanel}
       class="flex h-full w-full max-w-[560px] flex-col overflow-y-auto bg-card shadow-2xl transition-transform"
       role="dialog"
       aria-modal="true"
@@ -114,8 +154,13 @@
         <button type="button" class="btn-secondary" onclick={onclose}>
           Cancel
         </button>
-        <button type="button" class="btn-action" onclick={handleSubmit}>
-          Approve &amp; Submit Application
+        <button
+          type="button"
+          class="btn-action disabled:opacity-60"
+          onclick={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? 'Submitting...' : 'Approve & Submit Application'}
           <Icon name="arrow-right" size={12} />
         </button>
       </div>

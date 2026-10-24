@@ -182,16 +182,16 @@
 
     <div class="space-y-5 p-6">
       <!-- Comprehensive Seniority Levels -->
-      <div>
-        <div class="mb-2 block text-xs font-semibold text-content-primary">
-          Target Seniority Levels (Select All Applicable)
-        </div>
+      <fieldset>
+        <legend class="mb-2 block text-xs font-semibold text-content-primary">
+          Target Seniority Levels <span class="font-normal text-content-caption">(Select all applicable)</span>
+        </legend>
         <div class="flex flex-wrap gap-2">
           {#each ALL_SENIORITY_LEVELS as level}
             {@const active = selectedLevels.includes(level)}
             <button
               type="button"
-              class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all {active
+              class="inline-flex min-h-[36px] sm:min-h-0 items-center gap-1.5 rounded-md border px-3 py-2 sm:py-1.5 text-xs font-semibold transition-all {active
                 ? 'border-brand-blue bg-brand-blue text-white shadow-sm'
                 : 'border-border-strong bg-card text-content-secondary hover:bg-hover'}"
               onclick={() => toggleSeniority(level)}
@@ -201,20 +201,20 @@
             </button>
           {/each}
         </div>
-      </div>
+      </fieldset>
 
       <!-- Preferred Locations -->
       <div>
-        <div class="mb-1 block text-xs font-semibold text-content-primary">
+        <label for="addLocationInput" class="mb-1 block text-xs font-semibold text-content-primary">
           Preferred Locations
-        </div>
+        </label>
         <div class="mb-2 flex flex-wrap gap-2">
           {#each locations as loc}
             <span class="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-card px-2.5 py-1 text-xs font-semibold text-content-secondary">
               {loc}
               <button
                 type="button"
-                class="text-content-caption hover:text-red-500"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center text-content-caption hover:text-signal-amber-text"
                 onclick={() => removeLocation(loc)}
                 aria-label="Remove {loc}"
               >
@@ -225,13 +225,15 @@
         </div>
         <div class="flex max-w-sm gap-2">
           <input
+            id="addLocationInput"
             type="text"
             placeholder="Add location (e.g. Zurich, Munich)..."
+            aria-label="Add preferred European work location"
             bind:value={newLocation}
             onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
             class="flex-1 rounded-md border border-border-strong bg-card px-3 py-1.5 text-xs text-content-primary outline-none focus:border-brand-blue"
           />
-          <button type="button" class="btn-secondary !py-1 !text-xs" onclick={addLocation}>
+          <button type="button" class="btn-secondary !py-1 !text-xs" onclick={addLocation} aria-label="Add location">
             Add
           </button>
         </div>
@@ -239,16 +241,16 @@
 
       <!-- Excluded Keywords -->
       <div>
-        <div class="mb-1 block text-xs font-semibold text-content-primary">
-          Excluded Title Keywords (Negative Filter)
-        </div>
+        <label for="addKeywordInput" class="mb-1 block text-xs font-semibold text-content-primary">
+          Excluded Title Keywords <span class="font-normal text-content-caption">(Negative Filter)</span>
+        </label>
         <div class="mb-2 flex flex-wrap gap-2">
           {#each excludedKeywords as kw}
             <span class="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-card px-2.5 py-1 text-xs font-semibold text-content-secondary">
               {kw}
               <button
                 type="button"
-                class="text-content-caption hover:text-red-500"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center text-content-caption hover:text-signal-amber-text"
                 onclick={() => removeKeyword(kw)}
                 aria-label="Remove {kw}"
               >
@@ -259,13 +261,15 @@
         </div>
         <div class="flex max-w-sm gap-2">
           <input
+            id="addKeywordInput"
             type="text"
             placeholder="Add negative keyword (e.g. Rust, Manager)..."
+            aria-label="Add negative title keyword to exclude"
             bind:value={newKeyword}
             onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
             class="flex-1 rounded-md border border-border-strong bg-card px-3 py-1.5 text-xs text-content-primary outline-none focus:border-brand-blue"
           />
-          <button type="button" class="btn-secondary !py-1 !text-xs" onclick={addKeyword}>
+          <button type="button" class="btn-secondary !py-1 !text-xs" onclick={addKeyword} aria-label="Add excluded keyword">
             Add
           </button>
         </div>

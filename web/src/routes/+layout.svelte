@@ -57,10 +57,10 @@
         <span class="text-xs text-content-caption">Europe Engineering Feed</span>
       </div>
 
-      <nav class="flex gap-1 rounded-lg border border-border-main bg-subtle p-1" aria-label="Main Navigation">
+      <nav class="flex flex-wrap gap-1 rounded-lg border border-border-main bg-subtle p-1" aria-label="Main Navigation">
         <a
           href="/matches"
-          class="rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all {isActive('/matches')
+          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/matches')
             ? 'bg-card text-content-primary shadow-sm'
             : 'text-content-muted hover:text-content-primary'}"
         >
@@ -68,7 +68,7 @@
         </a>
         <a
           href="/applications"
-          class="rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all {isActive('/applications')
+          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/applications')
             ? 'bg-card text-content-primary shadow-sm'
             : 'text-content-muted hover:text-content-primary'}"
         >
@@ -76,7 +76,7 @@
         </a>
         <a
           href="/settings"
-          class="rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all {isActive('/settings')
+          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/settings')
             ? 'bg-card text-content-primary shadow-sm'
             : 'text-content-muted hover:text-content-primary'}"
         >
@@ -87,7 +87,7 @@
       <div class="flex items-center gap-2.5 self-end sm:self-auto">
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-card px-2.5 py-1.5 text-xs text-content-secondary shadow-sm transition-colors hover:bg-hover hover:text-content-primary"
+          class="inline-flex min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 items-center justify-center gap-1.5 rounded-md border border-border-strong bg-card p-2 sm:px-2.5 sm:py-1.5 text-xs text-content-secondary shadow-sm transition-colors hover:bg-hover hover:text-content-primary"
           onclick={toggleTheme}
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
