@@ -62,31 +62,55 @@ async def check_smartrecruiters(client: httpx.AsyncClient, ident: str) -> tuple[
     return True, f"{total} jobs"
 
 
+_ashby_lock: asyncio.Lock | None = None
+
+
+def _get_ashby_lock() -> asyncio.Lock:
+    global _ashby_lock
+    if _ashby_lock is None:
+        _ashby_lock = asyncio.Lock()
+    return _ashby_lock
+
+
+def has_active_jobs(detail: str | None) -> bool:
+    """Return True if verification detail indicates at least 1 live job or card."""
+    if not detail:
+        return False
+    m = re.match(r"^(\d+)\s+(?:jobs?|cards?)", detail)
+    if m:
+        return int(m.group(1)) > 0
+    return False
+
+
 async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
-    # Ashby soft-throttles bursts with HTTP 200 + null data or 429s, so retry.
-    delay = 1.0
-    for attempt in range(4):
-        r = await client.post(
-            "https://jobs.ashbyhq.com/api/non-user-graphql",
-            json={
-                "operationName": "ApiJobBoardWithTeams",
-                "variables": {"organizationHostedJobsPageName": ident},
-                "query": ASHBY_QUERY,
-            },
-        )
-        if r.status_code == 429:
+    # Ashby soft-throttles bursts with HTTP 200 + null data or 429s, so serialize with pacing.
+    async with _get_ashby_lock():
+        await asyncio.sleep(0.5)
+        delay = 1.0
+        for attempt in range(4):
+            r = await client.post(
+                "https://jobs.ashbyhq.com/api/non-user-graphql",
+                json={
+                    "operationName": "ApiJobBoardWithTeams",
+                    "variables": {"organizationHostedJobsPageName": ident},
+                    "query": ASHBY_QUERY,
+                },
+            )
+            if r.status_code == 429:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            if r.status_code != 200:
+                return False, f"HTTP {r.status_code}"
+            body = r.json()
+            if body.get("errors"):
+                return False, f"GraphQL error: {body['errors'][0].get('message', 'unknown')[:60]}"
+            board = (body.get("data") or {}).get("jobBoard")
+            if board is not None:
+                return True, f"{len(board['jobPostings'])} jobs"
             await asyncio.sleep(delay)
             delay *= 2
-            continue
-        if r.status_code != 200:
-            return False, f"HTTP {r.status_code}"
-        body = r.json()
-        board = (body.get("data") or {}).get("jobBoard")
-        if board is not None:
-            return True, f"{len(board['jobPostings'])} jobs"
-        await asyncio.sleep(delay)
-        delay *= 2
-    return False, "throttled after retries"
+        return False, "throttled after retries"
 
 
 async def check_workday(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]:
