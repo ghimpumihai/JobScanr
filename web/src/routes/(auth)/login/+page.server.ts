@@ -81,8 +81,8 @@ export const actions: Actions = {
       return fail(400, { error: 'Both email and verification code are required.', email });
     }
 
-    // Always permit 123456 in local prototype environments so rate limits never block testing
-    if (token === '123456') {
+    // In local prototype or mock mode, permit 123456 so rate limits never block local testing
+    if (token === '123456' && (!isSupabaseConfigured() || process.env.VITE_MOCK_AUTH === 'true')) {
       cookies.set('jobscanr_demo_session', 'true', {
         path: '/',
         httpOnly: true,

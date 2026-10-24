@@ -64,8 +64,12 @@ export const actions: Actions = {
     const formData = await request.formData();
     const fullName = formData.get('fullName');
     const workAuth = formData.get('workAuth');
+    const seniorityLevels = formData.get('seniorityLevels');
+    const locations = formData.get('locations');
+    const targetKeywords = formData.get('targetKeywords');
+    const excludedKeywords = formData.get('excludedKeywords');
 
-    if (locals.user && locals.supabase) {
+    if (locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id') {
       try {
         const { data: existingUser } = await locals.supabase
           .from('users')
@@ -74,6 +78,7 @@ export const actions: Actions = {
           .single();
 
         const currentDefaults = existingUser?.screening_defaults || {};
+        const currentFilters = existingUser?.profile_filters || {};
 
         const updatedDefaults = {
           ...currentDefaults,
@@ -81,14 +86,23 @@ export const actions: Actions = {
           ...(workAuth ? { work_authorization: workAuth.toString() } : {})
         };
 
+        const updatedFilters = {
+          ...currentFilters,
+          ...(seniorityLevels ? { levels: JSON.parse(seniorityLevels.toString()) } : {}),
+          ...(locations ? { locations: JSON.parse(locations.toString()) } : {}),
+          ...(targetKeywords ? { target_title_keywords: JSON.parse(targetKeywords.toString()) } : {}),
+          ...(excludedKeywords ? { excluded_title_keywords: JSON.parse(excludedKeywords.toString()) } : {})
+        };
+
         await locals.supabase
           .from('users')
           .update({
-            screening_defaults: updatedDefaults
+            screening_defaults: updatedDefaults,
+            profile_filters: updatedFilters
           })
           .eq('auth_user_id', locals.user.id);
-      } catch {
-        // Log error
+      } catch (err) {
+        console.error('Failed to save user preferences:', err);
       }
     }
 

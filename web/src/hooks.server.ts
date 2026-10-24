@@ -24,7 +24,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.session = null;
   }
 
-  // Support query param transitions (e.g. /matches?demo=true or /login?logout=true)
+  // Support query param transitions with clean URL redirect (e.g. /matches?demo=true -> /matches)
   if (event.url.searchParams.get('demo') === 'true') {
     event.cookies.delete('jobscanr_logged_out', { path: '/' });
     event.cookies.set('jobscanr_demo_session', 'true', {
@@ -33,6 +33,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7
     });
+    throw redirect(303, event.url.pathname);
   }
 
   if (event.url.searchParams.get('logout') === 'true') {
@@ -43,6 +44,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7
     });
+    throw redirect(303, event.url.pathname);
   }
 
   // Check if user is in demo mode or explicitly logged out

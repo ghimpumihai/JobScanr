@@ -58,25 +58,52 @@
   </div>
 
   <div class="px-6 py-3 sm:px-8 sm:py-4">
-    <!-- Desktop Table View -->
-    <table class="hidden w-full border-collapse sm:table">
+    <table class="w-full border-collapse">
       <tbody>
         {#each data.matches as match (match.id)}
           <tr class="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-subtle/30">
             <td class="py-5 align-top sm:py-5.5">
-              <div>
+              <!-- Top row: Title on left, Action on right (aligned on same line on all viewports) -->
+              <div class="flex items-start justify-between gap-4">
                 <a
                   href={match.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-[15px] font-semibold text-brand-blue hover:underline"
+                  class="text-[15px] font-semibold leading-snug text-brand-blue hover:underline"
                 >
                   {match.title}
                 </a>
+
+                <div class="shrink-0">
+                  {#if match.ats_platform === 'workday'}
+                    <a
+                      href={match.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="btn-secondary !text-xs whitespace-nowrap"
+                    >
+                      Apply Direct
+                      <Icon name="external-link" size={12} />
+                    </a>
+                  {:else}
+                    <button
+                      type="button"
+                      class="btn-action !text-xs whitespace-nowrap"
+                      onclick={() => handleReviewQueue(match.company_name, match.title)}
+                    >
+                      Queue Application
+                      <Icon name="arrow-right" size={12} />
+                    </button>
+                  {/if}
+                </div>
               </div>
-              <div class="mb-2 mt-0.5 text-xs font-medium text-content-secondary">
+
+              <!-- Second row: Company · Location -->
+              <div class="mb-2 mt-1 text-xs font-medium text-content-secondary">
                 {match.company_name} · {match.location}
               </div>
+
+              <!-- Third row: Tags -->
               <div class="flex flex-wrap items-center gap-2">
                 {#if match.compensation}
                   <span class="tag-salary">{match.compensation}</span>
@@ -85,97 +112,16 @@
                 <span class="tag-score">{match.match_score}% Match</span>
               </div>
             </td>
-            <td class="py-5 pl-6 text-right align-middle sm:py-5.5 sm:pl-8">
-              {#if match.ats_platform === 'workday'}
-                <a
-                  href={match.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="btn-secondary"
-                >
-                  Apply Direct
-                  <Icon name="external-link" size={12} />
-                </a>
-              {:else}
-                <button
-                  type="button"
-                  class="btn-action"
-                  onclick={() => handleReviewQueue(match.company_name, match.title)}
-                >
-                  Queue Application
-                  <Icon name="arrow-right" size={12} />
-                </button>
-              {/if}
-            </td>
           </tr>
         {:else}
           <tr>
-            <td colspan="2" class="py-12 text-center text-xs text-content-caption">
+            <td class="py-12 text-center text-xs text-content-caption">
               No matching positions discovered in the latest scan. Adjust your preferred locations or seniority criteria in Settings.
             </td>
           </tr>
         {/each}
       </tbody>
     </table>
-
-    <!-- Mobile Responsive Card Rows (Title & Button on same line) -->
-    <div class="divide-y divide-border-subtle sm:hidden">
-      {#each data.matches as match (match.id)}
-        <div class="py-4.5 transition-colors hover:bg-subtle/30">
-          <!-- Top row: Title on left, Action on right (same line) -->
-          <div class="flex items-start justify-between gap-3">
-            <a
-              href={match.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-[15px] font-semibold leading-snug text-brand-blue hover:underline"
-            >
-              {match.title}
-            </a>
-            <div class="shrink-0">
-              {#if match.ats_platform === 'workday'}
-                <a
-                  href={match.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="btn-secondary !py-1 !text-xs whitespace-nowrap"
-                >
-                  Apply Direct
-                  <Icon name="external-link" size={12} />
-                </a>
-              {:else}
-                <button
-                  type="button"
-                  class="btn-action !py-1 !text-xs whitespace-nowrap"
-                  onclick={() => handleReviewQueue(match.company_name, match.title)}
-                >
-                  Queue Application
-                  <Icon name="arrow-right" size={12} />
-                </button>
-              {/if}
-            </div>
-          </div>
-
-          <!-- Second row: Company · Location -->
-          <div class="mb-2 mt-1 text-xs font-medium text-content-secondary">
-            {match.company_name} · {match.location}
-          </div>
-
-          <!-- Third row: Tags -->
-          <div class="flex flex-wrap items-center gap-2">
-            {#if match.compensation}
-              <span class="tag-salary">{match.compensation}</span>
-            {/if}
-            <span class="tag-platform">via {match.ats_platform.charAt(0).toUpperCase() + match.ats_platform.slice(1)}</span>
-            <span class="tag-score">{match.match_score}% Match</span>
-          </div>
-        </div>
-      {:else}
-        <div class="py-12 text-center text-xs text-content-caption">
-          No matching positions discovered in the latest scan. Adjust your preferred locations or seniority criteria in Settings.
-        </div>
-      {/each}
-    </div>
   </div>
 </div>
 
