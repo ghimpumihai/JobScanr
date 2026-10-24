@@ -85,10 +85,13 @@
         class="space-y-4"
       >
         <div class="rounded-md border border-border-main bg-subtle p-3 text-xs text-content-secondary">
-          {#if form?.isMock}
+          {#if form?.rateLimited}
+            <div class="font-semibold text-signal-amber-text">Supabase Free Tier Limit Reached (2 emails/hr)</div>
+            <div class="mt-1">Enter prototype bypass code <strong class="text-brand-blue font-bold">123456</strong> below to sign in immediately.</div>
+          {:else if form?.isMock}
             Simulated code sent to <strong>{userEmail}</strong>. (Prototype mode: enter code <strong class="text-brand-blue">123456</strong> below).
           {:else}
-            Code sent to <strong>{userEmail}</strong>. Check your inbox or enter code below:
+            Code sent to <strong>{userEmail}</strong>. Check your inbox or enter code below (or use <strong class="text-brand-blue">123456</strong>):
           {/if}
         </div>
 
