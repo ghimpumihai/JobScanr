@@ -59,6 +59,11 @@
   --slate-tag-text: #cbd5e1;
 }
 
+html {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+}
+
 body {
   background-color: var(--bg-page);
   color: var(--text-primary);

@@ -7,13 +7,18 @@
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
-  let isDark = $state(false);
+  let isDark = $state(
+    typeof document !== 'undefined'
+      ? document.documentElement.getAttribute('data-theme') === 'dark'
+      : false
+  );
 
-  // Initialize theme from document or localStorage on mount
+  // Synchronize theme state with document and localStorage
   $effect(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('jobscanr-theme');
-      if (stored === 'dark') {
+      const docDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (stored === 'dark' || docDark) {
         isDark = true;
         document.documentElement.setAttribute('data-theme', 'dark');
       } else {
@@ -38,6 +43,8 @@
     return $page.url.pathname.startsWith(path);
   }
 
+  let isLoginPage = $derived($page.url.pathname === '/login');
+
   let userInitials = $derived.by(() => {
     if (data.user?.email) {
       return data.user.email.slice(0, 2).toUpperCase();
@@ -56,32 +63,34 @@
         </a>
       </div>
 
-      <nav class="flex flex-wrap gap-1 rounded-lg border border-border-main bg-subtle p-1" aria-label="Main Navigation">
-        <a
-          href="/matches"
-          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/matches')
-            ? 'bg-card text-content-primary shadow-sm'
-            : 'text-content-muted hover:text-content-primary'}"
-        >
-          Matches (4)
-        </a>
-        <a
-          href="/applications"
-          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/applications')
-            ? 'bg-card text-content-primary shadow-sm'
-            : 'text-content-muted hover:text-content-primary'}"
-        >
-          Applications (3)
-        </a>
-        <a
-          href="/settings"
-          class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/settings')
-            ? 'bg-card text-content-primary shadow-sm'
-            : 'text-content-muted hover:text-content-primary'}"
-        >
-          Profile &amp; Settings
-        </a>
-      </nav>
+      {#if !isLoginPage}
+        <nav class="flex flex-wrap gap-1 rounded-lg border border-border-main bg-subtle p-1" aria-label="Main Navigation">
+          <a
+            href="/matches"
+            class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/matches')
+              ? 'bg-card text-content-primary shadow-sm'
+              : 'text-content-muted hover:text-content-primary'}"
+          >
+            Matches (4)
+          </a>
+          <a
+            href="/applications"
+            class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/applications')
+              ? 'bg-card text-content-primary shadow-sm'
+              : 'text-content-muted hover:text-content-primary'}"
+          >
+            Applications (3)
+          </a>
+          <a
+            href="/settings"
+            class="flex min-h-[36px] sm:min-h-0 items-center justify-center rounded-md px-3.5 py-2 sm:py-1.5 text-xs font-semibold transition-all {isActive('/settings')
+              ? 'bg-card text-content-primary shadow-sm'
+              : 'text-content-muted hover:text-content-primary'}"
+          >
+            Profile &amp; Settings
+          </a>
+        </nav>
+      {/if}
 
       <div class="flex items-center gap-2.5 self-end sm:self-auto">
         <button
@@ -98,12 +107,30 @@
           {/if}
         </button>
 
-        <div
-          class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-xs font-bold text-white"
-          title={data.user?.email || 'stefan@example.com'}
-        >
-          {userInitials}
-        </div>
+        {#if !isLoginPage}
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-xs font-bold text-white shadow-sm"
+            title={data.user?.email || 'stefan@example.com'}
+          >
+            {userInitials}
+          </div>
+          <a
+            href="/login"
+            class="btn-secondary !py-1.5 !text-xs"
+            title="Sign out to login page"
+          >
+            Sign Out
+          </a>
+        {:else}
+          <a
+            href="/matches"
+            class="btn-action !py-1.5 !text-xs"
+            title="Explore Demo Mode"
+          >
+            Demo Mode
+            <Icon name="arrow-right" size={11} />
+          </a>
+        {/if}
       </div>
     </header>
 
