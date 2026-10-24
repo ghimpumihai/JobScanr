@@ -29,7 +29,7 @@ export const actions: Actions = {
     throw redirect(303, '/matches');
   },
 
-  sendOtp: async ({ request, locals, cookies }) => {
+  sendOtp: async ({ request, locals, cookies, url }) => {
     cookies.delete('jobscanr_logged_out', { path: '/' });
     const formData = await request.formData();
     const email = formData.get('email')?.toString().trim();
@@ -47,16 +47,17 @@ export const actions: Actions = {
       const { error } = await locals.supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: '/matches'
+          emailRedirectTo: `${url.origin}/auth/callback?next=/matches`
         }
       });
 
       if (error) {
-        return fail(500, { error: error.message });
+        return fail(500, { error: error.message, email });
       }
     } catch (err: any) {
       return fail(500, {
-        error: `Supabase connection failed: ${err.message}. Configure SUPABASE_URL & SUPABASE_ANON_KEY in your .env or click Demo Mode.`
+        error: `Supabase connection failed: ${err.message}. Configure SUPABASE_URL & SUPABASE_ANON_KEY in your .env or click Demo Mode.`,
+        email
       });
     }
 
@@ -70,7 +71,7 @@ export const actions: Actions = {
     const token = formData.get('token')?.toString().trim();
 
     if (!email || !token) {
-      return fail(400, { error: 'Both email and verification code are required.' });
+      return fail(400, { error: 'Both email and verification code are required.', email });
     }
 
     if (!isSupabaseConfigured()) {
@@ -84,21 +85,34 @@ export const actions: Actions = {
         });
         throw redirect(303, '/matches');
       }
-      return fail(400, { error: 'Prototype code is 123456.' });
+      return fail(400, { error: 'Prototype code is 123456.', email });
     }
 
     try {
-      const { error } = await locals.supabase.auth.verifyOtp({
+      let verifyResult = await locals.supabase.auth.verifyOtp({
         email,
         token,
         type: 'email'
       });
 
-      if (error) {
-        return fail(400, { error: error.message });
+      if (verifyResult.error) {
+        // If the email was a new signup or email confirmation token, retry with type: 'signup'
+        const signupResult = await locals.supabase.auth.verifyOtp({
+          email,
+          token,
+          type: 'signup'
+        });
+        if (!signupResult.error) {
+          verifyResult = signupResult;
+        }
+      }
+
+      if (verifyResult.error) {
+        return fail(400, { error: verifyResult.error.message, email });
       }
     } catch (err: any) {
-      return fail(500, { error: `Supabase verify failed: ${err.message}` });
+      if (err?.status === 303) throw err;
+      return fail(500, { error: `Supabase verify failed: ${err.message}`, email });
     }
 
     throw redirect(303, '/matches');

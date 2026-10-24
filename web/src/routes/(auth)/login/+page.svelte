@@ -10,9 +10,11 @@
   let loading = $state(false);
 
   $effect(() => {
-    if (form?.success && form?.email) {
-      emailSent = true;
+    if (form?.email) {
       userEmail = form.email;
+      emailSent = true;
+    } else if (form?.success) {
+      emailSent = true;
     }
   });
 </script>
