@@ -12,7 +12,7 @@
 ### 1.1 Technical Approach
 The frontend lives in a dedicated `web/` directory at the repository root, powered by **SvelteKit + Svelte 5 (Runes) + Tailwind CSS + TypeScript + `@supabase/ssr`**.
 
-Visual and behavioral identity is locked to the **"Editorial Digest"** system verified in `web_mockup_artifact.html`:
+Visual and behavioral identity is locked to the **"Editorial Digest"** system:
 - Slate-50 background (`#f8fafc`) with clean bordered white cards (`#ffffff`, `border: 1px solid #e2e8f0`, `border-radius: 8px`).
 - Light mode by default; manual dark mode override via `:root[data-theme="dark"]` with zero contrast degradation.
 - Zero emojis; all visual indicators and controls are self-contained, typed inline SVG components.

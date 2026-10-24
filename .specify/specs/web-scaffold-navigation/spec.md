@@ -81,7 +81,7 @@ Past mockup attempts fell into common traps: over-engineered "cartographic radar
    - Direct navigation to `/matches`, `/applications`, or `/settings` without an active session redirects to `/login`.
    - Authenticated sessions access all routes seamlessly.
 4. **Interactive Mock Data Parity**:
-   - All 3 routes render mock state matching `web_mockup_artifact.html`.
+   - All 3 routes render mock state matching the Editorial Digest design system.
    - Drawer opens on row click / button trigger and closes on `Escape` or backdrop click.
    - Seniority chips toggle `aria-pressed` states interactively.
    - Location and keyword tag clouds support interactive removal.
