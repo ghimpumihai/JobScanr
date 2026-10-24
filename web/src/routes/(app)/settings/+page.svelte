@@ -267,11 +267,11 @@
         </label>
         <div class="mb-2 flex flex-wrap gap-2">
           {#each targetKeywords as kw}
-            <span class="inline-flex items-center gap-1.5 rounded-md border border-brand-blue/30 bg-brand-blue/5 px-2.5 py-1 text-xs font-semibold text-brand-blue">
+            <span class="inline-flex items-center gap-1.5 rounded-md border border-brand-blue bg-brand-blue px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
               {kw}
               <button
                 type="button"
-                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-brand-blue/70 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                class="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-white/80 transition-colors hover:bg-black/20 hover:text-red-400"
                 onclick={() => removeTargetKeyword(kw)}
                 aria-label="Remove target keyword {kw}"
               >
