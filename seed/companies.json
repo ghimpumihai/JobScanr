@@ -529,9 +529,9 @@
   },
   {
     "company_name": "Age of Learning",
-    "career_url": "https://jobs.lever.co/aofl",
-    "ats_platform": "lever",
-    "ats_identifier": "aofl"
+    "career_url": "https://job-boards.greenhouse.io/ageoflearninginc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "ageoflearninginc"
   },
   {
     "company_name": "Agentis Capital",
@@ -3541,8 +3541,8 @@
   },
   {
     "company_name": "ButcherBox",
-    "career_url": "https://jobs.lever.co/butcherbox",
-    "ats_platform": "lever",
+    "career_url": "https://job-boards.greenhouse.io/butcherbox",
+    "ats_platform": "greenhouse",
     "ats_identifier": "butcherbox"
   },
   {
