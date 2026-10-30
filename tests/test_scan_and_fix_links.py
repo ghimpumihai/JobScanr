@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -8,13 +8,14 @@ from scripts.scan_and_fix_links import (
     construct_career_url,
     fingerprint_url_and_html,
     generate_candidate_identifiers,
+    generate_manual_review_markdown,
     generate_report_markdown,
     parse_failures_from_log,
     recover_company,
     remove_companies_from_seed,
     slugify,
 )
-from scripts.validate_companies import has_active_jobs
+from scripts.validate_companies import check_ashby, has_active_jobs
 
 
 def test_slugify():
@@ -189,6 +190,69 @@ def test_generate_report_markdown():
     assert "Unrecoverable (Requires Manual Review)**: 1" in md
     assert "| Company A | `greenhouse/comp-a-old` | `ashby/compa` | 12 jobs | fingerprinted |" in md
     assert "| Company C | `greenhouse/comp-c` | no live ATS coordinates could be verified |" in md
+
+
+def test_generate_manual_review_markdown():
+    recoveries = [
+        {
+            "company_name": "Recovered Corp",
+            "old_platform": "greenhouse",
+            "old_ident": "rec-old",
+            "status": "recovered",
+            "new_platform": "ashby",
+            "new_ident": "rec",
+            "verification_detail": "10 jobs",
+        },
+        {
+            "company_name": "Transient Inc",
+            "old_platform": "lever",
+            "old_ident": "transient",
+            "status": "transient",
+            "reason": "responding",
+        },
+        {
+            "company_name": "Failed With URL",
+            "old_platform": "ashby",
+            "old_ident": "failed-url",
+            "career_url": "https://jobs.ashbyhq.com/failed-url",
+            "status": "unrecoverable",
+            "reason": "404 not found",
+        },
+        {
+            "company_name": "Failed Without URL",
+            "old_platform": "greenhouse",
+            "old_ident": "failed-nourl",
+            "status": "unresolved",
+            "reason": "inconclusive search",
+        },
+    ]
+
+    md = generate_manual_review_markdown(recoveries)
+    assert "# ATS Career Links Needing Manual Review" in md
+    assert "| Company | Current ATS | Career Link | Issue |" in md
+    assert "| Failed With URL | `ashby/failed-url` | https://jobs.ashbyhq.com/failed-url | 404 not found |" in md
+    assert (
+        "| Failed Without URL | `greenhouse/failed-nourl` | https://job-boards.greenhouse.io/failed-nourl | inconclusive search |"
+        in md
+    )
+    # Must NOT include fixed or transient logs
+    assert "Recovered Corp" not in md
+    assert "Transient Inc" not in md
+    assert "Summary" not in md
+    assert "Verified Fixes" not in md
+
+    # Duplicate unrecoverable entries are deduped
+    with_dup = recoveries + [recoveries[2]]
+    assert generate_manual_review_markdown(with_dup) == md
+
+
+def test_generate_manual_review_markdown_empty():
+    recoveries = [
+        {"company_name": "Company A", "status": "recovered"},
+        {"company_name": "Company B", "status": "transient"},
+    ]
+    assert generate_manual_review_markdown(recoveries) == ""
+    assert generate_manual_review_markdown([]) == ""
 
 
 @pytest.mark.anyio
@@ -623,3 +687,17 @@ async def test_recover_company_workday_cluster_self_recovery_marked_as_transient
                 res = await recover_company(client, comp)
                 assert res["status"] == "transient"
                 assert "old workday cluster responding" in res["reason"]
+
+
+@pytest.mark.anyio
+async def test_check_ashby_missing_board_returns_immediately_without_retries():
+    client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"data": {"jobBoard": None}}
+    client.post.return_value = mock_response
+
+    ok, detail = await check_ashby(client, "nonexistent-ident")
+    assert ok is False
+    assert detail == "board not found"
+    assert client.post.call_count == 1

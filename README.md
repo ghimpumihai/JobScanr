@@ -155,6 +155,7 @@ Scans scrape failures, discovers & verifies working ATS replacements, triages un
 | `--failures-file <path>` | `None` | Path to structured failures JSON (e.g. `failures.json`). |
 | `--companies-file <path>` | `seed/companies.json` | Path to company seed JSON file. |
 | `--report-file <path>` | `fix_report.md` | Path to write the Markdown triage & repair summary report. |
+| `--manual-review-file <path>` | `manual_review.md` | Path to write the Markdown report containing links that need manual review. |
 | `--dry-run` | `False` | Discover, verify, and triage fixes without modifying `seed/companies.json` or database. |
 | `--ai` | Auto (`True` if `GROQ_API_KEY` set) | Explicitly enable AI search & triage for unrecoverable links. |
 | `--no-ai` | `False` | Disable AI search & triage, only running deterministic heuristics. |
