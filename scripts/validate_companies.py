@@ -106,10 +106,9 @@ async def check_ashby(client: httpx.AsyncClient, ident: str) -> tuple[bool, str]
             if body.get("errors"):
                 return False, f"GraphQL error: {body['errors'][0].get('message', 'unknown')[:60]}"
             board = (body.get("data") or {}).get("jobBoard")
-            if board is not None:
-                return True, f"{len(board['jobPostings'])} jobs"
-            await asyncio.sleep(delay)
-            delay *= 2
+            if board is None:
+                return False, "board not found"
+            return True, f"{len(board['jobPostings'])} jobs"
         return False, "throttled after retries"
 
 

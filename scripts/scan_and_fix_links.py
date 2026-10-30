@@ -31,6 +31,7 @@ from scripts.validate_companies import (
 
 SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
 DEFAULT_REPORT_FILE = Path(__file__).parent.parent / "fix_report.md"
+DEFAULT_MANUAL_REVIEW_FILE = Path(__file__).parent.parent / "manual_review.md"
 CONCURRENCY = 8
 TIMEOUT = 15.0
 UA = "JobScanr/0.1 (personal job alert; automated link fixer)"
@@ -415,6 +416,40 @@ def generate_report_markdown(recoveries: list[dict], failures_count: int) -> str
     return "\n".join(lines)
 
 
+def generate_manual_review_markdown(recoveries: list[dict]) -> str:
+    """Generates focused markdown report containing only broken links that require manual review."""
+    unrecoverable = [r for r in recoveries if r["status"] in ("unrecoverable", "unresolved")]
+    if not unrecoverable:
+        return ""
+
+    seen = set()
+    unique_unrecoverable = []
+    for r in unrecoverable:
+        key = (r.get("company_name", "").lower(), r.get("old_platform", "").lower(), r.get("old_ident", "").lower())
+        if key not in seen:
+            seen.add(key)
+            unique_unrecoverable.append(r)
+
+    lines = [
+        "# ATS Career Links Needing Manual Review",
+        "",
+        "The following ATS career links failed scraping and could not be automatically recovered. Please verify these links manually:",
+        "",
+        "| Company | Current ATS | Career Link | Issue |",
+        "|---|---|---|---|",
+    ]
+    for r in unique_unrecoverable:
+        plat = r.get("old_platform") or ""
+        ident = r.get("old_ident") or ""
+        cur_str = f"{plat}/{ident}" if plat or ident else "unknown"
+        link = r.get("career_url") or (construct_career_url(plat, ident) if plat and ident else "")
+        link_str = link if link else "N/A"
+        reason = r.get("reason") or "unresolved"
+        lines.append(f"| {r['company_name']} | `{cur_str}` | {link_str} | {reason} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 async def main_async(args) -> int:
     # 1. Load companies.json
     companies_path = Path(args.companies_file)
@@ -486,7 +521,22 @@ async def main_async(args) -> int:
 
     async def bounded_recover(client, comp):
         async with sem:
-            return await recover_company(client, comp)
+            try:
+                return await asyncio.wait_for(recover_company(client, comp), timeout=45.0)
+            except (TimeoutError, asyncio.TimeoutError):
+                print(f"Warning: deterministic recovery timed out for {comp.get('company_name')}")
+                return {
+                    "company_name": comp.get("company_name", ""),
+                    "old_platform": comp.get("ats_platform"),
+                    "old_ident": comp.get("ats_identifier"),
+                    "career_url": comp.get("career_url", ""),
+                    "status": "unrecoverable",
+                    "new_platform": None,
+                    "new_ident": None,
+                    "new_career_url": None,
+                    "verification_detail": None,
+                    "reason": "recovery timed out",
+                }
 
     async with httpx.AsyncClient(timeout=TIMEOUT, headers={"User-Agent": UA}, follow_redirects=True) as client:
         recoveries = list(await asyncio.gather(*(bounded_recover(client, t) for t in targets)))
@@ -498,7 +548,16 @@ async def main_async(args) -> int:
         if enable_ai:
             unresolved_indices = [i for i, r in enumerate(recoveries) if r["status"] == "unrecoverable"]
             if unresolved_indices:
-                print(f"\nInvoking AI triage for {len(unresolved_indices)} unresolved companies...")
+                # Cap the maximum number of AI triage attempts per run to protect workflow runtime
+                MAX_AI_TRIAGE_TARGETS = 25
+                triage_indices = unresolved_indices[:MAX_AI_TRIAGE_TARGETS]
+                if len(unresolved_indices) > MAX_AI_TRIAGE_TARGETS:
+                    print(
+                        f"\nCapping AI triage to {MAX_AI_TRIAGE_TARGETS} targets "
+                        f"(out of {len(unresolved_indices)} unresolved) to protect run timeout."
+                    )
+
+                print(f"\nInvoking AI triage for {len(triage_indices)} unresolved companies...")
                 from scripts.ai_fixer import triage_company_with_ai
 
                 ai_sem = asyncio.Semaphore(3)
@@ -506,10 +565,17 @@ async def main_async(args) -> int:
                 async def bounded_ai(idx):
                     async with ai_sem:
                         target_comp = targets[idx]
-                        ai_res = await triage_company_with_ai(client, target_comp)
+                        try:
+                            ai_res = await asyncio.wait_for(
+                                triage_company_with_ai(client, target_comp),
+                                timeout=30.0,
+                            )
+                        except (TimeoutError, asyncio.TimeoutError):
+                            print(f"Warning: AI triage timed out for {target_comp.get('company_name')}")
+                            ai_res = {"status": "unresolved", "reason": "AI triage timed out"}
                         return idx, ai_res
 
-                ai_results = await asyncio.gather(*(bounded_ai(i) for i in unresolved_indices))
+                ai_results = await asyncio.gather(*(bounded_ai(i) for i in triage_indices))
                 for idx, ai_res in ai_results:
                     if ai_res["status"] in ("recovered_by_ai", "remove"):
                         recoveries[idx] = ai_res
@@ -564,6 +630,17 @@ async def main_async(args) -> int:
     print(f"\nRepair report written to {args.report_file}:")
     print(report_md)
 
+    manual_review_file = getattr(args, "manual_review_file", None)
+    if manual_review_file:
+        manual_md = generate_manual_review_markdown(recoveries)
+        manual_path = Path(manual_review_file)
+        if manual_md:
+            manual_path.write_text(manual_md)
+            print(f"\nManual review report written to {manual_review_file}:")
+            print(manual_md)
+        elif manual_path.exists():
+            manual_path.unlink()
+
     return 0
 
 
@@ -574,6 +651,12 @@ def main():
     parser.add_argument("--companies-file", type=str, default=str(SEED_FILE), help="path to seed/companies.json")
     parser.add_argument(
         "--report-file", type=str, default=str(DEFAULT_REPORT_FILE), help="path to output markdown report"
+    )
+    parser.add_argument(
+        "--manual-review-file",
+        type=str,
+        default=str(DEFAULT_MANUAL_REVIEW_FILE),
+        help="path to output manual review markdown file for unrecoverable links (default: manual_review.md)",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="discover and verify fixes without modifying companies.json"
