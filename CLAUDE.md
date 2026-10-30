@@ -24,6 +24,7 @@ python -m scripts.validate_seed_schema                   # validate seed/compani
 python -m jobs.scrape_and_notify --dry-run               # scrape pipeline without DB writes or email
 python -m seed.seed --staging                             # sync companies to staging database
 python -m scripts.test_email --limit 5                    # preview email digest rendering
+graphify update .                                         # update AST knowledge graph for code changes
 ```
 
 ## Architectural Gotchas & Guardrails
@@ -51,4 +52,15 @@ This repository uses [GitHub Spec Kit](https://github.com/github/spec-kit) stand
   - `/spec-implement`: Execute implementation step-by-step against `tasks.md`.
   - `/spec-converge`: Verify implementation against specification, tests, and linters.
   - `/spec-bug`: Structured bug assessment, reproduction, root-cause patch, and regression tests.
+
+## graphify
+
+This project has a knowledge graph at `graphify-out/` with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- When `graphify-out/graph.json` exists, use the graphify MCP tools (`query_graph`, `get_node`, `get_neighbors`, `graph_stats`, etc.) or run `graphify query "<question>"` before your first grep, search or source-file read for codebase exploration questions. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+- If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- A committed `graphify-out/graph.json` is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
 
