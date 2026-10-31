@@ -1531,9 +1531,9 @@
   },
   {
     "company_name": "Arch",
-    "career_url": "https://jobs.ashbyhq.com/arch.co",
+    "career_url": "https://jobs.ashbyhq.com/arch",
     "ats_platform": "ashby",
-    "ats_identifier": "arch.co"
+    "ats_identifier": "arch"
   },
   {
     "company_name": "Arch Capital Group",
@@ -13279,9 +13279,9 @@
   },
   {
     "company_name": "Ncino",
-    "career_url": "https://ncino.wd5.myworkdayjobs.com/nCinoCareers",
-    "ats_platform": "workday",
-    "ats_identifier": "ncino|wd5|nCinoCareers"
+    "career_url": "https://job-boards.greenhouse.io/ncinoinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "ncinoinc"
   },
   {
     "company_name": "NCR Atleos",
@@ -18865,8 +18865,8 @@
   },
   {
     "company_name": "Tempo",
-    "career_url": "https://jobs.ashbyhq.com/tempo",
-    "ats_platform": "ashby",
+    "career_url": "https://job-boards.greenhouse.io/tempo",
+    "ats_platform": "greenhouse",
     "ats_identifier": "tempo"
   },
   {
