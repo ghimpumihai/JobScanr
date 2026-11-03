@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   lint-and-typecheck:
+    if: github.event_name == 'push' || (github.actor != 'github-actions[bot]' && github.event.pull_request.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -40,6 +41,7 @@ jobs:
         run: python -m scripts.validate_seed_schema
 
   test:
+    if: github.event_name == 'push' || (github.actor != 'github-actions[bot]' && github.event.pull_request.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -54,6 +56,7 @@ jobs:
         run: python -m pytest tests/ -v --cov=.
 
   security-audit:
+    if: github.event_name == 'push' || (github.actor != 'github-actions[bot]' && github.event.pull_request.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
