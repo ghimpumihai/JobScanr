@@ -2695,9 +2695,9 @@
   },
   {
     "company_name": "Beta Technologies",
-    "career_url": "https://jobs.lever.co/beta",
-    "ats_platform": "lever",
-    "ats_identifier": "beta"
+    "career_url": "https://job-boards.greenhouse.io/betatechnologiesinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "betatechnologiesinc"
   },
   {
     "company_name": "Beth Israel Lahey Health",
@@ -10750,12 +10750,6 @@
     "career_url": "https://job-boards.greenhouse.io/katalyst",
     "ats_platform": "greenhouse",
     "ats_identifier": "katalyst"
-  },
-  {
-    "company_name": "Kayak",
-    "career_url": "https://boards.greenhouse.io/kayak",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "kayak"
   },
   {
     "company_name": "KAYAK",
