@@ -439,9 +439,9 @@
   },
   {
     "company_name": "Advocate Health Care",
-    "career_url": "https://aah.wd5.myworkdayjobs.com/External",
-    "ats_platform": "workday",
-    "ats_identifier": "aah|wd5|External"
+    "career_url": "https://jobs.lever.co/advocate",
+    "ats_platform": "lever",
+    "ats_identifier": "advocate"
   },
   {
     "company_name": "Adyen",
@@ -2574,12 +2574,6 @@
     "ats_identifier": "beaconai"
   },
   {
-    "company_name": "Beacon Software",
-    "career_url": "https://jobs.ashbyhq.com/beaconsoftware",
-    "ats_platform": "ashby",
-    "ats_identifier": "beaconsoftware"
-  },
-  {
     "company_name": "Beamery",
     "career_url": "https://jobs.ashbyhq.com/beamery",
     "ats_platform": "ashby",
@@ -2695,9 +2689,9 @@
   },
   {
     "company_name": "Beta Technologies",
-    "career_url": "https://jobs.lever.co/beta",
-    "ats_platform": "lever",
-    "ats_identifier": "beta"
+    "career_url": "https://job-boards.greenhouse.io/betatechnologiesinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "betatechnologiesinc"
   },
   {
     "company_name": "Beth Israel Lahey Health",
@@ -10750,12 +10744,6 @@
     "career_url": "https://job-boards.greenhouse.io/katalyst",
     "ats_platform": "greenhouse",
     "ats_identifier": "katalyst"
-  },
-  {
-    "company_name": "Kayak",
-    "career_url": "https://boards.greenhouse.io/kayak",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "kayak"
   },
   {
     "company_name": "KAYAK",
