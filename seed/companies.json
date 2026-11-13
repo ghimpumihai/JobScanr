@@ -1963,9 +1963,9 @@
   },
   {
     "company_name": "Atlas Energy Solutions",
-    "career_url": "https://job-boards.greenhouse.io/atlassand",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "atlassand"
+    "career_url": "https://jobs.ashbyhq.com/ATLAS-careers",
+    "ats_platform": "ashby",
+    "ats_identifier": "ATLAS-careers"
   },
   {
     "company_name": "Atomic Invest (AtomicVest)",
@@ -12018,12 +12018,6 @@
     "ats_identifier": "marmon|wd501|Marmon_Careers"
   },
   {
-    "company_name": "Marmon Holdings",
-    "career_url": "https://marmon.wd501.myworkdayjobs.com/Marmon_MSIP_Internships",
-    "ats_platform": "workday",
-    "ats_identifier": "marmon|wd501|Marmon_MSIP_Internships"
-  },
-  {
     "company_name": "Marriott Vacations Worldwide",
     "career_url": "https://mymvw.wd5.myworkdayjobs.com/mvw",
     "ats_platform": "workday",
@@ -18691,8 +18685,8 @@
   },
   {
     "company_name": "Tavily",
-    "career_url": "https://jobs.ashbyhq.com/tavily",
-    "ats_platform": "ashby",
+    "career_url": "https://job-boards.greenhouse.io/tavily",
+    "ats_platform": "greenhouse",
     "ats_identifier": "tavily"
   },
   {
