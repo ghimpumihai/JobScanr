@@ -11947,9 +11947,9 @@
   },
   {
     "company_name": "Maple AI",
-    "career_url": "https://jobs.ashbyhq.com/maple",
-    "ats_platform": "ashby",
-    "ats_identifier": "maple"
+    "career_url": "https://jobs.lever.co/getmaple",
+    "ats_platform": "lever",
+    "ats_identifier": "getmaple"
   },
   {
     "company_name": "Maple Leaf Sports & Entertainment Partnership (MLSE)",
@@ -16666,12 +16666,6 @@
     "career_url": "https://rxo.wd501.myworkdayjobs.com/rxojobs",
     "ats_platform": "workday",
     "ats_identifier": "rxo|wd501|rxojobs"
-  },
-  {
-    "company_name": "Ryan",
-    "career_url": "https://ryan.wd1.myworkdayjobs.com/Students-Graduates",
-    "ats_platform": "workday",
-    "ats_identifier": "ryan|wd1|Students-Graduates"
   },
   {
     "company_name": "Ryan",
