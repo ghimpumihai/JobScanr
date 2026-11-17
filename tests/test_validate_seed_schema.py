@@ -77,3 +77,12 @@ def test_validate_companies_duplicate_keys():
     ]
     errors = validate_companies(sample)
     assert any("duplicate platform/identifier tuple" in e for e in errors)
+
+
+def test_seed_file_identifiers_are_all_well_formed():
+    """Guards the real seed so the stricter identifier rules never lock out an existing company."""
+    import json
+
+    from scripts.validate_seed_schema import DEFAULT_SEED_FILE, validate_companies
+
+    assert validate_companies(json.loads(DEFAULT_SEED_FILE.read_text(encoding="utf-8"))) == []

@@ -5,7 +5,8 @@ Ensures that:
 2. Required fields are present: company_name, career_url, ats_platform, ats_identifier.
 3. ats_platform is one of the supported scrapers in scrapers.CLIENTS.
 4. career_url is a well-formed http/https URL.
-5. Workday identifiers contain exactly 3 segments (tenant|wdN|site).
+5. Identifiers are well-formed for their platform (Workday tenant|wdN|site, slug charset for the others),
+   so they cannot change the host or path of the request they are interpolated into.
 6. No duplicate (ats_platform, ats_identifier) tuples exist.
 
 Usage:
@@ -17,6 +18,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+from scrapers.identifiers import identifier_error
 
 DEFAULT_SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
 
@@ -65,10 +68,11 @@ def validate_companies(data: list) -> list[str]:
 
         if not ident or not isinstance(ident, str) or not ident.strip():
             errors.append(f"{prefix}: missing or empty 'ats_identifier'")
-        elif platform == "workday":
-            parts = ident.split("|")
-            if len(parts) != 3 or not parts[0] or not parts[1] or not parts[2]:
-                errors.append(f"{prefix}: invalid Workday identifier '{ident}' (must be tenant|wdN|site)")
+        else:
+            problem = identifier_error(str(platform), ident)
+            if problem:
+                label = "Workday identifier" if platform == "workday" else "ats_identifier"
+                errors.append(f"{prefix}: invalid {label} '{ident}' ({problem})")
 
         key = (platform, ident)
         if key in seen_keys:

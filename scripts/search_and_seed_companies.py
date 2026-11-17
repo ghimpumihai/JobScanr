@@ -30,6 +30,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scrapers.identifiers import identifier_error
 from scripts.validate_companies import (
     CHECKS,
     SEED_FILE,
@@ -439,7 +440,11 @@ async def main_async() -> int:
                 r = await client.get(url)
                 if r.status_code == 200:
                     raw_list = r.json()
-                    fresh = [item for item in raw_list if (plat, item) not in existing_keys]
+                    fresh = [
+                        item
+                        for item in raw_list
+                        if identifier_error(plat, item) is None and (plat, item) not in existing_keys
+                    ]
                     candidate_pools[plat] = fresh
                     print(f"  {plat}: {len(fresh)} new candidates available")
             except Exception as exc:
