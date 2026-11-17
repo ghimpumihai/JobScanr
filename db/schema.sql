@@ -197,6 +197,62 @@ CREATE TRIGGER trg_protect_application_queue_fields
     FOR EACH ROW
     EXECUTE FUNCTION protect_application_queue_fields();
 
+-- Shared catalog tables (companies, job_postings): written only by the backend, which connects with a
+-- role that bypasses RLS. Authenticated web users may read them (the matches page joins job_postings);
+-- anon gets nothing and no web role can write. Without this, Supabase's default grants expose them
+-- to writes through the public anon key.
+ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_postings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "companies_select_authenticated" ON companies;
+CREATE POLICY "companies_select_authenticated" ON companies
+    FOR SELECT TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "job_postings_select_authenticated" ON job_postings;
+CREATE POLICY "job_postings_select_authenticated" ON job_postings
+    FOR SELECT TO authenticated
+    USING (true);
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        REVOKE ALL ON companies, job_postings FROM anon;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
+    END IF;
+EXCEPTION
+    WHEN insufficient_privilege THEN
+        NULL;
+END $$;
+
+-- users: the apply worker downloads users.resume_storage_path with the service-role key (which bypasses
+-- storage RLS), so a user may only point it at their own folder in the resumes bucket.
+CREATE OR REPLACE FUNCTION protect_user_worker_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (current_user = 'authenticated' OR auth.role() = 'authenticated') THEN
+        IF NEW.resume_storage_path IS DISTINCT FROM OLD.resume_storage_path
+           AND NEW.resume_storage_path IS NOT NULL THEN
+            IF auth.uid() IS NULL
+               OR position('..' IN NEW.resume_storage_path) > 0
+               OR position('/' IN NEW.resume_storage_path) = 0
+               OR split_part(NEW.resume_storage_path, '/', 1) <> auth.uid()::text THEN
+                RAISE EXCEPTION 'resume_storage_path must be inside your own folder';
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_protect_user_worker_fields ON users;
+CREATE TRIGGER trg_protect_user_worker_fields
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_user_worker_fields();
+
 -- Supabase Storage 'resumes' bucket definition (idempotent, safe for non-Supabase environments)
 DO $$
 BEGIN
