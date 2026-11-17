@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a192f"/>
+      <stop offset="100%" stop-color="#071224"/>
+    </linearGradient>
+    <linearGradient id="scanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0a66c2" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background container -->
+  <rect width="32" height="32" rx="7" fill="url(#bgGrad)"/>
+  <rect width="30" height="30" x="1" y="1" rx="6" fill="none" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Radar Rings -->
+  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#1e3a5f" stroke-width="1.25"/>
+  <circle cx="16" cy="16" r="6.5" fill="none" stroke="#2563eb" stroke-width="1.25" stroke-dasharray="2 2"/>
+  <circle cx="16" cy="16" r="2.5" fill="none" stroke="#38bdf8" stroke-width="1.25"/>
+
+  <!-- Radar Scanner Sweep Arc -->
+  <path d="M 16 16 L 24 9 A 10.5 10.5 0 0 0 16 5.5 Z" fill="url(#scanGrad)"/>
+
+  <!-- Crosshairs -->
+  <line x1="16" y1="3" x2="16" y2="7" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="16" y1="25" x2="16" y2="29" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="3" y1="16" x2="7" y2="16" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="25" y1="16" x2="29" y2="16" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Center Active Radar Target Blip -->
+  <circle cx="16" cy="16" r="1.75" fill="#10b981"/>
+  <!-- Discovered Job Target Blip -->
+  <circle cx="21" cy="11.5" r="1.5" fill="#38bdf8"/>
+</svg>

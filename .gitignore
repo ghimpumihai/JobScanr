@@ -62,3 +62,6 @@ node_modules/
 .svelte-kit/
 .svelte/
 build/
+.impeccable/
+.playwright-mcp/
+
