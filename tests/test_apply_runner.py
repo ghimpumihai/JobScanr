@@ -230,9 +230,10 @@ def sample_claim() -> ApplicationClaim:
         attempts=1,
         screening_defaults={"first_name": "Jane", "last_name": "Doe", "email": "jane@example.com"},
         resume_data={"skills": ["python"]},
-        resume_storage_path="1/resume.pdf",
+        resume_storage_path="auth-uuid-1/resume.pdf",
         resume_filename="resume.pdf",
         resume_content_type="application/pdf",
+        auth_user_id="auth-uuid-1",
     )
 
 
@@ -588,3 +589,35 @@ def test_run_queue_worker_processes_and_exits():
             assert claim_arg.id == 101
 
     asyncio.run(run())
+
+
+def test_transition_application_status_is_compare_and_set_on_from_status():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 0  # row was reaped to needs_review meanwhile
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        res = queries.transition_application_status(application_id=7, to_status="submitted", from_status="submitting")
+        assert res is False
+        sql, params = mock_cur.execute.call_args_list[0][0]
+        assert "AND status = %s" in sql
+        assert params[-1] == "submitting"
+        assert mock_cur.execute.call_count == 1  # no audit event for a skipped transition
+
+
+def test_process_application_without_owner_id_does_not_download_cv(sample_claim):
+    sample_claim.auth_user_id = None
+
+    async def run():
+        with (
+            patch("jobs.apply.runner.check_posting_liveness", return_value=True),
+            patch("jobs.apply.runner.transition_application_status") as mock_transition,
+        ):
+            result = await process_application(sample_claim)
+            return result, mock_transition
+
+    result, mock_transition = asyncio.run(run())
+    assert result.final_status == "needs_review"
+    assert mock_transition.call_args[1]["to_status"] == "needs_review"
