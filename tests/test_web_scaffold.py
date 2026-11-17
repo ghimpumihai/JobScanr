@@ -48,3 +48,10 @@ def test_no_emojis_in_web_components():
     for svelte_file in components_dir.glob("*.svelte"):
         text = svelte_file.read_text(encoding="utf-8")
         assert not emoji_pattern.search(text), f"Emoji found in {svelte_file.name}"
+
+
+def test_matches_loader_only_emits_http_urls():
+    loader = (WEB_ROOT / "src/routes/(app)/matches/+page.server.ts").read_text(encoding="utf-8")
+    assert "safeHttpUrl(row.job_postings?.url)" in loader
+    helper = (WEB_ROOT / "src/lib/safeUrl.ts").read_text(encoding="utf-8")
+    assert "'http:'" in helper and "'https:'" in helper

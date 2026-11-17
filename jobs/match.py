@@ -9,11 +9,18 @@ Checks, in order of cheapness:
 6. no excluded seniority word anywhere
 """
 
+import logging
 import re
 import unicodedata
 
 from config import PROFILE
 from models import JobPosting
+
+logger = logging.getLogger(__name__)
+
+# profile_filters is user-writable JSON. Bound what a tenant can make the shared matcher do.
+MAX_DESCRIPTION_PATTERNS = 20
+MAX_PATTERN_LENGTH = 200
 
 US_RESTRICTED_RE = re.compile(r"\b(united states|usa|u\.s\.|us|canada)\b")
 
@@ -59,6 +66,25 @@ def _any_word(tokens: list[str], text: str) -> bool:
     return any(re.search(rf"\b{re.escape(_normalize(t))}\b", text) for t in tokens)
 
 
+def _matches_user_pattern(patterns: object, text: str) -> bool:
+    """True if any user-supplied regex matches ``text``; malformed or oversized patterns are skipped, not raised.
+
+    shortcut: Python's ``re`` has no timeout, so a catastrophic-backtracking pattern within these size
+    limits can still be slow; switch to the ``re2`` package if untrusted regexes need hard guarantees.
+    """
+    if not isinstance(patterns, list):
+        return False
+    for pat in patterns[:MAX_DESCRIPTION_PATTERNS]:
+        if not isinstance(pat, str) or len(pat) > MAX_PATTERN_LENGTH:
+            continue
+        try:
+            if re.search(pat, text, re.IGNORECASE):
+                return True
+        except re.error:
+            logger.warning("Ignoring invalid excluded_description_pattern %r", pat[:60])
+    return False
+
+
 def _foreign_country_restriction(job: dict, p: dict) -> bool:
     """True if any sentence restricts eligibility to a non-eligible region.
 
@@ -90,16 +116,17 @@ def matches_profile(job: JobPosting | dict, profile: dict | None = None) -> bool
     text = f"{headline} {_normalize(job.get('description'))}"
     location = _normalize(job.get("location"))
 
-    if not _any_word(p["titles"], title):
+    if not _any_word(p.get("titles") or [], title):
         return False
     if not _any_word(p.get("levels", []), title):
         return False
-    if not any(loc in headline for loc in map(_normalize, p["locations"])):
+    locations = p.get("locations") or []
+    if not any(loc in headline for loc in map(_normalize, locations)):
         return False
     # "Remote" alone isn't EU-remote: "Remote - United States" is not
     # applicable. Only count it when the posting doesn't restrict to
     # non-EU countries (and no concrete EU location was named).
-    eu_loc_named = any(loc != "remote" and loc in location for loc in map(_normalize, p["locations"]))
+    eu_loc_named = any(loc != "remote" and loc in location for loc in map(_normalize, locations))
     if "remote" in location and not eu_loc_named and US_RESTRICTED_RE.search(location):
         return False
     if _any_word(p.get("excluded_title_keywords", []), title):
@@ -109,7 +136,7 @@ def matches_profile(job: JobPosting | dict, profile: dict | None = None) -> bool
         return False
     if p.get("excluded_keywords") and _any_word(p["excluded_keywords"], text):
         return False
-    if any(re.search(pat, text, re.IGNORECASE) for pat in p.get("excluded_description_patterns", [])):
+    if _matches_user_pattern(p.get("excluded_description_patterns"), text):
         return False
     if YEARS_EXPERIENCE_RE.search(text):
         return False
