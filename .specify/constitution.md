@@ -26,7 +26,7 @@ Every feature, plan, and pull request must strictly comply with the following in
 ### 1.4 Scraper Concurrency & Rate Limiting
 - **Concurrency Pools**:
   - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): 30-worker semaphore.
-  - Workday: Dedicated 40-worker pool; identifiers must strictly follow `tenant|wdN|site`.
+  - Workday: Dedicated 20-worker pool; identifiers must strictly follow `tenant|wdN|site`.
   - Ashby: Serialized pacing lock (`asyncio.Lock()` with 0.5s pause) to prevent GraphQL drops and soft-throttling null payloads.
 - **Circuit Breakers**:
   - Scrape pipeline aborts if failure rate exceeds 20% (`FAILURE_RATE_LIMIT = 0.2`).

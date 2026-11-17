@@ -92,6 +92,6 @@ def make_http_client() -> httpx.AsyncClient:
         timeout=httpx.Timeout(20.0),
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
-        # Must exceed the sum of worker pools (30 fast + 40 Workday + Ashby); 20 starved them and caused pool waits.
+        # Must exceed the sum of worker pools (30 fast + 20 Workday + Ashby); 20 starved them and caused pool waits.
         limits=httpx.Limits(max_connections=100),
     )
