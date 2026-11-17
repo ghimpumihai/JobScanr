@@ -51,6 +51,7 @@ def test_download_resume_stream_success():
         client=client,
         supabase_url="https://xyz.supabase.co",
         service_role_key="test-service-key",
+        owner_id="auth-uuid-1",
     )
 
     assert isinstance(stream, io.BytesIO)
@@ -90,6 +91,7 @@ def test_upload_resume_bytes_success():
         client=client,
         supabase_url="https://xyz.supabase.co",
         service_role_key="test-service-key",
+        owner_id="auth-uuid-2",
     )
 
     assert res is True
@@ -110,3 +112,38 @@ def test_storage_path_empty_validation():
             supabase_url="https://xyz.supabase.co",
             service_role_key="test-service-key",
         )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "other-uid/resume.pdf",  # another tenant's folder
+        "auth-uuid-1/../other-uid/resume.pdf",  # traversal
+        "auth-uuid-1//resume.pdf",  # empty segment
+        "auth-uuid-1/./resume.pdf",
+        "auth-uuid-1/%2e%2e/x.pdf",  # encoded dots
+        "auth-uuid-1\\..\\x.pdf",  # backslash
+        "resume.pdf",  # no folder
+        "auth-uuid-10/resume.pdf",  # prefix of a different id
+    ],
+)
+def test_safe_object_path_rejects_paths_outside_owner_folder(path):
+    with pytest.raises(ValueError):
+        cv_storage.safe_object_path(path, "auth-uuid-1")
+
+
+def test_safe_object_path_accepts_own_folder_and_strips_leading_slash():
+    assert cv_storage.safe_object_path("/auth-uuid-1/cv.pdf", "auth-uuid-1") == "auth-uuid-1/cv.pdf"
+    assert cv_storage.safe_object_path("AUTH-UUID-1/cv.pdf", "auth-uuid-1") == "AUTH-UUID-1/cv.pdf"
+
+
+def test_download_requires_owner_and_makes_no_request_for_foreign_path():
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - must not be reached
+        raise AssertionError("no request may be sent for an unbound path")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    kwargs = {"client": client, "supabase_url": "https://xyz.supabase.co", "service_role_key": "k"}
+    with pytest.raises(ValueError):
+        cv_storage.download_resume_stream("other-uid/cv.pdf", owner_id="auth-uuid-1", **kwargs)
+    with pytest.raises(ValueError):
+        cv_storage.download_resume_stream("auth-uuid-1/cv.pdf", owner_id=None, **kwargs)

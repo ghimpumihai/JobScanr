@@ -1,6 +1,7 @@
 """All DB operations in one place (plan Phase 3)."""
 
 import json
+import logging
 import uuid
 from contextlib import AbstractContextManager
 from datetime import datetime
@@ -11,6 +12,8 @@ from psycopg_pool import ConnectionPool
 
 import config
 from models import Company, JobPosting
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -536,7 +539,8 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
         SELECT u_app.id, u_app.user_id, u_app.job_posting_id, jp.company_id, comp.name AS company_name,
                comp.ats_platform, comp.ats_identifier, jp.url AS job_url, jp.title AS job_title,
                u_app.attempt_token, u_app.attempts,
-               usr.screening_defaults, usr.resume_data, usr.resume_storage_path, usr.resume_filename, usr.resume_content_type
+               usr.screening_defaults, usr.resume_data, usr.resume_storage_path, usr.resume_filename, usr.resume_content_type,
+               usr.auth_user_id
         FROM updated u_app
         JOIN job_postings jp ON u_app.job_posting_id = jp.id
         JOIN companies comp ON jp.company_id = comp.id
@@ -568,6 +572,7 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
             "resume_storage_path": row[13],
             "resume_filename": row[14],
             "resume_content_type": row[15],
+            "auth_user_id": str(row[16]) if len(row) > 16 and row[16] is not None else None,
         }
 
         cur.execute(
@@ -590,21 +595,31 @@ def transition_application_status(
 ) -> bool:
     """Update application status, optional payload and next attempt, and record an audit event.
 
+    When ``from_status`` is given the update is a compare-and-set: it only applies if the row is still in
+    that status, so a worker that outlived the stalled-application reaper cannot overwrite the reaper's state.
+    Returns False (and writes no event) when nothing was updated.
+
     Commits and releases database connection immediately.
     """
     payload_json = json.dumps(submitted_payload) if submitted_payload is not None else None
+    sql = """
+        UPDATE applications
+        SET status = %s,
+            submitted_payload = COALESCE(%s::jsonb, submitted_payload),
+            next_attempt_at = %s
+        WHERE id = %s
+    """
+    params: tuple = (to_status, payload_json, next_attempt_at, application_id)
+    if from_status is not None:
+        sql += "  AND status = %s\n"
+        params += (from_status,)
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE applications
-            SET status = %s,
-                submitted_payload = COALESCE(%s::jsonb, submitted_payload),
-                next_attempt_at = %s
-            WHERE id = %s
-            """,
-            (to_status, payload_json, next_attempt_at, application_id),
-        )
+        cur.execute(sql, params)
         if cur.rowcount == 0:
+            if from_status is not None:
+                logger.warning(
+                    "Application %s not in status %r; skipped transition to %r", application_id, from_status, to_status
+                )
             return False
 
         cur.execute(
