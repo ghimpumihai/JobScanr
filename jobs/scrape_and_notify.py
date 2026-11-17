@@ -53,26 +53,29 @@ async def scrape_all(
 
         async def fetch(c):
             try:
-                # Hard cap: httpx's 20s is per-read, so retries/pagination can otherwise stall a company
-                # (and the Ashby lock) for minutes.
-                return await asyncio.wait_for(_fetch(c), timeout=PER_COMPANY_TIMEOUT)
+                return await _fetch(c)
             finally:
                 done[0] += 1
                 if done[0] % PROGRESS_EVERY == 0:
                     logger.info("Scrape progress: %d/%d companies", done[0], len(companies))
+
+        async def timed(c):
+            # Hard cap on the request itself (not queue time): httpx's 20s is per-read, so retries/pagination
+            # could otherwise stall a company, and the Ashby lock, for minutes.
+            return await asyncio.wait_for(fetch_company(http, c), timeout=PER_COMPANY_TIMEOUT)
 
         async def _fetch(c):
             plat = c.get("ats_platform")
             if plat == "ashby":
                 async with ashby_lock:
                     await asyncio.sleep(0.5)
-                    return await fetch_company(http, c)
+                    return await timed(c)
             elif plat == "workday":
                 async with workday_sem:
-                    return await fetch_company(http, c)
+                    return await timed(c)
             else:
                 async with fast_sem:
-                    return await fetch_company(http, c)
+                    return await timed(c)
 
         results = await asyncio.gather(
             *(fetch(c) for c in companies),
