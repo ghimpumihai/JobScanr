@@ -19,6 +19,17 @@ from jobs.apply.runner import (
 
 
 @pytest.fixture(autouse=True)
+def public_dns():
+    """Keep liveness tests offline and deterministic: every host resolves to a public address."""
+
+    async def fake_resolve(host):
+        return ["93.184.216.34"]
+
+    with patch("net_safety.resolve_host_ips", fake_resolve):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def reset_pool():
     queries.close_pool()
     yield
@@ -230,9 +241,10 @@ def sample_claim() -> ApplicationClaim:
         attempts=1,
         screening_defaults={"first_name": "Jane", "last_name": "Doe", "email": "jane@example.com"},
         resume_data={"skills": ["python"]},
-        resume_storage_path="1/resume.pdf",
+        resume_storage_path="auth-uuid-1/resume.pdf",
         resume_filename="resume.pdf",
         resume_content_type="application/pdf",
+        auth_user_id="auth-uuid-1",
     )
 
 
@@ -588,3 +600,76 @@ def test_run_queue_worker_processes_and_exits():
             assert claim_arg.id == 101
 
     asyncio.run(run())
+
+
+def test_transition_application_status_is_compare_and_set_on_from_status():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 0  # row was reaped to needs_review meanwhile
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        res = queries.transition_application_status(application_id=7, to_status="submitted", from_status="submitting")
+        assert res is False
+        sql, params = mock_cur.execute.call_args_list[0][0]
+        assert "AND status = %s" in sql
+        assert params[-1] == "submitting"
+        assert mock_cur.execute.call_count == 1  # no audit event for a skipped transition
+
+
+def test_process_application_without_owner_id_does_not_download_cv(sample_claim):
+    sample_claim.auth_user_id = None
+
+    async def run():
+        with (
+            patch("jobs.apply.runner.check_posting_liveness", return_value=True),
+            patch("jobs.apply.runner.transition_application_status") as mock_transition,
+        ):
+            result = await process_application(sample_claim)
+            return result, mock_transition
+
+    result, mock_transition = asyncio.run(run())
+    assert result.final_status == "needs_review"
+    assert mock_transition.call_args[1]["to_status"] == "needs_review"
+
+
+def test_check_posting_liveness_refuses_private_and_metadata_urls():
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        return httpx.Response(200)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return [
+                await check_posting_liveness(u, client=client)
+                for u in (
+                    "http://169.254.169.254/latest/meta-data/",
+                    "http://127.0.0.1:8080/admin",
+                    "http://[::1]/x",
+                    "ftp://example.com/x",
+                    "https://user:pw@example.com/x",
+                )
+            ]
+
+    assert asyncio.run(run()) == [None] * 5
+    assert requested == []  # nothing was sent
+
+
+def test_check_posting_liveness_does_not_follow_redirect_to_internal_host():
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "boards.example.com":
+            return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/meta-data/"})
+        return httpx.Response(200)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True) as client:
+            return await check_posting_liveness("https://boards.example.com/job/1", client=client)
+
+    assert asyncio.run(run()) is None
+    assert requested == ["https://boards.example.com/job/1"]  # only the first hop, GET fallback refused too

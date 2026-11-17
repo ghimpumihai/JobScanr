@@ -132,3 +132,44 @@ async def test_teamtailor_client_pagination():
         jobs = await client.get_jobs("example")
         assert len(jobs) == 2
         assert [j["title"] for j in jobs] == ["Role 1", "Role 2"]
+
+
+@pytest.mark.anyio
+async def test_teamtailor_ignores_next_url_on_another_host():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"items": [], "next_url": "http://169.254.169.254/latest/meta-data/"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        assert await TeamtailorClient(http).get_jobs("bmwtechworks") == []
+    assert calls == ["https://bmwtechworks.teamtailor.com/jobs.json"]
+
+
+@pytest.mark.anyio
+async def test_teamtailor_follows_next_url_on_same_host():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        nxt = None if len(calls) > 1 else "https://careers.example.com/jobs.json?page=2"
+        return httpx.Response(200, json={"items": [], "next_url": nxt})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await TeamtailorClient(http).get_jobs("https://careers.example.com")
+    assert calls == ["https://careers.example.com/jobs.json", "https://careers.example.com/jobs.json?page=2"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "ident",
+    ["evil.com/x", "a@evil.com", "http://careers.example.com", "https://127.0.0.1", "https://u:p@x.com", "../x"],
+)
+async def test_teamtailor_rejects_unsafe_identifiers_without_requesting(ident):
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - must not be reached
+        raise AssertionError("no request may be sent")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(ValueError):
+            await TeamtailorClient(http).get_jobs(ident)

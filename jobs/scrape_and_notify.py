@@ -13,6 +13,7 @@ import logging
 import sys
 import time
 
+from ats_identifiers import identifier_error
 from config import setup_logging
 from db import queries
 from jobs.match import matches_profile
@@ -26,6 +27,9 @@ FAILURE_RATE_LIMIT = 0.2
 
 
 async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
+    problem = identifier_error(company["ats_platform"], company["ats_identifier"])
+    if problem:  # never interpolate an unchecked identifier into a request URL
+        raise ValueError(f"invalid ats_identifier {company['ats_identifier']!r}: {problem}")
     client = get_client(company["ats_platform"], http)
     jobs = await client.get_jobs(company["ats_identifier"])
     for job in jobs:
