@@ -1,6 +1,9 @@
 """Shape checks for ``ats_identifier`` values before they are interpolated into request URLs.
 
 Identifiers come from seed/companies.json, which is fed by third-party lists and an LLM-assisted bot PR.
+Kept at the top level and standard-library only: the CI seed-validation job installs no dependencies,
+and importing anything under ``scrapers/`` would pull in httpx.
+
 Unchecked, a value like ``x@evil.example#`` in the Workday tenant position changes the request host.
 """
 

@@ -19,7 +19,7 @@ import json
 import sys
 from pathlib import Path
 
-from scrapers.identifiers import identifier_error
+from ats_identifiers import identifier_error
 
 DEFAULT_SEED_FILE = Path(__file__).parent.parent / "seed" / "companies.json"
 

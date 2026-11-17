@@ -30,7 +30,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scrapers.identifiers import identifier_error
+from ats_identifiers import identifier_error
 from scripts.validate_companies import (
     CHECKS,
     SEED_FILE,

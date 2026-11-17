@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
+from ats_identifiers import identifier_error
 from jobs.scrape_and_notify import fetch_company
-from scrapers.identifiers import identifier_error
 from scripts.validate_seed_schema import validate_companies
 
 

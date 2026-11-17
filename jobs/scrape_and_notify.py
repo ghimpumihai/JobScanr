@@ -13,13 +13,13 @@ import logging
 import sys
 import time
 
+from ats_identifiers import identifier_error
 from config import setup_logging
 from db import queries
 from jobs.match import matches_profile
 from models import Company, JobPosting
 from scrapers import get_client
 from scrapers.base import make_http_client
-from scrapers.identifiers import identifier_error
 
 logger = logging.getLogger(__name__)
 
