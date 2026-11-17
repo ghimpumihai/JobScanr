@@ -58,6 +58,7 @@ class ApplicationClaim:
     resume_storage_path: str | None
     resume_filename: str | None
     resume_content_type: str | None
+    auth_user_id: str | None = None  # owner's Supabase auth UUID; binds resume_storage_path to its owner
 
 
 @dataclass
@@ -194,9 +195,9 @@ async def process_application(
             reason="resume_file_missing",
         )
 
-    # 3. In-Memory CV Retrieval
+    # 3. In-Memory CV Retrieval (path must sit in the claiming user's own folder)
     try:
-        resume_stream = download_resume_stream(claim.resume_storage_path)
+        resume_stream = download_resume_stream(claim.resume_storage_path, owner_id=claim.auth_user_id)
     except Exception as err:
         logger.error("Failed to retrieve CV stream for app %s: %s", claim.id, err)
         transition_application_status(
@@ -448,6 +449,7 @@ async def run_queue_worker(
                 resume_storage_path=claim_dict["resume_storage_path"],
                 resume_filename=claim_dict["resume_filename"],
                 resume_content_type=claim_dict["resume_content_type"],
+                auth_user_id=claim_dict.get("auth_user_id"),
             )
 
             result = await process_application(claim, dry_run=dry_run, client=http_client)

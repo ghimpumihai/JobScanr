@@ -50,12 +50,35 @@ def create_resume_snapshot(
     }
 
 
+def safe_object_path(storage_path: str, owner_id: str) -> str:
+    """Return a normalized object path that is provably inside the owner's folder.
+
+    The worker reads/writes with the service-role key, which bypasses storage RLS, so the path must be
+    bound to the owner here: first segment == owner auth UUID, no empty/dot segments, no encoded or
+    backslash tricks.
+    """
+    if not storage_path or not storage_path.strip():
+        raise ValueError("storage_path must not be empty")
+    if not owner_id or not str(owner_id).strip():
+        raise ValueError("owner_id is required to bind a storage path to its owner")
+    clean = storage_path.lstrip("/")
+    segments = clean.split("/")
+    if len(segments) < 2 or any(seg in ("", ".", "..") for seg in segments):
+        raise ValueError("storage_path must be <owner>/<file> without empty or dot segments")
+    if any(ch in clean for ch in ("\\", "%")) or any(ord(ch) < 32 for ch in clean):
+        raise ValueError("storage_path contains forbidden characters")
+    if segments[0].lower() != str(owner_id).strip().lower():
+        raise ValueError("storage_path is outside the owner's folder")
+    return clean
+
+
 def download_resume_stream(
     storage_path: str,
     bucket: str = "resumes",
     client: httpx.Client | None = None,
     supabase_url: str | None = None,
     service_role_key: str | None = None,
+    owner_id: str | None = None,
 ) -> tuple[io.BytesIO, str, str]:
     """Download candidate CV directly into an in-memory stream without disk storage.
 
@@ -68,10 +91,7 @@ def download_resume_stream(
     if not base_url or not api_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for storage operations")
 
-    if not storage_path or not storage_path.strip():
-        raise ValueError("storage_path must not be empty")
-
-    clean_path = storage_path.lstrip("/")
+    clean_path = safe_object_path(storage_path, owner_id or "")
     url = f"{base_url}/storage/v1/object/authenticated/{bucket}/{clean_path}"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -105,6 +125,7 @@ def upload_resume_bytes(
     client: httpx.Client | None = None,
     supabase_url: str | None = None,
     service_role_key: str | None = None,
+    owner_id: str | None = None,
 ) -> bool:
     """Upload resume bytes to Supabase Storage in-memory."""
     base_url = (config.SUPABASE_URL if supabase_url is None else supabase_url).rstrip("/")
@@ -113,10 +134,7 @@ def upload_resume_bytes(
     if not base_url or not api_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for storage operations")
 
-    if not storage_path or not storage_path.strip():
-        raise ValueError("storage_path must not be empty")
-
-    clean_path = storage_path.lstrip("/")
+    clean_path = safe_object_path(storage_path, owner_id or "")
     url = f"{base_url}/storage/v1/object/{bucket}/{clean_path}"
     filename = os.path.basename(clean_path)
     mime = content_type or get_content_type_for_filename(filename)
