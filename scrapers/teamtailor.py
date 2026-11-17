@@ -65,8 +65,8 @@ def _format_location(job_posting: dict) -> str | None:
 
 class TeamtailorClient(BaseClient):
     async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
-        url = _feed_url(ats_identifier)
-        feed_host = urlsplit(url).hostname
+        url: str | None = _feed_url(ats_identifier)
+        feed_host = urlsplit(url).hostname  # url is a str here
 
         jobs: list[JobPosting] = []
         page_count = 0
