@@ -19,6 +19,17 @@ from jobs.apply.runner import (
 
 
 @pytest.fixture(autouse=True)
+def public_dns():
+    """Keep liveness tests offline and deterministic: every host resolves to a public address."""
+
+    async def fake_resolve(host):
+        return ["93.184.216.34"]
+
+    with patch("net_safety.resolve_host_ips", fake_resolve):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def reset_pool():
     queries.close_pool()
     yield
@@ -621,3 +632,44 @@ def test_process_application_without_owner_id_does_not_download_cv(sample_claim)
     result, mock_transition = asyncio.run(run())
     assert result.final_status == "needs_review"
     assert mock_transition.call_args[1]["to_status"] == "needs_review"
+
+
+def test_check_posting_liveness_refuses_private_and_metadata_urls():
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        return httpx.Response(200)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return [
+                await check_posting_liveness(u, client=client)
+                for u in (
+                    "http://169.254.169.254/latest/meta-data/",
+                    "http://127.0.0.1:8080/admin",
+                    "http://[::1]/x",
+                    "ftp://example.com/x",
+                    "https://user:pw@example.com/x",
+                )
+            ]
+
+    assert asyncio.run(run()) == [None] * 5
+    assert requested == []  # nothing was sent
+
+
+def test_check_posting_liveness_does_not_follow_redirect_to_internal_host():
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "boards.example.com":
+            return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/meta-data/"})
+        return httpx.Response(200)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True) as client:
+            return await check_posting_liveness("https://boards.example.com/job/1", client=client)
+
+    assert asyncio.run(run()) is None
+    assert requested == ["https://boards.example.com/job/1"]  # only the first hop, GET fallback refused too
