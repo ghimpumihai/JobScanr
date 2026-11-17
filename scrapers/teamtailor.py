@@ -5,8 +5,28 @@ Teamtailor provides an unauthenticated JSON Feed (v1.1) for career boards.
 Pagination follows `next_url` when present.
 """
 
+import logging
+import re
+from urllib.parse import urlsplit
+
 from models import JobPosting
+from net_safety import UnsafeUrlError, check_url_syntax
 from scrapers.base import BaseClient, strip_html
+
+logger = logging.getLogger(__name__)
+
+_TENANT_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def _feed_url(ats_identifier: str) -> str:
+    """Build the feed URL, accepting only a *.teamtailor.com tenant label or an https custom-domain URL."""
+    ident = ats_identifier.strip()
+    if ident.lower().startswith(("http://", "https://")):
+        check_url_syntax(ident, require_https=True)  # raises UnsafeUrlError for credentials / private hosts
+        return f"{ident.rstrip('/')}/jobs.json"
+    if not _TENANT_RE.fullmatch(ident.lower()):
+        raise UnsafeUrlError(f"invalid Teamtailor tenant {ats_identifier!r}")
+    return f"https://{ident.lower()}.teamtailor.com/jobs.json"
 
 
 def _format_location(job_posting: dict) -> str | None:
@@ -45,17 +65,16 @@ def _format_location(job_posting: dict) -> str | None:
 
 class TeamtailorClient(BaseClient):
     async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
-        if ats_identifier.startswith("http://") or ats_identifier.startswith("https://"):
-            url = f"{ats_identifier.rstrip('/')}/jobs.json"
-        else:
-            url = f"https://{ats_identifier}.teamtailor.com/jobs.json"
+        url = _feed_url(ats_identifier)
+        feed_host = urlsplit(url).hostname
 
         jobs: list[JobPosting] = []
         page_count = 0
         max_pages = 10
 
         while url and page_count < max_pages:
-            r = await self.request_with_retry("GET", url)
+            # No redirects: a 3xx would otherwise send the scraper to a host we did not validate.
+            r = await self.request_with_retry("GET", url, follow_redirects=False)
             r.raise_for_status()
             data = r.json()
 
@@ -78,6 +97,11 @@ class TeamtailorClient(BaseClient):
                 )
 
             url = data.get("next_url")
+            if url:
+                nxt = urlsplit(url)
+                if nxt.scheme != "https" or nxt.hostname != feed_host:
+                    logger.warning("Ignoring Teamtailor next_url on a different host: %r", url)
+                    url = None
             page_count += 1
 
         return jobs

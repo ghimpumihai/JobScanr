@@ -24,6 +24,7 @@ from jobs.apply.base import BaseSubmitter, ManualApplySubmitter
 from jobs.apply.cv_storage import download_resume_stream
 from jobs.apply.greenhouse import GreenhouseSubmitter
 from jobs.apply.lever import LeverSubmitter
+from net_safety import UnsafeUrlError, fetch_public
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ async def check_posting_liveness(url: str, client: httpx.AsyncClient | None = No
 
     try:
         try:
-            resp = await client.head(url, follow_redirects=True)
+            resp = await fetch_public(client, "HEAD", url)
             if resp.status_code in (404, 410):
                 return False
             if resp.status_code < 400:
@@ -128,11 +129,15 @@ async def check_posting_liveness(url: str, client: httpx.AsyncClient | None = No
         except (httpx.HTTPError, httpx.RequestError):
             pass
 
-        resp = await client.get(url, follow_redirects=True)
+        resp = await fetch_public(client, "GET", url)
         if resp.status_code in (404, 410):
             return False
         if resp.status_code < 400:
             return True
+        return None
+    except UnsafeUrlError as err:
+        # Scraped URL is not a public http(s) URL (or redirects to a non-public host): never request it.
+        logger.warning("Liveness check refused unsafe URL %s: %s", url, err)
         return None
     except (httpx.HTTPError, httpx.RequestError) as err:
         logger.warning("Liveness check network error for %s: %s", url, err)
