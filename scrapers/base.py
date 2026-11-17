@@ -68,10 +68,8 @@ class BaseClient(ABC):
                     r.raise_for_status()  # dead board: fail fast, no retry
                 if r.status_code == 429:
                     retry_after = r.headers.get("Retry-After")
-                    # Capped: a huge Retry-After would otherwise stall the whole run (and the Ashby lock).
-                    sleep_time = min(
-                        float(retry_after) if retry_after and retry_after.isdigit() else (delay * (attempt + 1)),
-                        60.0,
+                    sleep_time = (
+                        float(retry_after) if retry_after and retry_after.isdigit() else (delay * (attempt + 1))
                     )
                     await asyncio.sleep(sleep_time)
                     delay *= 1.5
@@ -92,6 +90,5 @@ def make_http_client() -> httpx.AsyncClient:
         timeout=httpx.Timeout(20.0),
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
-        # Must exceed the sum of worker pools (30 fast + 20 Workday + Ashby); 20 starved them and caused pool waits.
-        limits=httpx.Limits(max_connections=100),
+        limits=httpx.Limits(max_connections=20),
     )
