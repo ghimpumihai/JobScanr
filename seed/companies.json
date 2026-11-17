@@ -439,9 +439,9 @@
   },
   {
     "company_name": "Advocate Health Care",
-    "career_url": "https://aah.wd5.myworkdayjobs.com/External",
-    "ats_platform": "workday",
-    "ats_identifier": "aah|wd5|External"
+    "career_url": "https://jobs.lever.co/advocate",
+    "ats_platform": "lever",
+    "ats_identifier": "advocate"
   },
   {
     "company_name": "Adyen",
@@ -1531,9 +1531,9 @@
   },
   {
     "company_name": "Arch",
-    "career_url": "https://jobs.ashbyhq.com/arch.co",
+    "career_url": "https://jobs.ashbyhq.com/arch",
     "ats_platform": "ashby",
-    "ats_identifier": "arch.co"
+    "ats_identifier": "arch"
   },
   {
     "company_name": "Arch Capital Group",
@@ -1963,9 +1963,9 @@
   },
   {
     "company_name": "Atlas Energy Solutions",
-    "career_url": "https://job-boards.greenhouse.io/atlassand",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "atlassand"
+    "career_url": "https://jobs.ashbyhq.com/ATLAS-careers",
+    "ats_platform": "ashby",
+    "ats_identifier": "ATLAS-careers"
   },
   {
     "company_name": "Atomic Invest (AtomicVest)",
@@ -2574,12 +2574,6 @@
     "ats_identifier": "beaconai"
   },
   {
-    "company_name": "Beacon Software",
-    "career_url": "https://jobs.ashbyhq.com/beaconsoftware",
-    "ats_platform": "ashby",
-    "ats_identifier": "beaconsoftware"
-  },
-  {
     "company_name": "Beamery",
     "career_url": "https://jobs.ashbyhq.com/beamery",
     "ats_platform": "ashby",
@@ -2695,9 +2689,9 @@
   },
   {
     "company_name": "Beta Technologies",
-    "career_url": "https://jobs.lever.co/beta",
-    "ats_platform": "lever",
-    "ats_identifier": "beta"
+    "career_url": "https://job-boards.greenhouse.io/betatechnologiesinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "betatechnologiesinc"
   },
   {
     "company_name": "Beth Israel Lahey Health",
@@ -6067,8 +6061,8 @@
   },
   {
     "company_name": "Doctolib",
-    "career_url": "https://job-boards.greenhouse.io/doctolib",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/doctolib",
+    "ats_platform": "ashby",
     "ats_identifier": "doctolib"
   },
   {
@@ -10752,12 +10746,6 @@
     "ats_identifier": "katalyst"
   },
   {
-    "company_name": "Kayak",
-    "career_url": "https://boards.greenhouse.io/kayak",
-    "ats_platform": "greenhouse",
-    "ats_identifier": "kayak"
-  },
-  {
     "company_name": "KAYAK",
     "career_url": "https://jobs.ashbyhq.com/kayak",
     "ats_platform": "ashby",
@@ -11959,9 +11947,9 @@
   },
   {
     "company_name": "Maple AI",
-    "career_url": "https://jobs.ashbyhq.com/maple",
-    "ats_platform": "ashby",
-    "ats_identifier": "maple"
+    "career_url": "https://jobs.lever.co/getmaple",
+    "ats_platform": "lever",
+    "ats_identifier": "getmaple"
   },
   {
     "company_name": "Maple Leaf Sports & Entertainment Partnership (MLSE)",
@@ -12028,12 +12016,6 @@
     "career_url": "https://marmon.wd501.myworkdayjobs.com/Marmon_Careers",
     "ats_platform": "workday",
     "ats_identifier": "marmon|wd501|Marmon_Careers"
-  },
-  {
-    "company_name": "Marmon Holdings",
-    "career_url": "https://marmon.wd501.myworkdayjobs.com/Marmon_MSIP_Internships",
-    "ats_platform": "workday",
-    "ats_identifier": "marmon|wd501|Marmon_MSIP_Internships"
   },
   {
     "company_name": "Marriott Vacations Worldwide",
@@ -12727,12 +12709,6 @@
   },
   {
     "company_name": "Mistral AI",
-    "career_url": "https://jobs.lever.co/mistral",
-    "ats_platform": "lever",
-    "ats_identifier": "mistral"
-  },
-  {
-    "company_name": "Mistral AI",
     "career_url": "https://jobs.ashbyhq.com/mistral.ai",
     "ats_platform": "ashby",
     "ats_identifier": "mistral.ai"
@@ -13279,9 +13255,9 @@
   },
   {
     "company_name": "Ncino",
-    "career_url": "https://ncino.wd5.myworkdayjobs.com/nCinoCareers",
-    "ats_platform": "workday",
-    "ats_identifier": "ncino|wd5|nCinoCareers"
+    "career_url": "https://job-boards.greenhouse.io/ncinoinc",
+    "ats_platform": "greenhouse",
+    "ats_identifier": "ncinoinc"
   },
   {
     "company_name": "NCR Atleos",
@@ -16693,12 +16669,6 @@
   },
   {
     "company_name": "Ryan",
-    "career_url": "https://ryan.wd1.myworkdayjobs.com/Students-Graduates",
-    "ats_platform": "workday",
-    "ats_identifier": "ryan|wd1|Students-Graduates"
-  },
-  {
-    "company_name": "Ryan",
     "career_url": "https://ryan.wd1.myworkdayjobs.com/RyanCareers",
     "ats_platform": "workday",
     "ats_identifier": "ryan|wd1|RyanCareers"
@@ -18709,8 +18679,8 @@
   },
   {
     "company_name": "Tavily",
-    "career_url": "https://jobs.ashbyhq.com/tavily",
-    "ats_platform": "ashby",
+    "career_url": "https://job-boards.greenhouse.io/tavily",
+    "ats_platform": "greenhouse",
     "ats_identifier": "tavily"
   },
   {
@@ -18865,8 +18835,8 @@
   },
   {
     "company_name": "Tempo",
-    "career_url": "https://jobs.ashbyhq.com/tempo",
-    "ats_platform": "ashby",
+    "career_url": "https://job-boards.greenhouse.io/tempo",
+    "ats_platform": "greenhouse",
     "ats_identifier": "tempo"
   },
   {
