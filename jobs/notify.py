@@ -9,6 +9,7 @@ import logging
 import os
 import smtplib
 from email.message import EmailMessage
+from urllib.parse import urlsplit
 
 from config import DIGEST_EMAIL
 from jobs.digest import build_digest
@@ -22,7 +23,7 @@ def build_html_digest(jobs: list[dict]) -> str:
         title = html.escape(str(j.get("title") or ""))
         company = html.escape(str(j.get("company_name") or ""))
         location = html.escape(str(j.get("location") or ""))
-        url = html.escape(str(j.get("url") or ""), quote=True)
+        url = _safe_href(j.get("url"))
         comp_val = html.escape(str(j["compensation"])) if j.get("compensation") else ""
         comp = f"<td>{comp_val}</td>" if comp_val else "<td></td>"
         deadline_val = html.escape(str(j["application_deadline"])) if j.get("application_deadline") else ""
@@ -40,6 +41,15 @@ def build_html_digest(jobs: list[dict]) -> str:
 EMAIL_MAX_INLINE_JOBS = 4
 
 
+def _safe_href(url: object) -> str:
+    """Attribute-escaped http(s) URL for an href, or '#'.
+
+    Job URLs come from third-party ATS data: html.escape alone still lets ``javascript:`` / ``data:`` through.
+    """
+    raw = str(url or "").strip()
+    return html.escape(raw, quote=True) if urlsplit(raw).scheme.lower() in ("http", "https") else "#"
+
+
 def _render_job_row(
     title: str,
     company: str,
@@ -51,7 +61,7 @@ def _render_job_row(
     """Render a clean, flowing job row with subtle tags and pill action button."""
     safe_title = html.escape(title)
     safe_company = html.escape(company)
-    safe_url = html.escape(url, quote=True) if url else "#"
+    safe_url = _safe_href(url)
     safe_loc = html.escape(location) if location else ""
 
     meta_subtitle = f"{safe_company} · {safe_loc}" if safe_loc else safe_company
@@ -270,7 +280,10 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
             extra_parts.append(
                 f"<div style='margin-top:16px;padding:12px;background:#f0fdf4;border-radius:6px;font-size:13px;color:#166534;'>"
                 f"<strong>Applications Submitted Today ({len(submitted)}):</strong> "
-                + ", ".join(f"{s['title']} at {s['company_name']} ({s.get('confirmation', 'OK')})" for s in submitted)
+                + ", ".join(
+                    html.escape(f"{s['title']} at {s['company_name']} ({s.get('confirmation', 'OK')})")
+                    for s in submitted
+                )
                 + "</div>"
             )
         if needs_review:
@@ -278,7 +291,9 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
                 f"<div style='margin-top:12px;padding:12px;background:#fffbeb;border-radius:6px;font-size:13px;color:#92400e;'>"
                 f"<strong>Actions Required ({len(needs_review)}):</strong> "
                 + ", ".join(
-                    f"<a href='{nr.get('url', '#')}' style='color:#92400e;font-weight:600;'>{nr['title']} at {nr['company_name']} (Complete Review &rarr;)</a>"
+                    f"<a href='{_safe_href(nr.get('url'))}' style='color:#92400e;font-weight:600;'>"
+                    f"{html.escape(str(nr['title']))} at {html.escape(str(nr['company_name']))} "
+                    "(Complete Review &rarr;)</a>"
                     for nr in needs_review
                 )
                 + "</div>"

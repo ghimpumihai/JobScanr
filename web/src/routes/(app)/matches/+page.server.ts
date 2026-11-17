@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import type { JobMatch } from '$lib/types';
 import { isSupabaseConfigured } from '$lib/supabase/server';
+import { safeHttpUrl } from '$lib/safeUrl';
 
 const MOCK_MATCHES: JobMatch[] = [
   {
@@ -77,7 +78,7 @@ export const load: PageServerLoad = async ({ locals }) => {
             location: row.job_postings?.location || 'Remote EU',
             compensation: row.job_postings?.compensation,
             ats_platform: row.job_postings?.companies?.ats_platform || 'greenhouse',
-            url: row.job_postings?.url || '#',
+            url: safeHttpUrl(row.job_postings?.url),
             match_score: Math.round((row.match_score || 0.9) * 100)
           };
         });
