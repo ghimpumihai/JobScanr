@@ -8,8 +8,10 @@ Usage:
 
 import argparse
 import asyncio
+import collections
 import logging
 import sys
+import time
 
 from config import setup_logging
 from db import queries
@@ -33,6 +35,9 @@ async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
     return jobs
 
 
+PROGRESS_EVERY = 200
+
+
 async def scrape_all(
     companies: list[Company | dict], failure_details: list[dict] | None = None
 ) -> tuple[list[JobPosting], list[str]]:
@@ -45,18 +50,47 @@ async def scrape_all(
         workday_sem = asyncio.Semaphore(20)
         ashby_lock = asyncio.Lock()
 
+        done = [0]
+        # platform -> [finished, total request seconds, errors]; shows which platform is the slow one.
+        stats: dict[str, list[float]] = {}
+        totals = collections.Counter(c.get("ats_platform") for c in companies)
+
         async def fetch(c):
+            try:
+                return await _fetch(c)
+            finally:
+                done[0] += 1
+                if done[0] % PROGRESS_EVERY == 0:
+                    detail = ", ".join(
+                        f"{p}={int(v[0])}/{totals[p]} avg={v[1] / max(v[0], 1):.1f}s err={int(v[2])}"
+                        for p, v in sorted(stats.items())
+                    )
+                    logger.info("Scrape progress: %d/%d companies (%s)", done[0], len(companies), detail)
+
+        async def timed(c):
+            st = stats.setdefault(c.get("ats_platform"), [0, 0.0, 0])
+            t0 = time.monotonic()
+            try:
+                return await fetch_company(http, c)
+            except Exception:
+                st[2] += 1
+                raise
+            finally:
+                st[0] += 1
+                st[1] += time.monotonic() - t0
+
+        async def _fetch(c):
             plat = c.get("ats_platform")
             if plat == "ashby":
                 async with ashby_lock:
                     await asyncio.sleep(0.5)
-                    return await fetch_company(http, c)
+                    return await timed(c)
             elif plat == "workday":
                 async with workday_sem:
-                    return await fetch_company(http, c)
+                    return await timed(c)
             else:
                 async with fast_sem:
-                    return await fetch_company(http, c)
+                    return await timed(c)
 
         results = await asyncio.gather(
             *(fetch(c) for c in companies),
