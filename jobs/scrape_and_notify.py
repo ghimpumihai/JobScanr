@@ -44,11 +44,11 @@ async def scrape_all(
 ) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
-    # - Workday: dedicated concurrent pool (20) so multi-page crawls never starve fast platforms
+    # - Workday: dedicated concurrent pool (40) so multi-page crawls never starve fast platforms
     # - Ashby: independent serialized pacing lock (0.5s) to prevent 429s and soft-throttle drops
     async with make_http_client() as http:
         fast_sem = asyncio.Semaphore(30)
-        workday_sem = asyncio.Semaphore(20)
+        workday_sem = asyncio.Semaphore(40)
         ashby_lock = asyncio.Lock()
 
         done = [0]
