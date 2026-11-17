@@ -8,8 +8,10 @@ Usage:
 
 import argparse
 import asyncio
+import collections
 import logging
 import sys
+import time
 
 from config import setup_logging
 from db import queries
@@ -50,6 +52,9 @@ async def scrape_all(
         ashby_lock = asyncio.Lock()
 
         done = [0]
+        # platform -> [finished, total request seconds, timeouts]; shows which platform is the slow one.
+        stats: dict[str, list[float]] = {}
+        totals = collections.Counter(c.get("ats_platform") for c in companies)
 
         async def fetch(c):
             try:
@@ -57,12 +62,25 @@ async def scrape_all(
             finally:
                 done[0] += 1
                 if done[0] % PROGRESS_EVERY == 0:
-                    logger.info("Scrape progress: %d/%d companies", done[0], len(companies))
+                    detail = ", ".join(
+                        f"{p}={int(v[0])}/{totals[p]} avg={v[1] / max(v[0], 1):.1f}s to={int(v[2])}"
+                        for p, v in sorted(stats.items())
+                    )
+                    logger.info("Scrape progress: %d/%d companies (%s)", done[0], len(companies), detail)
 
         async def timed(c):
             # Hard cap on the request itself (not queue time): httpx's 20s is per-read, so retries/pagination
             # could otherwise stall a company, and the Ashby lock, for minutes.
-            return await asyncio.wait_for(fetch_company(http, c), timeout=PER_COMPANY_TIMEOUT)
+            st = stats.setdefault(c.get("ats_platform"), [0, 0.0, 0])
+            t0 = time.monotonic()
+            try:
+                return await asyncio.wait_for(fetch_company(http, c), timeout=PER_COMPANY_TIMEOUT)
+            except asyncio.TimeoutError:
+                st[2] += 1
+                raise
+            finally:
+                st[0] += 1
+                st[1] += time.monotonic() - t0
 
         async def _fetch(c):
             plat = c.get("ats_platform")
