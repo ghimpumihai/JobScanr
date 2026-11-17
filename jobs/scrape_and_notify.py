@@ -33,6 +33,10 @@ async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
     return jobs
 
 
+PER_COMPANY_TIMEOUT = 120.0  # seconds
+PROGRESS_EVERY = 200
+
+
 async def scrape_all(
     companies: list[Company | dict], failure_details: list[dict] | None = None
 ) -> tuple[list[JobPosting], list[str]]:
@@ -45,7 +49,19 @@ async def scrape_all(
         workday_sem = asyncio.Semaphore(20)
         ashby_lock = asyncio.Lock()
 
+        done = [0]
+
         async def fetch(c):
+            try:
+                # Hard cap: httpx's 20s is per-read, so retries/pagination can otherwise stall a company
+                # (and the Ashby lock) for minutes.
+                return await asyncio.wait_for(_fetch(c), timeout=PER_COMPANY_TIMEOUT)
+            finally:
+                done[0] += 1
+                if done[0] % PROGRESS_EVERY == 0:
+                    logger.info("Scrape progress: %d/%d companies", done[0], len(companies))
+
+        async def _fetch(c):
             plat = c.get("ats_platform")
             if plat == "ashby":
                 async with ashby_lock:
