@@ -687,3 +687,52 @@ def test_greenhouse_submit_preserves_multiselect_lists(sample_user: User, sample
 
     resp = asyncio.run(run())
     assert resp.status == "submitted"
+
+
+def _q(label, qtype=QuestionType.SHORT_TEXT, options=None):
+    return ScreeningQuestion(id="q1", label=label, question_type=qtype, required=True, options=options or [])
+
+
+def test_work_authorization_free_text_is_never_coerced_to_yes():
+    # bool("No") is True in Python; that would submit "authorized" for a user who said no.
+    q = _q("Are you legally authorized to work in the EU?", QuestionType.BOOLEAN)
+    assert map_screening_question(q, {"screening_defaults": {"work_authorization": "No"}}) == (False, True)
+    assert map_screening_question(q, {"screening_defaults": {"work_authorization": "yes"}}) == (True, True)
+    # Unparseable text -> not confident, so the application goes to human review.
+    unclear = {"screening_defaults": {"work_authorization": "Authorized to work in UK & EU"}}
+    assert map_screening_question(q, unclear) == (None, False)
+
+
+def test_sponsorship_free_text_is_never_coerced_to_yes():
+    q = _q("Will you now or in the future require visa sponsorship?", QuestionType.BOOLEAN)
+    assert map_screening_question(q, {"screening_defaults": {"requires_sponsorship": "no"}}) == (False, True)
+
+
+def test_linkedin_in_a_how_did_you_hear_question_is_not_answered_with_a_url():
+    user = {"screening_defaults": {"linkedin": "https://linkedin.com/in/jane"}}
+    hear = _q("How did you hear about us? (LinkedIn, Referral, Other)")
+    assert map_screening_question(hear, user) == (None, False)
+    select = _q("LinkedIn", QuestionType.SINGLE_SELECT, [QuestionOption(id=1, label="Yes")])
+    assert map_screening_question(select, user) == (None, False)
+    assert map_screening_question(_q("LinkedIn Profile"), user) == ("https://linkedin.com/in/jane", True)
+
+
+@pytest.mark.parametrize(
+    "exc, reason",
+    [(httpx.ConnectError("refused"), "connect_error"), (httpx.ReadTimeout("sent, no answer"), "network_error")],
+)
+@pytest.mark.parametrize("submitter_cls", [GreenhouseSubmitter, LeverSubmitter])
+def test_submit_tells_connect_failures_from_unconfirmed_sends(
+    submitter_cls, exc, reason, sample_user: User, sample_greenhouse_posting: JobPosting
+):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise exc
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            return await submitter_cls(client=http).submit(
+                sample_user, sample_greenhouse_posting, {"first_name": "Jane"}, io.BytesIO(b"%PDF-1.4"), "cv.pdf"
+            )
+
+    resp = asyncio.run(run())
+    assert resp.status == "failed" and resp.reason == reason

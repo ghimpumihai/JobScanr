@@ -145,6 +145,19 @@ def _match_select_option(options: list[QuestionOption], desired_text: str | bool
     return None
 
 
+def _as_bool(value: Any) -> bool | None:
+    """Strict yes/no parsing. Free text like "No" or "Authorized in the EU" must not become True."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("yes", "true", "y", "1"):
+            return True
+        if v in ("no", "false", "n", "0"):
+            return False
+    return None
+
+
 def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any | None, bool]:
     """Map a single screening question against candidate profile and screening defaults.
 
@@ -168,9 +181,8 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
             "right to work",
         )
     ):
-        work_auth = defaults.get("work_authorization")
-        if work_auth is not None:
-            is_auth = bool(work_auth)
+        is_auth = _as_bool(defaults.get("work_authorization"))
+        if is_auth is not None:
             if question.question_type in (QuestionType.SINGLE_SELECT, QuestionType.MULTI_SELECT):
                 matched = _match_select_option(question.options, is_auth)
                 if matched:
@@ -192,9 +204,8 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
             "require now or in the future",
         )
     ):
-        sponsorship = defaults.get("requires_sponsorship")
-        if sponsorship is not None:
-            req_spon = bool(sponsorship)
+        req_spon = _as_bool(defaults.get("requires_sponsorship"))
+        if req_spon is not None:
             if question.question_type in (QuestionType.SINGLE_SELECT, QuestionType.MULTI_SELECT):
                 matched = _match_select_option(question.options, req_spon)
                 if matched:
@@ -258,8 +269,10 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
             return loc, True
 
     # 6. Candidate Profile URLs
+    # Text fields only: "How did you hear about us? (LinkedIn, ...)" must not get a profile URL.
+    is_text = question.question_type in (QuestionType.SHORT_TEXT, QuestionType.LONG_TEXT)
     for plat in ("linkedin", "github", "portfolio", "website", "twitter"):
-        if plat in clean_label:
+        if plat in clean_label and is_text and "hear about" not in clean_label:
             url = get_candidate_url(user, plat)
             if url:
                 return url, True
@@ -267,7 +280,7 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
     # 7. Exact key match in screening_defaults
     for key, val in defaults.items():
         clean_key = re.sub(r"[^\w\s]", "", key).lower().strip()
-        if clean_key and clean_key in clean_label:
+        if clean_key and clean_key in clean_label and "hear about" not in clean_label:
             if question.question_type in (QuestionType.SINGLE_SELECT, QuestionType.MULTI_SELECT):
                 matched = _match_select_option(question.options, str(val))
                 if matched:

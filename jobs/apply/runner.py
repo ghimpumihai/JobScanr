@@ -21,6 +21,7 @@ from db.queries import (
     transition_application_status,
 )
 from jobs.apply.base import BaseSubmitter, ManualApplySubmitter
+from jobs.apply.cv_security import validate_cv
 from jobs.apply.cv_storage import download_resume_stream
 from jobs.apply.greenhouse import GreenhouseSubmitter
 from jobs.apply.lever import LeverSubmitter
@@ -93,6 +94,15 @@ def _handle_failure(app_id: int, attempts: int, reason: str) -> ProcessingResult
         reason=f"max_attempts_exceeded: {reason}",
     )
     return ProcessingResult(application_id=app_id, final_status="failed", reason=f"max_attempts_exceeded: {reason}")
+
+
+def _needs_review_unconfirmed(app_id: int, reason: str) -> ProcessingResult:
+    """The POST may have reached the ATS; retrying could apply twice, so a human decides."""
+    reason = f"submission_unconfirmed: {reason}"
+    transition_application_status(
+        application_id=app_id, to_status="needs_review", from_status="submitting", reason=reason
+    )
+    return ProcessingResult(application_id=app_id, final_status="needs_review", reason=reason)
 
 
 async def check_posting_liveness(url: str, client: httpx.AsyncClient | None = None) -> bool | None:
@@ -202,7 +212,8 @@ async def process_application(
 
     # 3. In-Memory CV Retrieval (path must sit in the claiming user's own folder)
     try:
-        resume_stream = download_resume_stream(claim.resume_storage_path, owner_id=claim.auth_user_id)
+        # Returns (stream, filename, content_type); passing the whole tuple on would upload a broken file.
+        resume_stream, _, _ = download_resume_stream(claim.resume_storage_path, owner_id=claim.auth_user_id)
     except Exception as err:
         logger.error("Failed to retrieve CV stream for app %s: %s", claim.id, err)
         transition_application_status(
@@ -216,6 +227,16 @@ async def process_application(
             final_status="needs_review",
             reason=f"cv_download_failed: {err}",
         )
+
+    cv_ok, cv_error = validate_cv(resume_stream.getvalue(), resume_filename)
+    if not cv_ok:
+        transition_application_status(
+            application_id=claim.id,
+            to_status="needs_review",
+            from_status="submitting",
+            reason=f"cv_invalid: {cv_error}",
+        )
+        return ProcessingResult(application_id=claim.id, final_status="needs_review", reason=f"cv_invalid: {cv_error}")
 
     # 4. Resolve Submitter
     submitter = resolve_submitter(claim.ats_platform, client=client)
@@ -301,16 +322,17 @@ async def process_application(
     # 6. Execute Submission
     if dry_run:
         dry_payload = {"dry_run": True, "payload": mapping_result.payload}
+        # Nothing was sent, so release the claim instead of recording a fake submission.
         transition_application_status(
             application_id=claim.id,
-            to_status="submitted",
+            to_status="queued",
             from_status="submitting",
             reason="dry_run_simulation",
-            submitted_payload=dry_payload,
+            next_attempt_at=datetime.now(timezone.utc) + timedelta(hours=1),
         )
         return ProcessingResult(
             application_id=claim.id,
-            final_status="submitted",
+            final_status="queued",
             reason="dry_run_simulation",
             submitted_payload=dry_payload,
         )
@@ -326,7 +348,9 @@ async def process_application(
         )
     except Exception as err:
         logger.error("HTTP submission exception for app %s: %s", claim.id, err)
-        return _handle_failure(claim.id, claim.attempts, f"network_exception: {err}")
+        if isinstance(err, (httpx.ConnectError, httpx.ConnectTimeout)):
+            return _handle_failure(claim.id, claim.attempts, f"network_exception: {err}")  # never reached the ATS
+        return _needs_review_unconfirmed(claim.id, f"network_exception: {err}")
 
     if submit_resp.status == "submitted":
         conf = {
@@ -376,6 +400,8 @@ async def process_application(
             reason=submit_resp.reason,
         )
 
+    if submit_resp.reason == "network_error":  # connected, so the ATS may have received it
+        return _needs_review_unconfirmed(claim.id, "network_error")
     return _handle_failure(claim.id, claim.attempts, submit_resp.reason or "submit_failed")
 
 
