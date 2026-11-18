@@ -180,13 +180,13 @@ def test_aborted_run_still_saves_pod_backoff():
     from unittest.mock import MagicMock
 
     args = SimpleNamespace(profile=None, dry_run=False, failures_file=None)
-    companies = [_company(1, "a"), _company(2, "b")]
+    companies = [_company(i, f"c{i}") for i in range(12)]
 
     async def scrape(cs, failure_details=None, blocked=None, workday_states=None, countries=None):
         challenge_tracker.prime(POD)
         challenge_tracker.record_block(POD)  # the pod blocked us during the scan
         blocked.append(cs[0])
-        return [], ["b (workday): 422"]  # 1 failure out of 1 attempted -> abort
+        return [], [f"c{i} (workday): 422" for i in range(3)]  # 3 failures out of 11 attempted -> abort
 
     save = MagicMock()
     with (
@@ -201,3 +201,34 @@ def test_aborted_run_still_saves_pod_backoff():
         assert asyncio.run(sn.run_pipeline(args)) == 1
     upserts, _ = save.call_args.args
     assert upserts[POD]["days"] == 2
+
+
+def test_small_pod_that_only_challenged_is_backed_off_and_tiny_samples_dont_abort():
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    args = SimpleNamespace(profile=None, dry_run=False, failures_file=None)
+    small = "wd12.myworkdayjobs.com"
+
+    async def scrape(cs, failure_details=None, blocked=None, workday_states=None, countries=None):
+        challenge_tracker.record_block(small)  # one challenge, far below the consecutive limit
+        blocked.append(cs[0])
+        return [], ["b (workday): 422"]  # 1 failure out of 1 attempted: too few to judge
+
+    save = MagicMock()
+    with (
+        patch("db.queries.get_all_companies", return_value=[_company(1, "a"), _company(2, "b")]),
+        patch("db.queries.get_active_users", return_value=[]),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff", save),
+        patch("db.queries.upsert_jobs", return_value=[]),
+        patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("jobs.notify.email_configured", return_value=False),
+        patch.object(sn, "scrape_all", scrape),
+    ):
+        sn_ret = asyncio.run(sn.run_pipeline(args))
+    assert sn_ret == 1  # only because no mail channel is configured in this test, not the failure-rate abort
+    upserts, _ = save.call_args.args
+    assert small in upserts

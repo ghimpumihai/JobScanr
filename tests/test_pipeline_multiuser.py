@@ -299,6 +299,10 @@ async def test_run_pipeline_multiuser_flow():
     with (
         patch("asyncio.sleep", new_callable=AsyncMock),
         patch("db.queries.get_all_companies", return_value=[{"id": 1, "name": "Co"}]),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff"),
         patch("jobs.scrape_and_notify.scrape_all", new_callable=AsyncMock) as mock_scrape,
         patch("db.queries.get_active_users", return_value=users),
         patch("db.queries.upsert_jobs") as mock_upsert,

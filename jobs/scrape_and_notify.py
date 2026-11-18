@@ -28,6 +28,9 @@ from scrapers.workday import WorkdayClient, full_scan_due, is_hot
 logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
+# Below this many attempted (not challenge-blocked) companies, the failure rate says nothing: 1 failure out of 2
+# would abort a run in which Workday blocked everything else.
+MIN_ATTEMPTED_FOR_ABORT = 10
 # A Workday job's detail page is re-fetched at most this often; in between, cached per-profile verdicts are reused.
 ENRICH_TTL = timedelta(days=7)
 # A blocked board falls back to its cached listing (its jobs stay listed, matchable and unpruned) only while the
@@ -257,7 +260,7 @@ async def run_pipeline(args) -> int:
         logger.info("Wrote %d failure details to %s.", len(failure_details), args.failures_file)
 
     attempted = len(companies) - len(blocked)
-    if attempted > 0 and len(failures) > attempted * FAILURE_RATE_LIMIT:
+    if attempted >= MIN_ATTEMPTED_FOR_ABORT and len(failures) > attempted * FAILURE_RATE_LIMIT:
         logger.error("Failure rate too high — aborting.")
         # Still persist: a run that aborts because Workday blocked nearly everything must record the back-off.
         _save_workday(args, jobs, workday_states, backoff, now)
@@ -405,7 +408,13 @@ def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None
 
 def _save_workday(args, jobs: list[dict], states: dict[int, dict], backoff: dict[str, dict], now: datetime) -> None:
     """Persist board state and pod back-off. Failures only cost requests next run, so they never block the run."""
-    blocked_pods = {p for p in challenge_tracker.challenged if challenge_tracker.is_blocked(p)}
+    # Blocked: reached the consecutive-challenge limit, or challenged us without ever answering normally (a pod
+    # hosting only a few boards never reaches the limit, but still turned us away every time).
+    blocked_pods = {
+        p
+        for p in challenge_tracker.challenged
+        if challenge_tracker.is_blocked(p) or p not in challenge_tracker.answered
+    }
     pod_upserts, pod_deletes = _plan_backoff(backoff, blocked_pods, challenge_tracker.answered, now)
     for pod, b in pod_upserts.items():
         logger.warning("Workday pod %s challenged us: no requests to it for %d days.", pod, b["days"])
