@@ -155,7 +155,8 @@ def test_mark_user_matches_notified():
 # ---------------------------------------------------------------------------
 
 
-def test_build_personalized_html_digest_standard_and_high_volume():
+def test_build_personalized_html_digest_standard_and_high_volume(monkeypatch):
+    monkeypatch.setenv("PORTAL_URL", "https://app.example.com/matches")
     user = {"email": "alice@example.com"}
 
     # 1. Standard day: 3 roles (<= EMAIL_MAX_INLINE_JOBS)
@@ -210,6 +211,7 @@ def test_build_personalized_html_digest_standard_and_high_volume():
     assert "Software Engineer 4" in html_hv
     # Bridges the remaining 12 roles
     assert "+12 more matching roles on your JobScanr portal" in html_hv
+    assert 'href="https://app.example.com/matches"' in html_hv  # not a dead "#" link
     assert "View all 16 matches on JobScanr &rarr;" in html_hv
     assert "Amazon" in html_hv
     assert "Monzo" in html_hv
@@ -344,3 +346,104 @@ async def test_run_pipeline_multiuser_flow():
         assert user2_stage_call[0][1][0]["status"] == "manual_apply"
 
         assert mock_mark_notified.call_count == 2
+
+
+def test_digest_without_portal_url_lists_every_match_inline(monkeypatch):
+    # Matches hidden behind a dead link are marked notified and never seen again.
+    monkeypatch.delenv("PORTAL_URL", raising=False)
+    matches = [
+        {"title": f"Engineer {i}", "company_name": "Co", "location": "London", "url": f"https://x.test/{i}"}
+        for i in range(10)
+    ]
+    html_out = notify.build_personalized_html_digest({"email": "a@example.com"}, matches)
+    assert all(f"Engineer {i}" in html_out for i in range(10))
+    assert "more matching roles on your JobScanr portal" not in html_out
+
+
+def test_digest_activity_section_escapes_third_party_text():
+    activity = {
+        "submitted_today": [{"title": "<b>x</b>", "company_name": "A&B", "confirmation": "OK"}],
+        "needs_review": [{"title": "<script>1</script>", "company_name": "Co", "url": "x' onclick='evil"}],
+    }
+    out = notify.build_personalized_html_digest({"email": "a@example.com"}, [], activity)
+    assert "<script>" not in out and "<b>x</b>" not in out
+    assert "onclick='evil" not in out
+
+
+@pytest.mark.anyio
+async def test_run_pipeline_one_bad_user_does_not_stop_the_others():
+    mock_args = MagicMock()
+    mock_args.profile = None
+    mock_args.dry_run = False
+    mock_args.failures_file = None
+    mock_args.platforms = None
+    mock_args.skip_platforms = None
+    mock_args.no_email = False
+
+    good = {"id": 1, "email": "good@example.com", "profile_filters": {"titles": ["software engineer"]}}
+    # Missing keys fall back to the default profile; non-string items used to raise TypeError.
+    broken = {"id": 2, "email": "broken@example.com", "profile_filters": {"titles": [123]}}
+    sends: list[str] = []
+
+    def fake_send(user, unnotified, activity=None):
+        if user["id"] == 1:
+            raise RuntimeError("SMTP rejected recipient")  # first user's address is bad
+        sends.append(user["email"])
+        return "MSG"
+
+    job = {
+        "external_id": "e1",
+        "title": "Junior Software Engineer",
+        "company_id": 10,
+        "company_name": "Co",
+        "location": "Remote",
+        "ats_platform": "greenhouse",
+        "description": "Python",
+        "url": "https://x.test/1",
+        "id": 100,
+    }
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("db.queries.get_all_companies", return_value=[{"id": 1, "name": "Co"}]),
+        patch("jobs.scrape_and_notify.scrape_all", new_callable=AsyncMock, return_value=([job], [])),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff"),
+        patch("db.queries.get_active_users", return_value=[good, broken]),
+        patch("db.queries.upsert_jobs", return_value=[]),
+        patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.upsert_user_matches"),
+        patch("db.queries.stage_user_applications"),
+        patch("jobs.notify.email_configured", return_value=True),
+        patch("jobs.notify.send_user_digest", side_effect=fake_send),
+        patch("db.queries.mark_user_matches_notified") as mock_mark,
+        patch("db.queries.get_user_unnotified_matches", return_value=[{"id": 100}]),
+        patch("db.queries.get_user_recent_application_activity", return_value={}),
+    ):
+        assert await scrape_and_notify.run_pipeline(mock_args) == 0
+
+    assert sends == ["broken@example.com"]  # user 2 still got a digest after user 1's send failed
+    assert mock_mark.call_count == 1  # and the failed user's matches stay unnotified
+
+
+def test_prefilter_multiuser_falls_back_to_default_for_incomplete_profile():
+    job = {"title": "Junior Software Engineer", "location": "Remote"}
+    users = [{"id": 1, "profile_filters": {}}, {"id": 2, "profile_filters": {"locations": ["remote"]}}]
+    base = {"titles": ["software engineer"], "levels": ["junior"], "locations": ["remote"]}
+    assert enrich.passes_prefilter_multiuser(job, users, base=base) is True  # used to KeyError on 'titles'
+
+
+def test_enrich_jobs_without_profile_does_not_refilter(monkeypatch):
+    # The pipeline already filtered across all users; a second filter with the default profile
+    # would skip jobs that only another user's profile accepts.
+    job = {"ats_identifier": "acme", "external_id": "1", "title": "Data Analyst", "location": "Oslo"}
+
+    async def fake_fetch(job, client):
+        return {"descriptionHtml": "<p>Hello</p>"}
+
+    monkeypatch.setattr(enrich, "_fetch_detail", fake_fetch)
+    import asyncio
+
+    asyncio.run(enrich.enrich_jobs([job], client=None))
+    assert job["description"] == "Hello"
