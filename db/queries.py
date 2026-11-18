@@ -149,6 +149,39 @@ def delete_stale_jobs(days: int = 30) -> int:
         return cur.rowcount
 
 
+def get_workday_board_states() -> dict[int, dict]:
+    """Cached Workday scan state per company_id (see workday_board_state in db/schema.sql)."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT company_id, queries, enrichment, full_scan_at FROM workday_board_state")
+        return {
+            cid: {"queries": q or {}, "enrichment": e or {}, "full_scan_at": f.isoformat() if f else None}
+            for cid, q, e, f in cur.fetchall()
+        }
+
+
+def save_workday_board_states(states: dict[int, dict]) -> int:
+    if not states:
+        return 0
+    rows = [
+        (cid, json.dumps(s.get("queries") or {}), json.dumps(s.get("enrichment") or {}), s.get("full_scan_at"))
+        for cid, s in states.items()
+    ]
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO workday_board_state (company_id, queries, enrichment, full_scan_at, updated_at)
+            VALUES (%s, %s::jsonb, %s::jsonb, %s::timestamptz, NOW())
+            ON CONFLICT (company_id) DO UPDATE
+                SET queries = EXCLUDED.queries,
+                    enrichment = EXCLUDED.enrichment,
+                    full_scan_at = EXCLUDED.full_scan_at,
+                    updated_at = NOW()
+            """,
+            rows,
+        )
+        return len(rows)
+
+
 def mark_notified(job_ids: list[int]) -> None:
     if not job_ids:
         return

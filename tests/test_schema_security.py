@@ -28,3 +28,10 @@ def test_users_trigger_confines_resume_path_to_owner_folder():
     assert "position('..' IN NEW.resume_storage_path) > 0" in fn
     assert "split_part(NEW.resume_storage_path, '/', 1) <> auth.uid()::text" in fn
     assert re.search(r"CREATE TRIGGER trg_protect_user_worker_fields\s+BEFORE UPDATE ON users", SCHEMA)
+
+
+def test_workday_board_state_is_backend_only():
+    assert "ALTER TABLE workday_board_state ENABLE ROW LEVEL SECURITY" in SCHEMA
+    assert not re.search(r"CREATE POLICY [^\n]+ ON workday_board_state", SCHEMA)
+    assert "REVOKE ALL ON workday_board_state FROM anon" in SCHEMA
+    assert "REVOKE ALL ON workday_board_state FROM authenticated" in SCHEMA

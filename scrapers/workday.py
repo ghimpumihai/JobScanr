@@ -14,12 +14,15 @@ Quirks (documented community-wide):
 """
 
 import asyncio
+import json
 import logging
+import zlib
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from models import JobPosting
-from scrapers.base import BaseClient
+from scrapers.base import BaseClient, BlockedByChallenge
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +31,54 @@ MAX_PAGES = 100
 MAX_SEARCH_PAGES = 5  # For large boards (>40 jobs), cap search pagination to 5 pages per query
 SEARCH_QUERIES = ["software", "developer"]
 RETRY_DELAY = 2.0
+FULL_SCAN_EVERY = timedelta(days=7)  # catches what change detection can miss (an add plus a removal below page 1)
+
+
+def _slim(p: dict) -> dict:
+    """The listing fields we use; this is what gets cached (never descriptions)."""
+    return {
+        "jobPostingId": p.get("jobPostingId"),
+        "title": p.get("title"),
+        "externalPath": p.get("externalPath") or "",
+        "locationsText": p.get("locationsText"),
+    }
+
+
+def _full_scan_due(state: dict | None) -> bool:
+    last = (state or {}).get("full_scan_at")
+    if not last:
+        return True
+    return datetime.now(timezone.utc) - datetime.fromisoformat(last) >= FULL_SCAN_EVERY
+
+
+def _country_facets(facets: list | None, countries: set[str]) -> dict:
+    """{facetParameter: [ids]} for the first country facet with values in ``countries``, else {}.
+
+    Facet ids are per-tenant opaque GUIDs, so values are matched on their descriptor. Some tenants
+    nest facets (e.g. locationMainGroup -> locationCountry), hence the walk.
+    """
+    stack = list(facets or [])
+    while stack:
+        f = stack.pop(0)
+        if not isinstance(f, dict):
+            continue
+        values = f.get("values") or []
+        param = f.get("facetParameter") or ""
+        if "country" in param.lower():
+            ids = [
+                v["id"]
+                for v in values
+                if isinstance(v, dict) and v.get("id") and (v.get("descriptor") or "").strip().lower() in countries
+            ]
+            if ids:
+                return {param: ids}
+        stack.extend(v for v in values if isinstance(v, dict) and "facetParameter" in v)
+    return {}
 
 
 class WorkdayClient(BaseClient):
+    requests_sent = 0  # process-wide count of Workday requests, for the run log
+
     def __init__(self, client: httpx.AsyncClient):
         super().__init__(client)
 
@@ -47,27 +95,96 @@ class WorkdayClient(BaseClient):
         path = external_path if external_path.startswith("/") else f"/{external_path}"
         return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}"
 
-    async def get_jobs(self, ats_identifier: str) -> list[JobPosting]:
+    async def request_with_retry(self, method: str, url: str, **kwargs):
+        WorkdayClient.requests_sent += 1
+        return await super().request_with_retry(method, url, **kwargs)
+
+    async def get_jobs(
+        self, ats_identifier: str, state: dict | None = None, countries: set[str] | None = None
+    ) -> list[JobPosting]:
+        """List a board's jobs.
+
+        ``state`` is this board's cached scan (workday_board_state.queries/full_scan_at). It is read for
+        change detection and updated in place only when the scan succeeds. ``countries`` are lowercase
+        country names. When given, large boards are narrowed with the tenant's country facet.
+        """
         base, _ = self._base(ats_identifier)
         headers = {"Accept": "application/json"}
+        prior: dict = (state or {}).get("queries") or {}
+        full = _full_scan_due(state)
+        new_queries: dict[str, dict] = {}
+
+        async def page(search: str, facets: dict, offset: int) -> dict:
+            r = await self.request_with_retry(
+                "POST",
+                f"{base}/jobs",
+                json={"appliedFacets": facets, "limit": PAGE_SIZE, "offset": offset, "searchText": search},
+                headers=headers,
+            )
+            r.raise_for_status()
+            return r.json()
+
+        async def run_query(search: str, facets: dict, max_pages: int, first: dict | None = None) -> None:
+            key = json.dumps([search, facets], sort_keys=True)
+            data = first if first is not None else await page(search, facets, 0)
+            total = data.get("total", 0)
+            items = [_slim(p) for p in data.get("jobPostings") or []]
+            first_ids = [p["externalPath"] for p in items]
+            old = None if full else prior.get(key)
+            if old and old.get("total") == total and old.get("first_ids") == first_ids:
+                rows = old["postings"]  # A1: page 1 unchanged, reuse the cached listing
+            else:
+                rows = list(items)
+                known = {p["externalPath"] for p in old["postings"]} if old else set()
+                offset, pages = len(items), 1
+                # A2: stop at a page with no new jobs and merge in the cached rows.
+                # shortcut: jobs removed below that page linger in the cache until the weekly full scan.
+                while not (known and all(p["externalPath"] in known for p in items)):
+                    if not items or offset >= total or pages >= max_pages:
+                        break
+                    await asyncio.sleep(0.4)
+                    items = [_slim(p) for p in (await page(search, facets, offset)).get("jobPostings") or []]
+                    rows += items
+                    offset += len(items)
+                    pages += 1
+                else:
+                    rows += old["postings"] if old else []
+                rows = list({p["externalPath"]: p for p in rows}.values())
+            new_queries[key] = {"total": total, "first_ids": first_ids, "postings": rows}
+
+        first = await page("", {}, 0)
+        unfiltered = json.dumps(["", {}], sort_keys=True)
+        sig = {
+            "total": first.get("total", 0),
+            "first_ids": [_slim(p)["externalPath"] for p in first.get("jobPostings") or []],
+        }
+        old_sig = prior.get(unfiltered) or {}
+        if not full and {"total": old_sig.get("total"), "first_ids": old_sig.get("first_ids")} == sig:
+            new_queries = prior  # A1: whole board unchanged since the last scan, 1 request
+        elif sig["total"] <= 40:
+            # small board: page through everything unfiltered
+            await run_query("", {}, MAX_PAGES, first)
+        else:
+            # large board: the unfiltered page 1 is only the change signature; jobs come from targeted queries
+            new_queries[unfiltered] = {**sig, "postings": []}
+            facets = _country_facets(first.get("facets"), countries) if countries else {}
+            for q in SEARCH_QUERIES:
+                await asyncio.sleep(0.4)
+                await run_query(q, facets, MAX_SEARCH_PAGES)
+
+        if state is not None:
+            state["queries"] = new_queries
+            if full:
+                now = datetime.now(timezone.utc)
+                if not state.get("full_scan_at"):
+                    # first scan: spread boards over the week so full scans don't all come due on one day
+                    now -= timedelta(days=zlib.crc32(ats_identifier.encode()) % FULL_SCAN_EVERY.days)
+                state["full_scan_at"] = now.isoformat()
+
         jobs: dict[str, JobPosting] = {}
-
-        # 1. Initial page with limit=20
-        r = await self.request_with_retry(
-            "POST",
-            f"{base}/jobs",
-            json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": 0, "searchText": ""},
-            headers=headers,
-        )
-        r.raise_for_status()
-        data = r.json()
-        total = data.get("total", 0)
-        postings = data.get("jobPostings") or []
-
-        def add_postings(items):
-            for p in items:
-                external_path = p.get("externalPath") or ""
-                slug = external_path.rsplit("/", 1)[-1]
+        for entry in new_queries.values():
+            for p in entry["postings"]:
+                slug = p["externalPath"].rsplit("/", 1)[-1]
                 if slug and slug not in jobs:
                     jobs[slug] = {
                         "external_id": p.get("jobPostingId") or slug,
@@ -76,56 +193,11 @@ class WorkdayClient(BaseClient):
                         # the detail fetch fills the real location later
                         "location": p.get("locationsText"),
                         "department": None,
-                        "url": self._public_url(ats_identifier, external_path),
+                        "url": self._public_url(ats_identifier, p["externalPath"]),
                         "description": None,
                         "ats_identifier": ats_identifier,
                         "external_path": slug,
                     }
-
-        add_postings(postings)
-
-        # 2. If board is small (<= 40 total jobs), page through remaining unfiltered
-        if total <= 40:
-            offset = len(postings)
-            while offset < total:
-                await asyncio.sleep(0.4)
-                r = await self.request_with_retry(
-                    "POST",
-                    f"{base}/jobs",
-                    json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": offset, "searchText": ""},
-                    headers=headers,
-                )
-                r.raise_for_status()
-                next_postings = r.json().get("jobPostings") or []
-                if not next_postings:
-                    break
-                add_postings(next_postings)
-                offset += len(next_postings)
-            return list(jobs.values())
-
-        # 3. For large boards (> 40 total jobs), query targeted tech keywords
-        # to avoid paging through hundreds of non-tech jobs
-        for q in SEARCH_QUERIES:
-            offset = 0
-            for _ in range(MAX_SEARCH_PAGES):
-                await asyncio.sleep(0.4)
-                r = await self.request_with_retry(
-                    "POST",
-                    f"{base}/jobs",
-                    json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": offset, "searchText": q},
-                    headers=headers,
-                )
-                r.raise_for_status()
-                q_data = r.json()
-                q_postings = q_data.get("jobPostings") or []
-                if not q_postings:
-                    break
-                add_postings(q_postings)
-                offset += len(q_postings)
-                q_total = q_data.get("total", 0)
-                if offset >= q_total:
-                    break
-
         return list(jobs.values())
 
     async def get_job_detail(self, ats_identifier: str, slug: str) -> dict | None:
@@ -158,6 +230,8 @@ class WorkdayClient(BaseClient):
             if named:
                 out["locationText"] = ", ".join(named)
             return out
+        except BlockedByChallenge:
+            raise  # not a flaky detail page: the caller must stop, not retry
         except Exception as exc:
             logger.debug("Failed workday detail fetch for %s/%s: %s", ats_identifier, slug, exc)
             return None

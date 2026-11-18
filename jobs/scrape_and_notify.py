@@ -9,9 +9,12 @@ Usage:
 import argparse
 import asyncio
 import collections
+import hashlib
+import json
 import logging
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 
 from ats_identifiers import identifier_error
 from config import setup_logging
@@ -20,18 +23,26 @@ from jobs.match import matches_profile
 from models import Company, JobPosting
 from scrapers import get_client
 from scrapers.base import BlockedByChallenge, make_http_client
+from scrapers.workday import WorkdayClient
 
 logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
+# A Workday job's detail page is re-fetched at most this often; in between, cached per-profile verdicts are reused.
+ENRICH_TTL = timedelta(days=7)
 
 
-async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
+async def fetch_company(
+    http, company: Company | dict, state: dict | None = None, countries: set[str] | None = None
+) -> list[JobPosting]:
     problem = identifier_error(company["ats_platform"], company["ats_identifier"])
     if problem:  # never interpolate an unchecked identifier into a request URL
         raise ValueError(f"invalid ats_identifier {company['ats_identifier']!r}: {problem}")
     client = get_client(company["ats_platform"], http)
-    jobs = await client.get_jobs(company["ats_identifier"])
+    if isinstance(client, WorkdayClient):
+        jobs = await client.get_jobs(company["ats_identifier"], state=state, countries=countries)
+    else:
+        jobs = await client.get_jobs(company["ats_identifier"])
     for job in jobs:
         job["company_id"] = company["id"]
         job["company_name"] = company["name"]
@@ -46,6 +57,8 @@ async def scrape_all(
     companies: list[Company | dict],
     failure_details: list[dict] | None = None,
     blocked: list[dict] | None = None,
+    workday_states: dict[int, dict] | None = None,
+    countries: set[str] | None = None,
 ) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
@@ -77,6 +90,8 @@ async def scrape_all(
             st = stats.setdefault(c.get("ats_platform"), [0, 0.0, 0])
             t0 = time.monotonic()
             try:
+                if c.get("ats_platform") == "workday" and workday_states is not None:
+                    return await fetch_company(http, c, workday_states.setdefault(c["id"], {}), countries)
                 return await fetch_company(http, c)
             except Exception:
                 st[2] += 1
@@ -150,10 +165,41 @@ async def run_pipeline(args) -> int:
 
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
     companies = queries.get_all_companies()
+    active_users: list[dict] = []
+    if not getattr(args, "profile", None):
+        try:
+            active_users = queries.get_active_users()
+        except Exception as e:
+            logger.debug("Could not fetch active users from DB, falling back to profile.json: %s", e)
+
+    if not active_users:
+        active_users = [
+            {
+                "id": None,
+                "email": config.DIGEST_EMAIL,
+                "profile_filters": profile,
+                "auto_apply_mode": "disabled",
+            }
+        ]
+
+    try:
+        workday_states = queries.get_workday_board_states()
+    except Exception as e:  # first run before the schema is applied, or a read failure: scan without the cache
+        logger.warning("Could not load Workday board state, scanning without it: %s", e)
+        workday_states = {}
+
     logger.info("Scraping %d companies...", len(companies))
     failure_details: list[dict] = []
     blocked: list[dict] = []
-    jobs, failures = await scrape_all(companies, failure_details=failure_details, blocked=blocked)
+    WorkdayClient.requests_sent = 0
+    jobs, failures = await scrape_all(
+        companies,
+        failure_details=failure_details,
+        blocked=blocked,
+        workday_states=workday_states,
+        countries=_facet_countries(active_users, profile),
+    )
+    logger.info("Workday list requests sent: %d.", WorkdayClient.requests_sent)
     if blocked:
         by_platform = collections.Counter(c.get("ats_platform") for c in blocked)
         logger.warning(
@@ -183,36 +229,23 @@ async def run_pipeline(args) -> int:
 
     logger.info("Fetched %d live job postings.", len(jobs))
 
-    active_users: list[dict] = []
-    if not getattr(args, "profile", None):
-        try:
-            active_users = queries.get_active_users()
-        except Exception as e:
-            logger.debug("Could not fetch active users from DB, falling back to profile.json: %s", e)
-
-    if not active_users:
-        active_users = [
-            {
-                "id": None,
-                "email": config.DIGEST_EMAIL,
-                "profile_filters": profile,
-                "auto_apply_mode": "disabled",
-            }
-        ]
-
     # Ashby/SmartRecruiters-style listings ship without descriptions; fetch
     # details only for candidates passing the union prefilter across active users.
     from jobs.enrich import enrich_jobs, extract_compensation, passes_prefilter_multiuser
 
+    hashes = {id(u): _profile_hash(u.get("profile_filters") or profile) for u in active_users}
     candidates = [j for j in jobs if passes_prefilter_multiuser(j, active_users)]
+    candidates = [j for j in candidates if not _apply_cached_enrichment(j, workday_states, set(hashes.values()))]
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
         # let the window cool before enriching.
         await asyncio.sleep(15)
 
+        before = WorkdayClient.requests_sent
         async with make_http_client() as http:
             await enrich_jobs(candidates, http)
         logger.info("Enriched %d description-less candidates.", len(candidates))
+        logger.info("Workday detail requests sent: %d.", WorkdayClient.requests_sent - before)
 
     # Extract compensation for any postings containing description text
     for j in jobs:
@@ -225,7 +258,7 @@ async def run_pipeline(args) -> int:
 
     for u in active_users:
         u_filters = u.get("profile_filters") or profile
-        u_matches = [j for j in jobs if matches_profile(j, u_filters)]
+        u_matches = [j for j in jobs if _match(j, u_filters, hashes[id(u)])]
         u_key = u.get("id")
         user_match_map[u_key] = u_matches
         for j in u_matches:
@@ -240,12 +273,18 @@ async def run_pipeline(args) -> int:
     )
 
     if args.dry_run:
+        logger.info("[dry-run] Workday board state not saved (%d boards).", len(workday_states))
         for u in active_users:
             u_matches = user_match_map.get(u.get("id"), [])
             logger.info("[dry-run] User %s matches %d job(s).", u.get("email"), len(u_matches))
         logger.info("[dry-run] no DB writes, no email.")
         return 0
 
+    _record_enrichment(jobs, workday_states)
+    try:
+        queries.save_workday_board_states(workday_states)
+    except Exception as e:  # a lost cache only costs requests next run; never block the digest on it
+        logger.warning("Could not save Workday board state: %s", e)
     new_jobs = queries.upsert_jobs(all_matched_jobs)
     stale = queries.delete_stale_jobs(days=30)
     logger.info("Stored %d new / %d total matched; pruned %d stale.", len(new_jobs), len(all_matched_jobs), stale)
@@ -312,6 +351,78 @@ async def run_pipeline(args) -> int:
 
     logger.info("Notification stage finished. Digests sent: %d.", sent_count)
     return 0
+
+
+def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None:
+    """Lowercase country names to narrow large Workday boards with, or None to not narrow.
+
+    Built from every user's locations plus eligible_regions (non-country entries simply match no facet).
+    A user without eligible_regions may have city-only locations whose country we can't infer, so then
+    nothing is narrowed. Narrowing drops postings in other countries, "Remote - <other country>" included.
+    """
+    out: set[str] = set()
+    for u in active_users:
+        f = u.get("profile_filters") or profile
+        if not f.get("eligible_regions"):
+            return None
+        out |= {str(x).strip().lower() for x in [*f["eligible_regions"], *(f.get("locations") or [])]}
+    return out or None
+
+
+def _profile_hash(filters: dict) -> str:
+    return hashlib.sha256(json.dumps(filters, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _apply_cached_enrichment(job: dict, states: dict[int, dict], hashes: set[str]) -> bool:
+    """Reuse a recent Workday detail fetch instead of repeating it. True if the job needs no fetch.
+
+    Only the enrichment fields and a yes/no verdict per profile are cached (never the description), so a
+    cache hit requires a verdict for every active profile; a new or edited profile forces a fresh fetch.
+    """
+    if job.get("ats_platform") != "workday":
+        return False
+    entry = (states.get(job["company_id"]) or {}).get("enrichment", {}).get(job["external_id"])
+    if not entry or datetime.now(timezone.utc) - datetime.fromisoformat(entry["at"]) >= ENRICH_TTL:
+        return False
+    if not hashes <= entry.get("verdicts", {}).keys():
+        return False
+    for k in ("location", "url", "compensation", "application_deadline"):
+        if entry.get(k):
+            job[k] = entry[k]
+    job["_verdicts"] = entry["verdicts"]
+    return True
+
+
+def _match(job: dict, filters: dict, profile_hash: str) -> bool:
+    verdicts = job.get("_verdicts")
+    if verdicts is not None and profile_hash in verdicts:
+        return verdicts[profile_hash]
+    verdict = matches_profile(job, filters)
+    # Only a verdict made with the full description is worth caching; a failed fetch would cache a looser one.
+    if job.get("ats_platform") == "workday" and job.get("description"):
+        job.setdefault("_new_verdicts", {})[profile_hash] = verdict
+    return verdict
+
+
+def _record_enrichment(jobs: list[dict], states: dict[int, dict]) -> None:
+    """Store today's fresh verdicts and drop cache entries for jobs no longer listed."""
+    now = datetime.now(timezone.utc).isoformat()
+    listed: dict[int, set[str]] = collections.defaultdict(set)
+    for j in jobs:
+        if j.get("ats_platform") != "workday":
+            continue
+        listed[j["company_id"]].add(j["external_id"])
+        state = states.get(j["company_id"])
+        if state is None or not j.get("_new_verdicts"):
+            continue
+        state.setdefault("enrichment", {})[j["external_id"]] = {
+            "at": now,
+            "verdicts": j["_new_verdicts"],
+            **{k: j.get(k) for k in ("location", "url", "compensation", "application_deadline")},
+        }
+    for cid, state in states.items():
+        if cid in listed:
+            state["enrichment"] = {k: v for k, v in (state.get("enrichment") or {}).items() if k in listed[cid]}
 
 
 def main() -> int:
