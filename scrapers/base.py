@@ -37,6 +37,8 @@ BLOCK_AFTER_CONSECUTIVE = 5
 class _ChallengeTracker:
     def __init__(self) -> None:
         self._streak: dict[str, int] = {}
+        self.challenged: set[str] = set()  # hosts that answered with a challenge in this process
+        self.answered: set[str] = set()  # hosts that answered normally in this process
 
     @staticmethod
     def key(url: str) -> str:
@@ -49,12 +51,24 @@ class _ChallengeTracker:
 
     def record_block(self, key: str) -> None:
         self._streak[key] = self._streak.get(key, 0) + 1
+        self.challenged.add(key)
 
     def record_ok(self, key: str) -> None:
         self._streak[key] = 0
+        self.answered.add(key)
+
+    def block(self, key: str) -> None:
+        """Skip ``key`` for this process without sending anything (a persisted back-off is active)."""
+        self._streak[key] = BLOCK_AFTER_CONSECUTIVE
+
+    def prime(self, key: str) -> None:
+        """One challenge blocks ``key`` for this process (probing a host that challenged us before)."""
+        self._streak[key] = BLOCK_AFTER_CONSECUTIVE - 1
 
     def reset(self) -> None:
         self._streak.clear()
+        self.challenged.clear()
+        self.answered.clear()
 
 
 challenge_tracker = _ChallengeTracker()

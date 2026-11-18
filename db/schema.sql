@@ -56,7 +56,16 @@ CREATE TABLE IF NOT EXISTS workday_board_state (
     queries         JSONB NOT NULL DEFAULT '{}'::jsonb,
     enrichment      JSONB NOT NULL DEFAULT '{}'::jsonb,
     full_scan_at    TIMESTAMPTZ,
+    last_candidate_at TIMESTAMPTZ,      -- last run a posting passed the prefilter; NULL/old = scanned weekly only
     updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Per Workday pod (wd1.myworkdayjobs.com, ...) that answered with a Cloudflare challenge: no requests until
+-- challenged_until, then one probe; backoff_days doubles (2 -> 14) each time the probe is challenged again.
+CREATE TABLE IF NOT EXISTS workday_pod_backoff (
+    pod              TEXT PRIMARY KEY,
+    challenged_until TIMESTAMPTZ NOT NULL,
+    backoff_days     INTEGER NOT NULL
 );
 
 -- Multi-user tables
@@ -216,6 +225,7 @@ ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_postings ENABLE ROW LEVEL SECURITY;
 -- workday_board_state: RLS on and no policies, so web roles can neither read nor write it.
 ALTER TABLE workday_board_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workday_pod_backoff ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "companies_select_authenticated" ON companies;
 CREATE POLICY "companies_select_authenticated" ON companies
@@ -231,11 +241,11 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         REVOKE ALL ON companies, job_postings FROM anon;
-        REVOKE ALL ON workday_board_state FROM anon;
+        REVOKE ALL ON workday_board_state, workday_pod_backoff FROM anon;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
-        REVOKE ALL ON workday_board_state FROM authenticated;
+        REVOKE ALL ON workday_board_state, workday_pod_backoff FROM authenticated;
     END IF;
 EXCEPTION
     WHEN insufficient_privilege THEN

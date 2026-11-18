@@ -30,8 +30,9 @@ def test_users_trigger_confines_resume_path_to_owner_folder():
     assert re.search(r"CREATE TRIGGER trg_protect_user_worker_fields\s+BEFORE UPDATE ON users", SCHEMA)
 
 
-def test_workday_board_state_is_backend_only():
-    assert "ALTER TABLE workday_board_state ENABLE ROW LEVEL SECURITY" in SCHEMA
-    assert not re.search(r"CREATE POLICY [^\n]+ ON workday_board_state", SCHEMA)
-    assert "REVOKE ALL ON workday_board_state FROM anon" in SCHEMA
-    assert "REVOKE ALL ON workday_board_state FROM authenticated" in SCHEMA
+def test_workday_scan_tables_are_backend_only():
+    for table in ("workday_board_state", "workday_pod_backoff"):
+        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in SCHEMA
+        assert not re.search(rf"CREATE POLICY [^\n]+ ON {table}", SCHEMA)
+    assert "REVOKE ALL ON workday_board_state, workday_pod_backoff FROM anon" in SCHEMA
+    assert "REVOKE ALL ON workday_board_state, workday_pod_backoff FROM authenticated" in SCHEMA

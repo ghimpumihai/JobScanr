@@ -22,14 +22,26 @@ from db import queries
 from jobs.match import matches_profile
 from models import Company, JobPosting
 from scrapers import get_client
-from scrapers.base import BlockedByChallenge, make_http_client
-from scrapers.workday import WorkdayClient
+from scrapers.base import BlockedByChallenge, challenge_tracker, make_http_client
+from scrapers.workday import WorkdayClient, full_scan_due, is_hot
 
 logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
 # A Workday job's detail page is re-fetched at most this often; in between, cached per-profile verdicts are reused.
 ENRICH_TTL = timedelta(days=7)
+# A blocked board falls back to its cached listing (its jobs stay listed, matchable and unpruned) only while the
+# cache is younger than the job-pruning window. shortcut: assumes the jobs are still live while we can't look.
+BLOCKED_CACHE_MAX_AGE = timedelta(days=30)
+BACKOFF_FIRST_DAYS, BACKOFF_MAX_DAYS = 2, 14
+
+
+def _tag(jobs: list[JobPosting], company: Company | dict) -> list[JobPosting]:
+    for job in jobs:
+        job["company_id"] = company["id"]
+        job["company_name"] = company["name"]
+        job["ats_platform"] = company["ats_platform"]
+    return jobs
 
 
 async def fetch_company(
@@ -43,11 +55,7 @@ async def fetch_company(
         jobs = await client.get_jobs(company["ats_identifier"], state=state, countries=countries)
     else:
         jobs = await client.get_jobs(company["ats_identifier"])
-    for job in jobs:
-        job["company_id"] = company["id"]
-        job["company_name"] = company["name"]
-        job["ats_platform"] = company["ats_platform"]
-    return jobs
+    return _tag(jobs, company)
 
 
 PROGRESS_EVERY = 200
@@ -62,11 +70,11 @@ async def scrape_all(
 ) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
-    # - Workday: dedicated concurrent pool (20) so multi-page crawls never starve fast platforms
+    # - Workday: no pool; WorkdayClient paces request starts per pod (wd1, wd5, ...). A shared pool on top
+    #   would let the busiest pod hold every slot and stall the others.
     # - Ashby: independent serialized pacing lock (0.5s) to prevent 429s and soft-throttle drops
     async with make_http_client() as http:
         fast_sem = asyncio.Semaphore(30)
-        workday_sem = asyncio.Semaphore(20)
         ashby_lock = asyncio.Lock()
 
         done = [0]
@@ -91,7 +99,11 @@ async def scrape_all(
             t0 = time.monotonic()
             try:
                 if c.get("ats_platform") == "workday" and workday_states is not None:
-                    return await fetch_company(http, c, workday_states.setdefault(c["id"], {}), countries)
+                    state = workday_states.setdefault(c["id"], {})
+                    if state.get("queries") and not is_hot(state) and not full_scan_due(state):
+                        # A5: a cold board is scanned only on its staggered weekly full scan
+                        return _tag(WorkdayClient.cached_jobs(c["ats_identifier"], state), c)
+                    return await fetch_company(http, c, state, countries)
                 return await fetch_company(http, c)
             except Exception:
                 st[2] += 1
@@ -107,8 +119,7 @@ async def scrape_all(
                     await asyncio.sleep(0.5)
                     return await timed(c)
             elif plat == "workday":
-                async with workday_sem:
-                    return await timed(c)
+                return await timed(c)
             else:
                 async with fast_sem:
                     return await timed(c)
@@ -138,6 +149,9 @@ async def scrape_all(
                         "blocked": True,
                     }
                 )
+            state = (workday_states or {}).get(company.get("id")) or {}
+            if company.get("ats_platform") == "workday" and _cache_fresh(state):
+                all_jobs.extend(_tag(WorkdayClient.cached_jobs(company["ats_identifier"], state), company))
             continue
         if isinstance(result, Exception):
             failures.append(f"{company['name']} ({company['ats_platform']}): {result}")
@@ -188,6 +202,26 @@ async def run_pipeline(args) -> int:
         logger.warning("Could not load Workday board state, scanning without it: %s", e)
         workday_states = {}
 
+    try:
+        backoff = queries.get_workday_pod_backoff()
+    except Exception as e:
+        logger.warning("Could not load Workday pod back-off, probing every pod: %s", e)
+        backoff = {}
+    now = datetime.now(timezone.utc)
+    for pod, b in backoff.items():
+        # B9: no requests while backed off; afterwards one challenge (not five) blocks the pod again
+        if b["until"] > now:
+            challenge_tracker.block(pod)
+        else:
+            challenge_tracker.prime(pod)
+    if backoff:
+        logger.info(
+            "Workday pods in back-off: %s",
+            ", ".join(
+                f"{p} until {b['until']:%Y-%m-%d}" if b["until"] > now else f"{p} (probe)" for p, b in backoff.items()
+            ),
+        )
+
     logger.info("Scraping %d companies...", len(companies))
     failure_details: list[dict] = []
     blocked: list[dict] = []
@@ -235,6 +269,9 @@ async def run_pipeline(args) -> int:
 
     hashes = {id(u): _profile_hash(u.get("profile_filters") or profile) for u in active_users}
     candidates = [j for j in jobs if passes_prefilter_multiuser(j, active_users)]
+    for j in candidates:  # A5: boards producing candidates stay on the daily scan
+        if j.get("ats_platform") == "workday" and j.get("company_id") in workday_states:
+            workday_states[j["company_id"]]["last_candidate_at"] = now.isoformat()
     candidates = [j for j in candidates if not _apply_cached_enrichment(j, workday_states, set(hashes.values()))]
     if candidates:
         # Detail endpoints throttle hardest right after a full scrape;
@@ -272,8 +309,13 @@ async def run_pipeline(args) -> int:
         len(active_users),
     )
 
+    blocked_pods = {p for p in challenge_tracker.challenged if challenge_tracker.is_blocked(p)}
+    pod_upserts, pod_deletes = _plan_backoff(backoff, blocked_pods, challenge_tracker.answered, now)
+    for pod, b in pod_upserts.items():
+        logger.warning("Workday pod %s challenged us: no requests to it for %d days.", pod, b["days"])
+
     if args.dry_run:
-        logger.info("[dry-run] Workday board state not saved (%d boards).", len(workday_states))
+        logger.info("[dry-run] Workday board state and pod back-off not saved (%d boards).", len(workday_states))
         for u in active_users:
             u_matches = user_match_map.get(u.get("id"), [])
             logger.info("[dry-run] User %s matches %d job(s).", u.get("email"), len(u_matches))
@@ -285,6 +327,10 @@ async def run_pipeline(args) -> int:
         queries.save_workday_board_states(workday_states)
     except Exception as e:  # a lost cache only costs requests next run; never block the digest on it
         logger.warning("Could not save Workday board state: %s", e)
+    try:
+        queries.save_workday_pod_backoff(pod_upserts, pod_deletes)
+    except Exception as e:
+        logger.warning("Could not save Workday pod back-off: %s", e)
     new_jobs = queries.upsert_jobs(all_matched_jobs)
     stale = queries.delete_stale_jobs(days=30)
     logger.info("Stored %d new / %d total matched; pruned %d stale.", len(new_jobs), len(all_matched_jobs), stale)
@@ -367,6 +413,27 @@ def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None
             return None
         out |= {str(x).strip().lower() for x in [*f["eligible_regions"], *(f.get("locations") or [])]}
     return out or None
+
+
+def _cache_fresh(state: dict) -> bool:
+    last = state.get("full_scan_at")
+    return bool(state.get("queries") and last) and (
+        datetime.now(timezone.utc) - datetime.fromisoformat(last) < BLOCKED_CACHE_MAX_AGE
+    )
+
+
+def _plan_backoff(
+    backoff: dict[str, dict], blocked: set[str], answered: set[str], now: datetime
+) -> tuple[dict[str, dict], set[str]]:
+    """New back-off rows for Workday pods blocked this run (doubling on repeat), and rows to clear."""
+    upserts = {}
+    for pod in blocked:
+        if not pod.endswith(".myworkdayjobs.com"):
+            continue
+        prev = backoff.get(pod)
+        days = min(prev["days"] * 2, BACKOFF_MAX_DAYS) if prev else BACKOFF_FIRST_DAYS
+        upserts[pod] = {"until": now + timedelta(days=days), "days": days}
+    return upserts, {p for p in backoff if p in answered and p not in blocked}
 
 
 def _profile_hash(filters: dict) -> str:

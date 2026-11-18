@@ -152,10 +152,15 @@ def delete_stale_jobs(days: int = 30) -> int:
 def get_workday_board_states() -> dict[int, dict]:
     """Cached Workday scan state per company_id (see workday_board_state in db/schema.sql)."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT company_id, queries, enrichment, full_scan_at FROM workday_board_state")
+        cur.execute("SELECT company_id, queries, enrichment, full_scan_at, last_candidate_at FROM workday_board_state")
         return {
-            cid: {"queries": q or {}, "enrichment": e or {}, "full_scan_at": f.isoformat() if f else None}
-            for cid, q, e, f in cur.fetchall()
+            cid: {
+                "queries": q or {},
+                "enrichment": e or {},
+                "full_scan_at": f.isoformat() if f else None,
+                "last_candidate_at": lc.isoformat() if lc else None,
+            }
+            for cid, q, e, f, lc in cur.fetchall()
         }
 
 
@@ -163,23 +168,52 @@ def save_workday_board_states(states: dict[int, dict]) -> int:
     if not states:
         return 0
     rows = [
-        (cid, json.dumps(s.get("queries") or {}), json.dumps(s.get("enrichment") or {}), s.get("full_scan_at"))
+        (
+            cid,
+            json.dumps(s.get("queries") or {}),
+            json.dumps(s.get("enrichment") or {}),
+            s.get("full_scan_at"),
+            s.get("last_candidate_at"),
+        )
         for cid, s in states.items()
     ]
     with get_connection() as conn, conn.cursor() as cur:
         cur.executemany(
             """
-            INSERT INTO workday_board_state (company_id, queries, enrichment, full_scan_at, updated_at)
-            VALUES (%s, %s::jsonb, %s::jsonb, %s::timestamptz, NOW())
+            INSERT INTO workday_board_state
+                (company_id, queries, enrichment, full_scan_at, last_candidate_at, updated_at)
+            VALUES (%s, %s::jsonb, %s::jsonb, %s::timestamptz, %s::timestamptz, NOW())
             ON CONFLICT (company_id) DO UPDATE
                 SET queries = EXCLUDED.queries,
                     enrichment = EXCLUDED.enrichment,
                     full_scan_at = EXCLUDED.full_scan_at,
+                    last_candidate_at = EXCLUDED.last_candidate_at,
                     updated_at = NOW()
             """,
             rows,
         )
         return len(rows)
+
+
+def get_workday_pod_backoff() -> dict[str, dict]:
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT pod, challenged_until, backoff_days FROM workday_pod_backoff")
+        return {pod: {"until": until, "days": days} for pod, until, days in cur.fetchall()}
+
+
+def save_workday_pod_backoff(upserts: dict[str, dict], deletes: set[str]) -> None:
+    with get_connection() as conn, conn.cursor() as cur:
+        if upserts:
+            cur.executemany(
+                """
+                INSERT INTO workday_pod_backoff (pod, challenged_until, backoff_days) VALUES (%s, %s, %s)
+                ON CONFLICT (pod) DO UPDATE
+                    SET challenged_until = EXCLUDED.challenged_until, backoff_days = EXCLUDED.backoff_days
+                """,
+                [(pod, v["until"], v["days"]) for pod, v in upserts.items()],
+            )
+        if deletes:
+            cur.execute("DELETE FROM workday_pod_backoff WHERE pod = ANY(%s)", (list(deletes),))
 
 
 def mark_notified(job_ids: list[int]) -> None:
