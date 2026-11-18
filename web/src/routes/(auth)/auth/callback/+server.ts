@@ -3,7 +3,9 @@ import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals, cookies }) => {
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') ?? '/matches';
+  // Only same-site paths: an absolute or protocol-relative `next` would be an open redirect.
+  const rawNext = url.searchParams.get('next') ?? '';
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('\\') ? rawNext : '/matches';
 
   if (code && locals.supabase) {
     try {

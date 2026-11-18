@@ -16,37 +16,13 @@
     'Lead / Principal (8+ yrs)'
   ];
 
-  let selectedLevels = $state<string[]>([
-    'Graduate / New Grad',
-    'Entry Level (0-1 yrs)',
-    'Junior (1-2 yrs)'
-  ]);
-
-  let locations = $state<string[]>([
-    'London',
-    'Berlin',
-    'Amsterdam',
-    'Dublin',
-    'Paris',
-    'Remote EU'
-  ]);
-
-  let excludedKeywords = $state<string[]>([
-    'Senior',
-    'Lead',
-    'Principal',
-    'Staff',
-    'Clearance',
-    'C++'
-  ]);
-
-  let targetKeywords = $state<string[]>([
-    'Backend',
-    'Python',
-    'Go',
-    'Distributed Systems',
-    'Platform'
-  ]);
+  // Seeded from the stored profile so saving never overwrites it with demo values.
+  // svelte-ignore state_referenced_locally -- form fields are seeded once from the loaded profile
+  const profile = data.profile;
+  let selectedLevels = $state<string[]>([...(profile?.seniority_levels ?? [])]);
+  let locations = $state<string[]>([...(profile?.preferred_locations ?? [])]);
+  let excludedKeywords = $state<string[]>([...(profile?.excluded_keywords ?? [])]);
+  let targetKeywords = $state<string[]>([...(profile?.target_keywords ?? [])]);
 
   let newLocation = $state('');
   let newTargetKeyword = $state('');
@@ -110,12 +86,21 @@
 </svelte:head>
 
 <div class="space-y-5">
+  {#if data.loadError}
+    <div class="card border-l-4 border-red-500 p-4 text-xs text-content-primary" role="alert">
+      Could not load your settings. Saving is disabled so nothing gets overwritten. Please reload.
+    </div>
+  {/if}
   <form
     method="POST"
     action="?/savePreferences"
     use:enhance={() => {
-      return async ({ update }) => {
-        showToast("Preferences saved. Active for tomorrow's 06:00 UTC scan.");
+      return async ({ result, update }) => {
+        if (result.type === 'success') {
+          showToast((result.data?.message as string) ?? 'Preferences saved.');
+        } else {
+          showToast((result.type === 'failure' && (result.data?.error as string)) || 'Could not save preferences.');
+        }
         await update({ reset: false });
       };
     }}
@@ -144,10 +129,10 @@
             <Icon name="document" size={24} class="mt-0.5 shrink-0 text-brand-blue" />
             <div>
               <div class="font-semibold text-content-primary">
-                {data.profile.resume_filename || 'stefan_ghimpu_cv_2026.pdf'}
+                {profile?.resume_filename ?? 'No resume uploaded'}
               </div>
               <div class="text-xs text-content-caption">
-                {data.profile.resume_size_kb || 142} KB · Uploaded {data.profile.resume_uploaded_at || 'Oct 12, 2026'} · Supabase Secure Storage
+                {#if profile?.resume_uploaded_at}Uploaded {profile.resume_uploaded_at} · {/if}Supabase Secure Storage
               </div>
               <div class="mt-1.5">
                 <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">
@@ -185,7 +170,7 @@
               id="fullName"
               name="fullName"
               type="text"
-              value={data.profile.full_name || 'Stefan Ghimpu'}
+              value={profile?.full_name ?? ''}
               class="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue"
             />
           </div>
@@ -197,7 +182,7 @@
               id="contactEmail"
               type="email"
               readonly
-              value={data.profile.email || 'stefan@example.com'}
+              value={profile?.email ?? ''}
               class="w-full rounded-md border border-border-main bg-subtle px-3 py-2 text-xs text-content-muted outline-none"
             />
           </div>
@@ -355,20 +340,23 @@
         <label for="workAuthorization" class="mb-1 block text-xs font-semibold text-content-primary">
           Work Authorization Default
         </label>
-        <input
+        <select
           id="workAuthorization"
           name="workAuth"
-          type="text"
-          value={data.profile.work_authorization}
+          value={profile?.work_authorization ?? ''}
           class="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue"
-        />
+        >
+          <option value="" disabled>Select…</option>
+          <option value="yes">Yes, authorized to work in my target countries</option>
+          <option value="no">No, I need authorization or sponsorship</option>
+        </select>
         <p class="mt-1 text-[11px] text-content-caption">
           Pre-filled in ATS screening questions to prevent application drops.
         </p>
       </div>
 
       <div class="flex justify-end pt-3">
-        <button type="submit" class="btn-action">
+        <button type="submit" class="btn-action disabled:opacity-60" disabled={!profile}>
           Save Preferences
           <Icon name="arrow-right" size={12} />
         </button>
@@ -383,7 +371,7 @@
       <div>
         <h2 class="text-sm font-semibold text-content-primary">Account Session</h2>
         <p class="mt-0.5 text-xs text-content-muted">
-          Signed in as <strong class="text-content-primary">{data.profile.email || 'stefan@example.com'}</strong>
+          Signed in as <strong class="text-content-primary">{profile?.email ?? ''}</strong>
         </p>
       </div>
       <a

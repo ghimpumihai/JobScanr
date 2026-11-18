@@ -55,3 +55,26 @@ def test_matches_loader_only_emits_http_urls():
     assert "safeHttpUrl(row.job_postings?.url)" in loader
     helper = (WEB_ROOT / "src/lib/safeUrl.ts").read_text(encoding="utf-8")
     assert "'http:'" in helper and "'https:'" in helper
+
+
+def test_settings_seniority_labels_match_server_mapping():
+    """The page's checkbox labels must be keys of LEVEL_TOKENS, or saving them is rejected."""
+    page = (WEB_ROOT / "src" / "routes" / "(app)" / "settings" / "+page.svelte").read_text(encoding="utf-8")
+    server = (WEB_ROOT / "src" / "routes" / "(app)" / "settings" / "+page.server.ts").read_text(encoding="utf-8")
+
+    block = page.split("ALL_SENIORITY_LEVELS = [", 1)[1].split("];", 1)[0]
+    labels = re.findall(r"'([^']+)'", block)
+    assert labels, "no labels found"
+    for label in labels:
+        assert f"'{label}':" in server, f"{label} missing from LEVEL_TOKENS"
+
+
+def test_auth_callback_rejects_offsite_next():
+    callback = (WEB_ROOT / "src" / "routes" / "(auth)" / "auth" / "callback" / "+server.ts").read_text(encoding="utf-8")
+    assert "startsWith('/')" in callback and "startsWith('//')" in callback
+
+
+def test_real_users_never_get_mock_data_fallbacks():
+    for page in ("applications", "matches", "settings"):
+        text = (WEB_ROOT / "src" / "routes" / "(app)" / page / "+page.server.ts").read_text(encoding="utf-8")
+        assert "loadError" in text, f"{page} must report load errors instead of silently showing mock data"
