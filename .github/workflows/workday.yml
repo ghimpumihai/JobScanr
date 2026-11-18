@@ -1,0 +1,94 @@
+name: workday
+# Workday scan, kept out of the daily digest so a slow or challenged Workday can't delay it.
+# Stores jobs and matches; the 06:00 digest (which skips Workday) emails them.
+on:
+  schedule:
+    - cron: "0 4,10,16,22 * * *"   # every 6 h, finishing well before the 06:00 UTC digest
+  workflow_dispatch:
+
+concurrency:
+  group: workday
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    environment: production
+    # First run without cache is ~40 min (wd1 at 1 request/s); cached runs ~5-10 min.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Scan Workday boards
+        run: python -m jobs.scrape_and_notify --platforms workday --no-email --failures-file failures.json 2>&1 | tee scrape.log
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Same repair as digest.yml, with its own issue title and a time-stamped branch so the four daily
+      # runs and the digest never collide. Challenge-blocked boards are skipped (not broken links).
+      - name: Scan logs, verify replacement links, and open pull request
+        if: always()
+        timeout-minutes: 15
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          python -u -m scripts.scan_and_fix_links --log-file scrape.log --failures-file failures.json --report-file fix_report.md --manual-review-file manual_review.md --ai --prune
+          if [ -f fix_report.md ]; then
+            cat fix_report.md >> "$GITHUB_STEP_SUMMARY"
+
+            ISSUE_TITLE="Workday Career Links Needing Manual Review"
+            EXISTING_ISSUE=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --limit 1 --json number --jq '.[0].number' 2>/dev/null || true)
+            if [ -f manual_review.md ]; then
+              if [ -n "$EXISTING_ISSUE" ]; then
+                gh issue edit "$EXISTING_ISSUE" --body-file manual_review.md
+              else
+                gh issue create --title "$ISSUE_TITLE" --body-file manual_review.md
+              fi
+            elif [ -n "$EXISTING_ISSUE" ]; then
+              gh issue close "$EXISTING_ISSUE" --comment "All broken Workday career links have been resolved."
+            fi
+          fi
+          if [ -n "$(git status --porcelain seed/companies.json)" ]; then
+            STAMP="$(date -u +%Y%m%d-%H%M)"
+            BRANCH="bot/fix-workday-links-${STAMP}"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$BRANCH"
+            git add seed/companies.json
+            {
+              echo "fix(seed): auto-recover broken Workday career links (${STAMP})"
+              echo ""
+              cat fix_report.md
+            } > /tmp/commit_msg.txt
+            git commit -F /tmp/commit_msg.txt
+            git push origin "$BRANCH"
+
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "fix(seed): auto-recover broken Workday career links (${STAMP})" \
+              --body-file fix_report.md
+          fi
+
+      - name: Keep failures for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workday-failures
+          path: |
+            failures.json
+            scrape.log
+          if-no-files-found: ignore
+          retention-days: 7

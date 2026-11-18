@@ -4,6 +4,8 @@ Usage:
   python -m jobs.scrape_and_notify             # normal daily run
   python -m jobs.scrape_and_notify --dry-run   # fetch + match, no DB writes, no email
   python -m jobs.scrape_and_notify --staging   # run against staging environment (.env.stage)
+  python -m jobs.scrape_and_notify --platforms workday --no-email   # Workday-only scan, digest sent later
+  python -m jobs.scrape_and_notify --skip-platforms workday         # daily digest without Workday requests
 """
 
 import argparse
@@ -181,7 +183,7 @@ async def run_pipeline(args) -> int:
     import config
 
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
-    companies = queries.get_all_companies()
+    companies = _select_platforms(queries.get_all_companies(), args.platforms, args.skip_platforms)
     active_users: list[dict] = []
     if not getattr(args, "profile", None):
         try:
@@ -361,6 +363,10 @@ async def run_pipeline(args) -> int:
         if app_stage_items:
             queries.stage_user_applications(uid, app_stage_items)
 
+    if args.no_email:
+        logger.info("--no-email: jobs and matches stored; the next digest run sends them.")
+        return 0
+
     from jobs.notify import email_configured, send_email_digest, send_user_digest
 
     if not email_configured():
@@ -380,14 +386,25 @@ async def run_pipeline(args) -> int:
                     queries.mark_user_matches_notified(uid, [j["id"] for j in unnotified])
                 logger.info("Personalized digest sent to %s (%d new matches).", u.get("email"), len(unnotified))
         else:
-            if new_jobs:
-                send_email_digest(new_jobs)
-                queries.mark_notified([j["id"] for j in new_jobs])
+            # Not just this run's new jobs: Workday runs store jobs with --no-email for this digest to send.
+            pending = queries.get_unnotified_jobs()
+            if pending:
+                send_email_digest(pending)
+                queries.mark_notified([j["id"] for j in pending])
                 sent_count += 1
-                logger.info("Email digest sent for %d jobs.", len(new_jobs))
+                logger.info("Email digest sent for %d jobs.", len(pending))
 
     logger.info("Notification stage finished. Digests sent: %d.", sent_count)
     return 0
+
+
+def _select_platforms(companies: list, only: str | None, skip: str | None) -> list:
+    """Filter companies by comma-separated platform lists (--platforms / --skip-platforms)."""
+    keep = {p.strip() for p in only.split(",")} if only else None
+    drop = {p.strip() for p in skip.split(",")} if skip else set()
+    return [
+        c for c in companies if (keep is None or c.get("ats_platform") in keep) and c.get("ats_platform") not in drop
+    ]
 
 
 def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None:
@@ -516,6 +533,9 @@ def main() -> int:
     parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
     parser.add_argument("--failures-file", type=str, default=None, help="path to write structured failures JSON")
     parser.add_argument("--profile", type=str, default=None, help="path to custom profile JSON")
+    parser.add_argument("--platforms", type=str, default=None, help="comma-separated: scrape only these platforms")
+    parser.add_argument("--skip-platforms", type=str, default=None, help="comma-separated: don't scrape these")
+    parser.add_argument("--no-email", action="store_true", help="store jobs and matches but send no digest")
     args = parser.parse_args()
 
     return asyncio.run(run_pipeline(args))

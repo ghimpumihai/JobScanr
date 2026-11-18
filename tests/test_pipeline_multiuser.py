@@ -249,6 +249,9 @@ async def test_run_pipeline_multiuser_flow():
     mock_args.profile = None
     mock_args.dry_run = False
     mock_args.failures_file = None
+    mock_args.platforms = None
+    mock_args.skip_platforms = None
+    mock_args.no_email = False
 
     users = [
         {
