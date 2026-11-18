@@ -99,11 +99,22 @@ def passes_prefilter(job: JobPosting | dict, p: dict | None = None) -> bool:
     return True
 
 
-def passes_prefilter_multiuser(job: JobPosting | dict, active_users: list[dict]) -> bool:
-    """Evaluate whether a description-less job passes prefilter for ANY active user."""
+def passes_prefilter_multiuser(job: JobPosting | dict, active_users: list[dict], base: dict | None = None) -> bool:
+    """Evaluate whether a description-less job passes prefilter for ANY active user.
+
+    Each user's filters are layered over ``base`` (the same rule the matcher uses), so a profile missing a
+    key falls back to the default instead of raising.
+    """
     if not active_users:
-        return passes_prefilter(job)
-    return any(passes_prefilter(job, u.get("profile_filters") or u) for u in active_users)
+        return passes_prefilter(job, base) if base else passes_prefilter(job)
+    base = base or PROFILE
+    for u in active_users:
+        try:
+            if passes_prefilter(job, {**base, **(u.get("profile_filters") or {})}):
+                return True
+        except Exception:  # one malformed user profile must not stop the daily run
+            logger.debug("Skipping malformed profile_filters for user %s", u.get("id"), exc_info=True)
+    return False
 
 
 def _needs_enrichment(job: JobPosting | dict) -> bool:
@@ -151,7 +162,9 @@ async def enrich_jobs(
 ) -> list[JobPosting | dict]:
     """Fill descriptions for candidates lacking them. Failures are silent:
     an unenriched job still gets matched on title/location."""
-    targets = [j for j in jobs if passes_prefilter(j, p) and _needs_enrichment(j)]
+    # p=None: the caller already filtered across every user; re-filtering with the default profile would
+    # drop jobs only another user's profile accepts.
+    targets = [j for j in jobs if _needs_enrichment(j) and (p is None or passes_prefilter(j, p))]
     if not targets:
         return jobs
 

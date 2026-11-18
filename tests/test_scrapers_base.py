@@ -36,3 +36,36 @@ def test_decode_non_base64_passthrough():
 
 def test_decode_none_passthrough():
     assert decode_html_field(None) is None
+
+
+def test_retry_after_sleep_is_capped(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from scrapers.base import BaseClient
+
+    slept: list[float] = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("scrapers.base.asyncio.sleep", fake_sleep)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "86400"})
+        return httpx.Response(200, json={})
+
+    class Dummy(BaseClient):
+        async def get_jobs(self, ats_identifier):
+            return []
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            await Dummy(http).request_with_retry("GET", "https://x.test")
+
+    asyncio.run(run())
+    assert slept and max(slept) <= 60

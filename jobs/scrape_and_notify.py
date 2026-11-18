@@ -30,6 +30,9 @@ from scrapers.workday import WorkdayClient, full_scan_due, is_hot
 logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
+# Per-company cap so one hung board can't stall the run. Not applied to Workday: its boards queue for per-pod
+# pacing slots (minutes on a big pod), and each of its requests already has its own timeout.
+PER_COMPANY_TIMEOUT = 120.0
 # Below this many attempted (not challenge-blocked) companies, the failure rate says nothing: 1 failure out of 2
 # would abort a run in which Workday blocked everything else.
 MIN_ATTEMPTED_FOR_ABORT = 10
@@ -109,7 +112,7 @@ async def scrape_all(
                         # A5: a cold board is scanned only on its staggered weekly full scan
                         return _tag(WorkdayClient.cached_jobs(c["ats_identifier"], state), c)
                     return await fetch_company(http, c, state, countries)
-                return await fetch_company(http, c)
+                return await asyncio.wait_for(fetch_company(http, c), timeout=PER_COMPANY_TIMEOUT)
             except Exception:
                 st[2] += 1
                 raise
@@ -274,8 +277,10 @@ async def run_pipeline(args) -> int:
     # details only for candidates passing the union prefilter across active users.
     from jobs.enrich import enrich_jobs, extract_compensation, passes_prefilter_multiuser
 
-    hashes = {id(u): _profile_hash(u.get("profile_filters") or profile) for u in active_users}
-    candidates = [j for j in jobs if passes_prefilter_multiuser(j, active_users)]
+    # Each user's filters layered over the default profile, so a missing key falls back instead of raising.
+    user_filters = {id(u): {**profile, **(u.get("profile_filters") or {})} for u in active_users}
+    hashes = {id(u): _profile_hash(user_filters[id(u)]) for u in active_users}
+    candidates = [j for j in jobs if passes_prefilter_multiuser(j, active_users, base=profile)]
     for j in candidates:  # A5: boards producing candidates stay on the daily scan
         if j.get("ats_platform") == "workday" and j.get("company_id") in workday_states:
             workday_states[j["company_id"]]["last_candidate_at"] = now.isoformat()
@@ -301,8 +306,11 @@ async def run_pipeline(args) -> int:
     all_matched_jobs_map: dict[tuple[str, int | None], dict] = {}
 
     for u in active_users:
-        u_filters = u.get("profile_filters") or profile
-        u_matches = [j for j in jobs if _match(j, u_filters, hashes[id(u)])]
+        try:
+            u_matches = [j for j in jobs if _match(j, user_filters[id(u)], hashes[id(u)])]
+        except Exception:  # one malformed profile must not stop everyone else's digest
+            logger.exception("Matching failed for user %s; skipping this user today.", u.get("id"))
+            u_matches = []
         u_key = u.get("id")
         user_match_map[u_key] = u_matches
         for j in u_matches:
@@ -369,7 +377,7 @@ async def run_pipeline(args) -> int:
 
     from jobs.notify import email_configured, send_email_digest, send_user_digest
 
-    if not email_configured():
+    if not email_configured(require_digest_email=any(not u.get("id") for u in active_users)):
         logger.warning("Matches found but no delivery channel — they will be retried.")
         return 1
 
@@ -377,9 +385,13 @@ async def run_pipeline(args) -> int:
     for u in active_users:
         uid = u.get("id")
         if uid:
-            unnotified = queries.get_user_unnotified_matches(uid)
-            activity = queries.get_user_recent_application_activity(uid)
-            msg_id = send_user_digest(u, unnotified, activity)
+            try:
+                unnotified = queries.get_user_unnotified_matches(uid)
+                activity = queries.get_user_recent_application_activity(uid)
+                msg_id = send_user_digest(u, unnotified, activity)
+            except Exception:  # e.g. SMTP rejects one address; the remaining users must still get theirs
+                logger.exception("Digest failed for user %s; matches stay unnotified for the next run.", uid)
+                continue
             if msg_id:
                 sent_count += 1
                 if unnotified:
@@ -416,7 +428,7 @@ def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None
     """
     out: set[str] = set()
     for u in active_users:
-        f = u.get("profile_filters") or profile
+        f = {**profile, **(u.get("profile_filters") or {})}
         if not f.get("eligible_regions"):
             return None
         out |= {str(x).strip().lower() for x in [*f["eligible_regions"], *(f.get("locations") or [])]}
