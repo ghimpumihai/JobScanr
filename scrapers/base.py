@@ -6,6 +6,7 @@ import binascii
 import html
 import re
 from abc import ABC, abstractmethod
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -15,6 +16,48 @@ USER_AGENT = "JobScanr/0.1 (personal job alert)"
 MAX_RETRIES = 3
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"\s+")
+
+
+class BlockedByChallenge(RuntimeError):
+    """The host answered with a Cloudflare bot-management challenge (HTTP 429 + ``cf-mitigated: challenge``).
+
+    A challenge is not a transient rate limit: retrying cannot pass it, and every retry is more automated
+    traffic against a host that has told us to stop. Callers must not retry and must not treat it as a dead
+    board (the company is fine; we are being turned away).
+    """
+
+    blocked = True
+
+
+# Consecutive challenges (with no successful request in between) after which a host is skipped for the
+# rest of the process. Workday serves tenants from shared pods (wd1, wd5, ...), so the pod is the key.
+BLOCK_AFTER_CONSECUTIVE = 5
+
+
+class _ChallengeTracker:
+    def __init__(self) -> None:
+        self._streak: dict[str, int] = {}
+
+    @staticmethod
+    def key(url: str) -> str:
+        host = (urlsplit(url).hostname or "").lower()
+        # tenant.wd1.myworkdayjobs.com -> wd1.myworkdayjobs.com
+        return host.split(".", 1)[1] if host.endswith(".myworkdayjobs.com") and host.count(".") >= 3 else host
+
+    def is_blocked(self, key: str) -> bool:
+        return self._streak.get(key, 0) >= BLOCK_AFTER_CONSECUTIVE
+
+    def record_block(self, key: str) -> None:
+        self._streak[key] = self._streak.get(key, 0) + 1
+
+    def record_ok(self, key: str) -> None:
+        self._streak[key] = 0
+
+    def reset(self) -> None:
+        self._streak.clear()
+
+
+challenge_tracker = _ChallengeTracker()
 
 
 def strip_html(raw: str | None) -> str | None:
@@ -59,11 +102,18 @@ class BaseClient(ABC):
     async def request_with_retry(self, method: str, url: str, **kwargs):
         delay = 1.0
         last_exc: Exception | None = None
+        host_key = challenge_tracker.key(url)
+        if challenge_tracker.is_blocked(host_key):
+            raise BlockedByChallenge(f"{host_key} is challenging this client; skipped without a request")
         for attempt in range(5):
             try:
                 r = await self.http.request(method, url, **kwargs)
                 if r.status_code < 400:
+                    challenge_tracker.record_ok(host_key)
                     return r
+                if r.status_code == 429 and r.headers.get("cf-mitigated", "").lower() == "challenge":
+                    challenge_tracker.record_block(host_key)
+                    raise BlockedByChallenge(f"{host_key} answered with a Cloudflare challenge for {url}")
                 if r.status_code == 404:
                     r.raise_for_status()  # dead board: fail fast, no retry
                 if r.status_code == 429:
