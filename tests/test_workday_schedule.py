@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from jobs import scrape_and_notify as sn
+from scrapers import workday as workday_module
 from scrapers.base import BaseClient, BlockedByChallenge, challenge_tracker
 from scrapers.workday import WorkdayClient, is_hot
 
@@ -232,3 +233,34 @@ def test_small_pod_that_only_challenged_is_backed_off_and_tiny_samples_dont_abor
     assert sn_ret == 1  # only because no mail channel is configured in this test, not the failure-rate abort
     upserts, _ = save.call_args.args
     assert small in upserts
+
+
+def test_queued_requests_skip_their_slot_once_the_pod_is_blocked():
+    """Production run: 683 wd1 boards queued at the start each waited out a 1 s slot after wd1 was blocked."""
+    sent = []
+
+    async def handler(request):
+        sent.append(1)
+        await asyncio.sleep(0.01)  # a real network yields, so the other requests are already queued
+        return _challenge(request)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            c = WorkdayClient(http)
+            return await asyncio.gather(
+                *(c.request_with_retry("GET", f"https://t{i}.{POD}/x") for i in range(20)), return_exceptions=True
+            )
+
+    challenge_tracker.prime(POD)  # the first challenge blocks the pod
+    WorkdayClient.requests_sent = 0
+    loop = asyncio.new_event_loop()
+    try:
+        with patch.object(workday_module, "POD_INTERVAL", 0.05):
+            t0 = loop.time()
+            results = loop.run_until_complete(run())
+            elapsed = loop.time() - t0
+    finally:
+        loop.close()
+    assert all(isinstance(r, BlockedByChallenge) for r in results)
+    assert len(sent) == 1 and WorkdayClient.requests_sent == 1
+    assert elapsed < 0.5  # 19 queued slots of 0.05 s would take ~0.95 s

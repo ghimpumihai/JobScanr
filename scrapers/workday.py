@@ -54,13 +54,17 @@ class _PodPacer:
         self._lock: dict[str, asyncio.Lock] = {}
         self._next: dict[str, float] = {}
 
-    async def wait(self, pod: str) -> None:
+    async def wait(self, pod: str) -> bool:
+        """Wait for this pod's next slot. False if the pod got blocked while we queued: skip, don't wait."""
         async with self._lock.setdefault(pod, asyncio.Lock()):
+            if challenge_tracker.is_blocked(pod):
+                return False
             now = asyncio.get_running_loop().time()
             start = max(now, self._next.get(pod, now))
             self._next[pod] = start + POD_INTERVAL
             if start > now:
                 await asyncio.sleep(start - now)
+            return not challenge_tracker.is_blocked(pod)  # it may have been blocked while we waited
 
 
 _pacers: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _PodPacer]" = weakref.WeakKeyDictionary()
@@ -128,8 +132,7 @@ class WorkdayClient(BaseClient):
 
     async def request_with_retry(self, method: str, url: str, **kwargs):
         pod = challenge_tracker.key(url)
-        if not challenge_tracker.is_blocked(pod):  # a blocked pod fails at once, it shouldn't queue for pacing
-            await _pacer().wait(pod)
+        if await _pacer().wait(pod):  # False once the pod is blocked: super() then fails without a request
             WorkdayClient.requests_sent += 1
         return await super().request_with_retry(method, url, **kwargs)
 
