@@ -19,7 +19,7 @@ from db import queries
 from jobs.match import matches_profile
 from models import Company, JobPosting
 from scrapers import get_client
-from scrapers.base import make_http_client
+from scrapers.base import BlockedByChallenge, make_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,9 @@ PROGRESS_EVERY = 200
 
 
 async def scrape_all(
-    companies: list[Company | dict], failure_details: list[dict] | None = None
+    companies: list[Company | dict],
+    failure_details: list[dict] | None = None,
+    blocked: list[dict] | None = None,
 ) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
@@ -103,6 +105,25 @@ async def scrape_all(
     all_jobs: list[dict] = []
     failures: list[str] = []
     for company, result in zip(companies, results):
+        if isinstance(result, BlockedByChallenge):
+            # Turned away by a bot challenge: neither a scraper failure nor a dead board. Reported separately so
+            # it cannot trip the failure-rate breaker or be "repaired" (pruned/rewritten) by the link fixer.
+            if blocked is not None:
+                blocked.append(company)
+            if failure_details is not None:
+                failure_details.append(
+                    {
+                        "company_id": company.get("id"),
+                        "company_name": company.get("name"),
+                        "ats_platform": company.get("ats_platform"),
+                        "ats_identifier": company.get("ats_identifier"),
+                        "career_url": company.get("career_url"),
+                        "error": str(result),
+                        "status_code": 429,
+                        "blocked": True,
+                    }
+                )
+            continue
         if isinstance(result, Exception):
             failures.append(f"{company['name']} ({company['ats_platform']}): {result}")
             if failure_details is not None:
@@ -131,7 +152,17 @@ async def run_pipeline(args) -> int:
     companies = queries.get_all_companies()
     logger.info("Scraping %d companies...", len(companies))
     failure_details: list[dict] = []
-    jobs, failures = await scrape_all(companies, failure_details=failure_details)
+    blocked: list[dict] = []
+    jobs, failures = await scrape_all(companies, failure_details=failure_details, blocked=blocked)
+    if blocked:
+        by_platform = collections.Counter(c.get("ats_platform") for c in blocked)
+        logger.warning(
+            "%d of %d companies were not scraped today because the host answered with a Cloudflare challenge, %s. "
+            "They are skipped (not failures) and retried on the next run.",
+            len(blocked),
+            len(companies),
+            ", ".join(f"{p}={n}" for p, n in sorted(by_platform.items())),
+        )
 
     if failures:
         logger.info("Scrape finished with %d failures across %d companies.", len(failures), len(companies))
@@ -145,7 +176,8 @@ async def run_pipeline(args) -> int:
         Path(args.failures_file).write_text(json.dumps(failure_details, indent=2))
         logger.info("Wrote %d failure details to %s.", len(failure_details), args.failures_file)
 
-    if len(failures) > len(companies) * FAILURE_RATE_LIMIT:
+    attempted = len(companies) - len(blocked)
+    if attempted > 0 and len(failures) > attempted * FAILURE_RATE_LIMIT:
         logger.error("Failure rate too high — aborting.")
         return 1
 
