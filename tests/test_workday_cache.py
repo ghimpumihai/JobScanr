@@ -177,10 +177,14 @@ def test_only_verdicts_made_with_a_description_are_recorded():
     assert "GONE" not in cache  # no longer listed
 
 
-def test_facet_countries_needs_eligible_regions_for_every_user():
+def test_facet_countries_layers_each_user_over_the_default_profile():
     p = {"locations": ["Berlin"], "eligible_regions": ["Germany"]}
     assert sn._facet_countries([{"profile_filters": p}], p) == {"berlin", "germany"}
-    assert sn._facet_countries([{"profile_filters": p}, {"profile_filters": {"locations": ["Paris"]}}], p) is None
+    # A user without eligible_regions inherits the default's, exactly as the matcher sees them.
+    paris = {"profile_filters": {"locations": ["Paris"]}}
+    assert sn._facet_countries([{"profile_filters": p}, paris], p) == {"berlin", "germany", "paris"}
+    # No eligible_regions anywhere: city-only locations can't be mapped to countries, so don't narrow.
+    assert sn._facet_countries([paris], {"locations": ["Paris"]}) is None
 
 
 def test_challenged_detail_fetch_is_not_retried():

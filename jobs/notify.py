@@ -249,8 +249,12 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
     </div>
     """
 
-    inline_jobs = unnotified_matches[:EMAIL_MAX_INLINE_JOBS]
-    overflow_jobs = unnotified_matches[EMAIL_MAX_INLINE_JOBS:]
+    # Without a portal to link to, every match goes inline: overflow behind a dead "#" link would be marked
+    # notified and never seen.
+    portal_url = os.environ.get("PORTAL_URL", "").strip()
+    inline_limit = EMAIL_MAX_INLINE_JOBS if portal_url else len(unnotified_matches)
+    inline_jobs = unnotified_matches[:inline_limit]
+    overflow_jobs = unnotified_matches[inline_limit:]
 
     rows_html = "".join(
         _render_job_row(
@@ -270,7 +274,7 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
     </table>
     """
 
-    bridge_html = _render_web_portal_bridge(total_matches, overflow_jobs) if overflow_jobs else ""
+    bridge_html = _render_web_portal_bridge(total_matches, overflow_jobs, portal_url) if overflow_jobs else ""
 
     # Optional activity sections for backward compatibility
     extra_activity_html = ""
@@ -410,11 +414,14 @@ def send_user_digest(
     )
 
 
-def email_configured() -> bool:
-    """True when all SMTP settings are present; logs what's missing otherwise."""
-    required = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "DIGEST_EMAIL")
-    missing = [k for k in required if not os.environ.get(k) and k != "DIGEST_EMAIL"]
-    if not DIGEST_EMAIL:
+def email_configured(require_digest_email: bool = True) -> bool:
+    """True when all SMTP settings are present; logs what's missing otherwise.
+
+    DIGEST_EMAIL is only the recipient of the single-user fallback; per-user digests go to each user's own
+    address, so multi-user runs don't need it.
+    """
+    missing = [k for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS") if not os.environ.get(k)]
+    if require_digest_email and not DIGEST_EMAIL:
         missing.append("DIGEST_EMAIL (or DIGEST_EMAIL_TEST for staging)")
     if missing:
         logger.warning(
