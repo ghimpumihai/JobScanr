@@ -1,5 +1,4 @@
 <script lang="ts">
-  import TelemetryStrip from '$lib/components/TelemetryStrip.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import type { PageData } from './$types';
 
@@ -19,7 +18,7 @@
   }
 
   function handleQueueAll() {
-    showToast('Queued all 3 matches for dispatch.');
+    showToast(`Queued ${data.matches.length} roles for dispatch.`);
   }
 </script>
 
@@ -27,33 +26,24 @@
   <title>Daily Matches · JobScanr</title>
 </svelte:head>
 
-<!-- Telemetry Summary Strip -->
-<TelemetryStrip
-  feedsOnline={388}
-  totalFeeds={388}
-  scanTime="06:00 UTC"
-  matchesCount={data.matches.length}
-/>
-
 <!-- Main Matches Card -->
 <div class="card overflow-hidden">
   <div class="border-b border-border-subtle p-6 sm:p-7">
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-base font-bold leading-snug text-content-primary sm:text-lg">
-        Daily Matching Roles (06:00 UTC)
+        Today's matches
       </h1>
       <button
         type="button"
         class="btn-action shrink-0 !py-1.5 sm:!py-2 !text-xs sm:!text-[13px]"
         onclick={handleQueueAll}
       >
-        Queue All (3)
+        Queue all ({data.matches.length})
         <Icon name="arrow-right" size={12} />
       </button>
     </div>
     <p class="mt-1.5 text-xs text-content-muted">
-      Scanned 388 engineering career boards across Europe for
-      <strong class="text-content-primary">stefan@example.com</strong>
+      {data.matches.length} {data.matches.length === 1 ? 'role' : 'roles'} from the latest 06:00 UTC scan, filtered to your locations and seniority.
     </p>
   </div>
 
@@ -91,7 +81,7 @@
                       class="btn-action !text-xs whitespace-nowrap"
                       onclick={() => handleReviewQueue(match.company_name, match.title)}
                     >
-                      Queue Application
+                      Queue
                       <Icon name="arrow-right" size={12} />
                     </button>
                   {/if}
@@ -109,7 +99,6 @@
                   <span class="tag-salary">{match.compensation}</span>
                 {/if}
                 <span class="tag-platform">via {match.ats_platform.charAt(0).toUpperCase() + match.ats_platform.slice(1)}</span>
-                <span class="tag-score">{match.match_score}% Match</span>
               </div>
             </td>
           </tr>

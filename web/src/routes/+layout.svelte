@@ -49,7 +49,7 @@
     if (data.user?.email) {
       return data.user.email.slice(0, 2).toUpperCase();
     }
-    return 'SG';
+    return '?';
   });
 </script>
 
@@ -95,7 +95,7 @@
             {#if !isLoginPage}
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-xs font-bold text-white shadow-sm"
-                title={data.user?.email || 'stefan@example.com'}
+                title={data.user?.email ?? ''}
               >
                 {userInitials}
               </div>
@@ -127,7 +127,7 @@
                 ? 'bg-card text-content-primary shadow-sm'
                 : 'text-content-muted hover:text-content-primary'}"
             >
-              Matches (4)
+              Matches
             </a>
             <a
               href="/applications"
@@ -135,7 +135,7 @@
                 ? 'bg-card text-content-primary shadow-sm'
                 : 'text-content-muted hover:text-content-primary'}"
             >
-              Applications (3)
+              Applications
             </a>
             <a
               href="/settings"
@@ -143,7 +143,7 @@
                 ? 'bg-card text-content-primary shadow-sm'
                 : 'text-content-muted hover:text-content-primary'}"
             >
-              Profile &amp; Settings
+              Settings
             </a>
           </nav>
         {/if}
