@@ -462,19 +462,27 @@ async def main_async(args) -> int:
 
     # 2. Collect failures
     failures: list[dict] = []
+    loaded_failures_file = False
     if args.failures_file and Path(args.failures_file).exists():
         try:
             failures = json.loads(Path(args.failures_file).read_text())
+            loaded_failures_file = True
             print(f"Loaded {len(failures)} failures from {args.failures_file}")
+            # Companies turned away by a Cloudflare challenge are healthy boards we could not reach: never
+            # attempt link recovery or pruning on them.
+            blocked_count = sum(1 for f in failures if f.get("blocked"))
+            if blocked_count:
+                failures = [f for f in failures if not f.get("blocked")]
+                print(f"Ignoring {blocked_count} companies blocked by a bot challenge (not broken links).")
         except Exception as exc:
             print(f"Warning: could not parse failures file: {exc}", file=sys.stderr)
 
-    if not failures and args.log_file and Path(args.log_file).exists():
+    if not failures and not loaded_failures_file and args.log_file and Path(args.log_file).exists():
         log_text = Path(args.log_file).read_text()
         failures = parse_failures_from_log(log_text)
         print(f"Parsed {len(failures)} failures from {args.log_file}")
 
-    if not failures and not sys.stdin.isatty():
+    if not failures and not loaded_failures_file and not sys.stdin.isatty():
         stdin_text = sys.stdin.read()
         if stdin_text.strip():
             failures = parse_failures_from_log(stdin_text)

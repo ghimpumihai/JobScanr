@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS job_postings (
 CREATE INDEX IF NOT EXISTS idx_job_postings_company ON job_postings (company_id);
 CREATE INDEX IF NOT EXISTS idx_job_postings_last_seen ON job_postings (last_seen_at);
 
+-- Workday scan cache (backend only), so unchanged boards cost one request instead of up to eleven.
+-- queries: {query_key: {total, first_ids, postings: [listing rows, never descriptions]}}
+-- enrichment: {external_id: {at, location, url, compensation, application_deadline, verdicts: {profile_hash: bool}}}
+CREATE TABLE IF NOT EXISTS workday_board_state (
+    company_id      INTEGER PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+    queries         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    enrichment      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    full_scan_at    TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Multi-user tables
 CREATE TABLE IF NOT EXISTS users (
     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -203,6 +214,8 @@ CREATE TRIGGER trg_protect_application_queue_fields
 -- to writes through the public anon key.
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_postings ENABLE ROW LEVEL SECURITY;
+-- workday_board_state: RLS on and no policies, so web roles can neither read nor write it.
+ALTER TABLE workday_board_state ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "companies_select_authenticated" ON companies;
 CREATE POLICY "companies_select_authenticated" ON companies
@@ -218,9 +231,11 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         REVOKE ALL ON companies, job_postings FROM anon;
+        REVOKE ALL ON workday_board_state FROM anon;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
+        REVOKE ALL ON workday_board_state FROM authenticated;
     END IF;
 EXCEPTION
     WHEN insufficient_privilege THEN

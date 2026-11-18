@@ -17,7 +17,7 @@ import httpx
 from config import PROFILE
 from jobs.match import _any_word, _normalize
 from models import JobPosting
-from scrapers.base import strip_html
+from scrapers.base import BlockedByChallenge, strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +132,8 @@ async def _fetch_detail(job: JobPosting | dict, client: httpx.AsyncClient) -> di
                 detail = await AshbyClient(client).get_job_detail(ident, job["external_id"])
             if detail is not None and detail.get("descriptionHtml"):
                 return detail
+        except BlockedByChallenge:
+            return None  # retrying a challenge only adds load; the host breaker skips the rest
         except Exception as exc:
             logger.debug(
                 "Detail fetch attempt %d/3 failed for %s (%s): %s",
