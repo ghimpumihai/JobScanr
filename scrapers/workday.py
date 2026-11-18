@@ -16,13 +16,14 @@ Quirks (documented community-wide):
 import asyncio
 import json
 import logging
+import weakref
 import zlib
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from models import JobPosting
-from scrapers.base import BaseClient, BlockedByChallenge
+from scrapers.base import BaseClient, BlockedByChallenge, challenge_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ MAX_PAGES = 100
 MAX_SEARCH_PAGES = 5  # For large boards (>40 jobs), cap search pagination to 5 pages per query
 SEARCH_QUERIES = ["software", "developer"]
 RETRY_DELAY = 2.0
+POD_INTERVAL = 1.0  # seconds between request starts on one pod (wd1, wd5, ...): what the challenge reacts to
+HOT_FOR = timedelta(days=28)  # a board that produced a candidate this recently is scanned every run
 FULL_SCAN_EVERY = timedelta(days=7)  # catches what change detection can miss (an add plus a removal below page 1)
 
 
@@ -44,7 +47,39 @@ def _slim(p: dict) -> dict:
     }
 
 
-def _full_scan_due(state: dict | None) -> bool:
+class _PodPacer:
+    """Spaces request starts per pod by POD_INTERVAL. One per event loop (asyncio locks are loop-bound)."""
+
+    def __init__(self) -> None:
+        self._lock: dict[str, asyncio.Lock] = {}
+        self._next: dict[str, float] = {}
+
+    async def wait(self, pod: str) -> bool:
+        """Wait for this pod's next slot. False if the pod got blocked while we queued: skip, don't wait."""
+        async with self._lock.setdefault(pod, asyncio.Lock()):
+            if challenge_tracker.is_blocked(pod):
+                return False
+            now = asyncio.get_running_loop().time()
+            start = max(now, self._next.get(pod, now))
+            self._next[pod] = start + POD_INTERVAL
+            if start > now:
+                await asyncio.sleep(start - now)
+            return not challenge_tracker.is_blocked(pod)  # it may have been blocked while we waited
+
+
+_pacers: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _PodPacer]" = weakref.WeakKeyDictionary()
+
+
+def _pacer() -> _PodPacer:
+    return _pacers.setdefault(asyncio.get_running_loop(), _PodPacer())
+
+
+def is_hot(state: dict | None) -> bool:
+    last = (state or {}).get("last_candidate_at")
+    return last is not None and datetime.now(timezone.utc) - datetime.fromisoformat(last) < HOT_FOR
+
+
+def full_scan_due(state: dict | None) -> bool:
     last = (state or {}).get("full_scan_at")
     if not last:
         return True
@@ -96,8 +131,15 @@ class WorkdayClient(BaseClient):
         return f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}"
 
     async def request_with_retry(self, method: str, url: str, **kwargs):
-        WorkdayClient.requests_sent += 1
+        pod = challenge_tracker.key(url)
+        if await _pacer().wait(pod):  # False once the pod is blocked: super() then fails without a request
+            WorkdayClient.requests_sent += 1
         return await super().request_with_retry(method, url, **kwargs)
+
+    @classmethod
+    def cached_jobs(cls, ats_identifier: str, state: dict | None) -> list[JobPosting]:
+        """The board's jobs from its last scan, without a request."""
+        return cls._jobs_from_queries(ats_identifier, (state or {}).get("queries") or {})
 
     async def get_jobs(
         self, ats_identifier: str, state: dict | None = None, countries: set[str] | None = None
@@ -111,7 +153,7 @@ class WorkdayClient(BaseClient):
         base, _ = self._base(ats_identifier)
         headers = {"Accept": "application/json"}
         prior: dict = (state or {}).get("queries") or {}
-        full = _full_scan_due(state)
+        full = full_scan_due(state)
         new_queries: dict[str, dict] = {}
 
         async def page(search: str, facets: dict, offset: int) -> dict:
@@ -181,8 +223,12 @@ class WorkdayClient(BaseClient):
                     now -= timedelta(days=zlib.crc32(ats_identifier.encode()) % FULL_SCAN_EVERY.days)
                 state["full_scan_at"] = now.isoformat()
 
+        return self._jobs_from_queries(ats_identifier, new_queries)
+
+    @classmethod
+    def _jobs_from_queries(cls, ats_identifier: str, queries: dict) -> list[JobPosting]:
         jobs: dict[str, JobPosting] = {}
-        for entry in new_queries.values():
+        for entry in queries.values():
             for p in entry["postings"]:
                 slug = p["externalPath"].rsplit("/", 1)[-1]
                 if slug and slug not in jobs:
@@ -193,7 +239,7 @@ class WorkdayClient(BaseClient):
                         # the detail fetch fills the real location later
                         "location": p.get("locationsText"),
                         "department": None,
-                        "url": self._public_url(ats_identifier, p["externalPath"]),
+                        "url": cls._public_url(ats_identifier, p["externalPath"]),
                         "description": None,
                         "ats_identifier": ats_identifier,
                         "external_path": slug,
