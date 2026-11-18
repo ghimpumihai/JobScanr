@@ -10,8 +10,10 @@ import argparse
 import asyncio
 import collections
 import logging
+import os
 import sys
 import time
+from datetime import date
 
 from ats_identifiers import identifier_error
 from config import setup_logging
@@ -24,6 +26,26 @@ from scrapers.base import make_http_client
 logger = logging.getLogger(__name__)
 
 FAILURE_RATE_LIMIT = 0.2
+
+# Workday throttles hard (about 40s per company under 429 backoff on 2026-11-16..18, versus ~7s before), which
+# stretched the whole scrape past the 60-minute workflow cap. Scrape each Workday company every N days (job
+# postings are only deleted after 30 unseen days) and stop starting new Workday companies after a deadline.
+WORKDAY_ROTATION_DAYS = int(os.environ.get("WORKDAY_ROTATION_DAYS", "2"))
+WORKDAY_DEADLINE_SECONDS = 40 * 60
+
+
+def select_companies_for_today(
+    companies: list[Company | dict], rotation_days: int = WORKDAY_ROTATION_DAYS, today: date | None = None
+) -> list[Company | dict]:
+    """All non-Workday companies, plus the 1/rotation_days slice of Workday companies due today (by id)."""
+    if rotation_days <= 1:
+        return list(companies)
+    slot = (today or date.today()).toordinal() % rotation_days
+    return [
+        c
+        for c in companies
+        if c.get("ats_platform") != "workday" or c.get("id") is None or c["id"] % rotation_days == slot
+    ]
 
 
 async def fetch_company(http, company: Company | dict) -> list[JobPosting]:
@@ -43,7 +65,9 @@ PROGRESS_EVERY = 200
 
 
 async def scrape_all(
-    companies: list[Company | dict], failure_details: list[dict] | None = None
+    companies: list[Company | dict],
+    failure_details: list[dict] | None = None,
+    workday_deadline: float | None = WORKDAY_DEADLINE_SECONDS,
 ) -> tuple[list[JobPosting], list[str]]:
     # Separate concurrency pools by platform characteristics:
     # - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor): high throughput (30)
@@ -55,6 +79,8 @@ async def scrape_all(
         ashby_lock = asyncio.Lock()
 
         done = [0]
+        started = time.monotonic()
+        workday_skipped = [0]
         # platform -> [finished, total request seconds, errors]; shows which platform is the slow one.
         stats: dict[str, list[float]] = {}
         totals = collections.Counter(c.get("ats_platform") for c in companies)
@@ -91,6 +117,9 @@ async def scrape_all(
                     return await timed(c)
             elif plat == "workday":
                 async with workday_sem:
+                    if workday_deadline is not None and time.monotonic() - started > workday_deadline:
+                        workday_skipped[0] += 1  # not a failure: picked up again at its next rotation slot
+                        return []
                     return await timed(c)
             else:
                 async with fast_sem:
@@ -99,6 +128,12 @@ async def scrape_all(
         results = await asyncio.gather(
             *(fetch(c) for c in companies),
             return_exceptions=True,
+        )
+    if workday_skipped[0]:
+        logger.warning(
+            "Workday deadline of %ss reached; skipped %d Workday companies for today.",
+            workday_deadline,
+            workday_skipped[0],
         )
     all_jobs: list[dict] = []
     failures: list[str] = []
@@ -128,8 +163,12 @@ async def run_pipeline(args) -> int:
     import config
 
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
-    companies = queries.get_all_companies()
-    logger.info("Scraping %d companies...", len(companies))
+    all_companies = queries.get_all_companies()
+    rotation = getattr(args, "workday_rotation_days", None)
+    companies = select_companies_for_today(
+        all_companies, rotation if isinstance(rotation, int) else WORKDAY_ROTATION_DAYS
+    )
+    logger.info("Scraping %d of %d companies today, Workday rotation applied...", len(companies), len(all_companies))
     failure_details: list[dict] = []
     jobs, failures = await scrape_all(companies, failure_details=failure_details)
 
@@ -289,6 +328,12 @@ def main() -> int:
     parser.add_argument("--staging", action="store_true", help="use staging environment (.env.stage)")
     parser.add_argument("--failures-file", type=str, default=None, help="path to write structured failures JSON")
     parser.add_argument("--profile", type=str, default=None, help="path to custom profile JSON")
+    parser.add_argument(
+        "--workday-rotation-days",
+        type=int,
+        default=WORKDAY_ROTATION_DAYS,
+        help="scrape each Workday company every N days (1 = every run; env WORKDAY_ROTATION_DAYS)",
+    )
     args = parser.parse_args()
 
     return asyncio.run(run_pipeline(args))

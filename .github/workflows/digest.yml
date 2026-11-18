@@ -18,7 +18,7 @@ jobs:
     # "production" environment is branch-restricted to main in repo settings,
     # so the digest can never execute from dev or arbitrary dispatches.
     environment: production
-    timeout-minutes: 60
+    timeout-minutes: 90  # scrape (~35 min with Workday rotation) + 15 min link-repair step, with headroom
     steps:
       - uses: actions/checkout@v4
         with:
