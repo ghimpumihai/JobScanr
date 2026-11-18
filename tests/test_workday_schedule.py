@@ -180,7 +180,9 @@ def test_aborted_run_still_saves_pod_backoff():
     from types import SimpleNamespace
     from unittest.mock import MagicMock
 
-    args = SimpleNamespace(profile=None, dry_run=False, failures_file=None)
+    args = SimpleNamespace(
+        profile=None, dry_run=False, failures_file=None, platforms=None, skip_platforms=None, no_email=False
+    )
     companies = [_company(i, f"c{i}") for i in range(12)]
 
     async def scrape(cs, failure_details=None, blocked=None, workday_states=None, countries=None):
@@ -208,7 +210,9 @@ def test_small_pod_that_only_challenged_is_backed_off_and_tiny_samples_dont_abor
     from types import SimpleNamespace
     from unittest.mock import MagicMock
 
-    args = SimpleNamespace(profile=None, dry_run=False, failures_file=None)
+    args = SimpleNamespace(
+        profile=None, dry_run=False, failures_file=None, platforms=None, skip_platforms=None, no_email=False
+    )
     small = "wd12.myworkdayjobs.com"
 
     async def scrape(cs, failure_details=None, blocked=None, workday_states=None, countries=None):
@@ -264,3 +268,57 @@ def test_queued_requests_skip_their_slot_once_the_pod_is_blocked():
     assert all(isinstance(r, BlockedByChallenge) for r in results)
     assert len(sent) == 1 and WorkdayClient.requests_sent == 1
     assert elapsed < 0.5  # 19 queued slots of 0.05 s would take ~0.95 s
+
+
+# B7: Workday in its own workflow
+
+
+def test_select_platforms():
+    cs = [{"ats_platform": "workday"}, {"ats_platform": "lever"}, {"ats_platform": "ashby"}]
+    assert sn._select_platforms(cs, "workday", None) == [cs[0]]
+    assert sn._select_platforms(cs, None, "workday") == cs[1:]
+    assert sn._select_platforms(cs, "workday, lever", "lever") == [cs[0]]
+    assert sn._select_platforms(cs, None, None) == cs
+
+
+def _args(**kw):
+    from types import SimpleNamespace
+
+    base = dict(profile=None, dry_run=False, failures_file=None, platforms=None, skip_platforms=None, no_email=False)
+    return SimpleNamespace(**{**base, **kw})
+
+
+def _run_pipeline(args, unnotified):
+    from unittest.mock import MagicMock
+
+    send = MagicMock(return_value="MSG")
+    mark = MagicMock()
+    with (
+        patch("db.queries.get_all_companies", return_value=[]),
+        patch("db.queries.get_active_users", return_value=[]),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff"),
+        patch("db.queries.upsert_jobs", return_value=[]),
+        patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.get_unnotified_jobs", return_value=unnotified),
+        patch("db.queries.mark_notified", mark),
+        patch("jobs.notify.email_configured", return_value=True),
+        patch("jobs.notify.send_email_digest", send),
+    ):
+        ret = asyncio.run(sn.run_pipeline(args))
+    return ret, send, mark
+
+
+def test_digest_sends_jobs_stored_by_earlier_runs():
+    stored = [{"id": 7, "title": "SE Intern", "company_name": "Acme"}]
+    ret, send, mark = _run_pipeline(_args(skip_platforms="workday"), stored)
+    assert ret == 0
+    send.assert_called_once_with(stored)
+    mark.assert_called_once_with([7])
+
+
+def test_no_email_stores_but_sends_nothing():
+    ret, send, mark = _run_pipeline(_args(platforms="workday", no_email=True), [{"id": 7}])
+    assert ret == 0 and not send.called and not mark.called

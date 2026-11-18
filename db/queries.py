@@ -216,6 +216,36 @@ def save_workday_pod_backoff(upserts: dict[str, dict], deletes: set[str]) -> Non
             cur.execute("DELETE FROM workday_pod_backoff WHERE pod = ANY(%s)", (list(deletes),))
 
 
+def get_unnotified_jobs(max_age_days: int = 7) -> list[dict]:
+    """Stored jobs not yet in a digest (single-user mode), newest first.
+
+    The age bound keeps a long-failed mail setup from flushing a stale backlog in one digest.
+    """
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT jp.id, jp.title, c.name AS company_name, jp.location, jp.url,
+                   jp.compensation, jp.application_deadline, c.ats_platform
+            FROM job_postings jp
+            JOIN companies c ON c.id = jp.company_id
+            WHERE jp.notified_at IS NULL AND jp.first_seen_at > NOW() - make_interval(days => %s)
+            ORDER BY jp.first_seen_at DESC
+            """,
+            (max_age_days,),
+        )
+        cols = (
+            "id",
+            "title",
+            "company_name",
+            "location",
+            "url",
+            "compensation",
+            "application_deadline",
+            "ats_platform",
+        )
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 def mark_notified(job_ids: list[int]) -> None:
     if not job_ids:
         return

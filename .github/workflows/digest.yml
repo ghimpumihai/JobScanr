@@ -33,7 +33,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Scrape careers and notify
-        run: python -m jobs.scrape_and_notify --failures-file failures.json 2>&1 | tee scrape.log
+        # Workday is scanned by workday.yml; its jobs are already stored and get emailed here.
+        run: python -m jobs.scrape_and_notify --skip-platforms workday --failures-file failures.json 2>&1 | tee scrape.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}

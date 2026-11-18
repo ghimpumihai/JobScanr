@@ -1,0 +1,41 @@
+name: workday
+# Workday scan, kept out of the daily digest so a slow or challenged Workday can't delay it.
+# Stores jobs and matches; the 06:00 digest (which skips Workday) emails them.
+on:
+  schedule:
+    - cron: "0 4,10,16,22 * * *"   # every 6 h, finishing well before the 06:00 UTC digest
+  workflow_dispatch:
+
+concurrency:
+  group: workday
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: production
+    # First run without cache is ~40 min (wd1 at 1 request/s); cached runs ~5-10 min.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Scan Workday boards
+        run: python -m jobs.scrape_and_notify --platforms workday --no-email --failures-file failures.json 2>&1 | tee scrape.log
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Keep failures for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workday-failures
+          path: |
+            failures.json
+            scrape.log
+          if-no-files-found: ignore
+          retention-days: 7
