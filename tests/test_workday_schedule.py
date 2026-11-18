@@ -173,3 +173,31 @@ def test_plan_backoff_starts_doubles_caps_and_clears():
 
     up, down = sn._plan_backoff({POD: {"until": now, "days": 4}}, set(), {POD}, now)
     assert not up and down == {POD}  # the probe got through
+
+
+def test_aborted_run_still_saves_pod_backoff():
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    args = SimpleNamespace(profile=None, dry_run=False, failures_file=None)
+    companies = [_company(1, "a"), _company(2, "b")]
+
+    async def scrape(cs, failure_details=None, blocked=None, workday_states=None, countries=None):
+        challenge_tracker.prime(POD)
+        challenge_tracker.record_block(POD)  # the pod blocked us during the scan
+        blocked.append(cs[0])
+        return [], ["b (workday): 422"]  # 1 failure out of 1 attempted -> abort
+
+    save = MagicMock()
+    with (
+        patch("db.queries.get_all_companies", return_value=companies),
+        patch("db.queries.get_active_users", return_value=[]),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff", save),
+        patch.object(sn, "scrape_all", scrape),
+    ):
+        assert asyncio.run(sn.run_pipeline(args)) == 1
+    upserts, _ = save.call_args.args
+    assert upserts[POD]["days"] == 2

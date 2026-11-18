@@ -259,6 +259,8 @@ async def run_pipeline(args) -> int:
     attempted = len(companies) - len(blocked)
     if attempted > 0 and len(failures) > attempted * FAILURE_RATE_LIMIT:
         logger.error("Failure rate too high — aborting.")
+        # Still persist: a run that aborts because Workday blocked nearly everything must record the back-off.
+        _save_workday(args, jobs, workday_states, backoff, now)
         return 1
 
     logger.info("Fetched %d live job postings.", len(jobs))
@@ -309,28 +311,14 @@ async def run_pipeline(args) -> int:
         len(active_users),
     )
 
-    blocked_pods = {p for p in challenge_tracker.challenged if challenge_tracker.is_blocked(p)}
-    pod_upserts, pod_deletes = _plan_backoff(backoff, blocked_pods, challenge_tracker.answered, now)
-    for pod, b in pod_upserts.items():
-        logger.warning("Workday pod %s challenged us: no requests to it for %d days.", pod, b["days"])
-
+    _save_workday(args, jobs, workday_states, backoff, now)
     if args.dry_run:
-        logger.info("[dry-run] Workday board state and pod back-off not saved (%d boards).", len(workday_states))
         for u in active_users:
             u_matches = user_match_map.get(u.get("id"), [])
             logger.info("[dry-run] User %s matches %d job(s).", u.get("email"), len(u_matches))
         logger.info("[dry-run] no DB writes, no email.")
         return 0
 
-    _record_enrichment(jobs, workday_states)
-    try:
-        queries.save_workday_board_states(workday_states)
-    except Exception as e:  # a lost cache only costs requests next run; never block the digest on it
-        logger.warning("Could not save Workday board state: %s", e)
-    try:
-        queries.save_workday_pod_backoff(pod_upserts, pod_deletes)
-    except Exception as e:
-        logger.warning("Could not save Workday pod back-off: %s", e)
     new_jobs = queries.upsert_jobs(all_matched_jobs)
     stale = queries.delete_stale_jobs(days=30)
     logger.info("Stored %d new / %d total matched; pruned %d stale.", len(new_jobs), len(all_matched_jobs), stale)
@@ -413,6 +401,26 @@ def _facet_countries(active_users: list[dict], profile: dict) -> set[str] | None
             return None
         out |= {str(x).strip().lower() for x in [*f["eligible_regions"], *(f.get("locations") or [])]}
     return out or None
+
+
+def _save_workday(args, jobs: list[dict], states: dict[int, dict], backoff: dict[str, dict], now: datetime) -> None:
+    """Persist board state and pod back-off. Failures only cost requests next run, so they never block the run."""
+    blocked_pods = {p for p in challenge_tracker.challenged if challenge_tracker.is_blocked(p)}
+    pod_upserts, pod_deletes = _plan_backoff(backoff, blocked_pods, challenge_tracker.answered, now)
+    for pod, b in pod_upserts.items():
+        logger.warning("Workday pod %s challenged us: no requests to it for %d days.", pod, b["days"])
+    if args.dry_run:
+        logger.info("[dry-run] Workday board state and pod back-off not saved (%d boards).", len(states))
+        return
+    _record_enrichment(jobs, states)
+    try:
+        queries.save_workday_board_states(states)
+    except Exception as e:
+        logger.warning("Could not save Workday board state: %s", e)
+    try:
+        queries.save_workday_pod_backoff(pod_upserts, pod_deletes)
+    except Exception as e:
+        logger.warning("Could not save Workday pod back-off: %s", e)
 
 
 def _cache_fresh(state: dict) -> bool:
