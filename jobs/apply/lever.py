@@ -300,9 +300,11 @@ class LeverSubmitter(BaseSubmitter):
                     resp = await _send(cli)
         except httpx.RequestError as exc:
             logger.warning("Network error submitting to Lever: %s", exc)
+            # connect_error: nothing reached Lever, retry is safe. network_error: it may have arrived.
+            connect_failed = isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
             return SubmitResponse(
                 status="failed",
-                reason="network_error",
+                reason="connect_error" if connect_failed else "network_error",
                 error_message=str(exc),
             )
 
