@@ -256,13 +256,21 @@ def mark_notified(job_ids: list[int]) -> None:
         )
 
 
+# Companies whose postings have applications are kept: applications.job_posting_id is ON DELETE RESTRICT,
+# so deleting one fails and rolls back the whole batch (no company gets pruned).
+_COMPANY_HAS_APPLICATIONS = """EXISTS (
+    SELECT 1 FROM job_postings jp JOIN applications a ON a.job_posting_id = jp.id
+    WHERE jp.company_id = companies.id
+)"""
+_DELETE_COMPANY_SQL = (
+    "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s AND NOT " + _COMPANY_HAS_APPLICATIONS
+)
+
+
 def delete_company(ats_platform: str, ats_identifier: str) -> int:
     """Delete a single company by ATS platform and identifier. Cascades to job_postings."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
-            (ats_platform, ats_identifier),
-        )
+        cur.execute(_DELETE_COMPANY_SQL, (ats_platform, ats_identifier))
         return cur.rowcount
 
 
@@ -271,10 +279,7 @@ def delete_companies_batch(identifiers: list[tuple[str, str]]) -> int:
     if not identifiers:
         return 0
     with get_connection() as conn, conn.cursor() as cur:
-        cur.executemany(
-            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
-            identifiers,
-        )
+        cur.executemany(_DELETE_COMPANY_SQL, identifiers)
         return cur.rowcount
 
 
@@ -291,7 +296,9 @@ def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[Company]:
     Returns the list of deleted company metadata dicts.
     """
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id, name, ats_platform, ats_identifier FROM companies")
+        cur.execute(
+            "SELECT id, name, ats_platform, ats_identifier FROM companies WHERE NOT " + _COMPANY_HAS_APPLICATIONS
+        )
         to_delete = []
         deleted_records = []
         for row in cur.fetchall():

@@ -341,7 +341,7 @@ def test_process_application_unsupported_platform_manual_apply(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 mock")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 mock"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -379,7 +379,7 @@ def test_process_application_greenhouse_ready_submitted(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -417,11 +417,12 @@ def test_process_application_dry_run_simulation(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim, dry_run=True)
 
-            assert res.final_status == "submitted"
+            # A dry run must never record a fake submission; it releases the claim instead.
+            assert res.final_status == "queued"
             assert res.reason == "dry_run_simulation"
             mock_submitter.submit.assert_not_called()
             mock_transition.assert_called_once()
@@ -446,7 +447,7 @@ def test_process_application_captcha_transitions_to_manual_apply(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -478,7 +479,7 @@ def test_process_application_unmapped_questions_transitions_to_needs_review(samp
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -509,7 +510,7 @@ def test_process_application_network_error_schedules_retry(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -540,7 +541,7 @@ def test_process_application_max_attempts_exceeded_fails(sample_claim):
             patch("jobs.apply.runner.transition_application_status") as mock_transition,
         ):
             mock_liveness.return_value = True
-            mock_download.return_value = io.BytesIO(b"%PDF-1.4 dummy pdf")
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
 
             res = await process_application(sample_claim)
 
@@ -673,3 +674,74 @@ def test_check_posting_liveness_does_not_follow_redirect_to_internal_host():
 
     assert asyncio.run(run()) is None
     assert requested == ["https://boards.example.com/job/1"]  # only the first hop, GET fallback refused too
+
+
+def _ready_submitter(**submit_kwargs):
+    mock_submitter = MagicMock()
+    mock_submitter.fetch_questions = AsyncMock(return_value=[])
+    mock_submitter.map_and_validate_payload.return_value = SubmissionResult(status="ready", payload={"a": "b"})
+    mock_submitter.submit = AsyncMock(**submit_kwargs)
+    return mock_submitter
+
+
+def _run_with(sample_claim, submitter, pdf=b"%PDF-1.4 dummy pdf"):
+    async def run():
+        with (
+            patch("jobs.apply.runner.check_posting_liveness", new_callable=AsyncMock, return_value=True),
+            patch("jobs.apply.runner.download_resume_stream") as mock_download,
+            patch("jobs.apply.runner.resolve_submitter", return_value=submitter),
+            patch("jobs.apply.runner.transition_application_status") as mock_transition,
+        ):
+            mock_download.return_value = (io.BytesIO(pdf), "resume.pdf", "application/pdf")
+            return await process_application(sample_claim), mock_transition
+
+    return asyncio.run(run())
+
+
+def test_submitter_receives_the_stream_not_the_download_tuple(sample_claim):
+    submitter = _ready_submitter(return_value=SubmitResponse(status="submitted", external_application_id="C1"))
+    _run_with(sample_claim, submitter)
+    assert isinstance(submitter.submit.call_args.kwargs["resume_stream"], io.BytesIO)
+
+
+def test_dry_run_requeues_without_recording_a_submission(sample_claim):
+    async def run():
+        with (
+            patch("jobs.apply.runner.check_posting_liveness", new_callable=AsyncMock, return_value=True),
+            patch("jobs.apply.runner.download_resume_stream") as mock_download,
+            patch("jobs.apply.runner.resolve_submitter", return_value=_ready_submitter()),
+            patch("jobs.apply.runner.transition_application_status") as mock_transition,
+        ):
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
+            await process_application(sample_claim, dry_run=True)
+            kwargs = mock_transition.call_args.kwargs
+            assert kwargs["to_status"] == "queued" and "submitted_payload" not in kwargs
+
+    asyncio.run(run())
+
+
+def test_unconfirmed_post_goes_to_review_not_retry(sample_claim):
+    res, transition = _run_with(sample_claim, _ready_submitter(side_effect=httpx.ReadTimeout("sent, no answer")))
+    # A retry here could submit the same application twice.
+    assert res.final_status == "needs_review"
+    assert transition.call_args.kwargs["to_status"] == "needs_review"
+
+
+def test_submitter_network_error_goes_to_review_connect_error_retries(sample_claim):
+    res, _ = _run_with(
+        sample_claim, _ready_submitter(return_value=SubmitResponse(status="failed", reason="network_error"))
+    )
+    assert res.final_status == "needs_review" and "submission_unconfirmed" in (res.reason or "")
+
+    sample_claim.attempts = 1
+    res, transition = _run_with(
+        sample_claim, _ready_submitter(return_value=SubmitResponse(status="failed", reason="connect_error"))
+    )
+    assert res.final_status == "queued"  # nothing reached the ATS, so a retry is safe
+
+
+def test_invalid_cv_goes_to_review_before_submitting(sample_claim):
+    submitter = _ready_submitter()
+    res, transition = _run_with(sample_claim, submitter, pdf=b"not a pdf")
+    assert res.final_status == "needs_review" and (res.reason or "").startswith("cv_invalid")
+    submitter.submit.assert_not_called()

@@ -322,7 +322,7 @@ def test_delete_company():
         deleted = queries.delete_company("ashby", "deadco")
         assert deleted == 1
         mock_cur.execute.assert_called_once_with(
-            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            queries._DELETE_COMPANY_SQL,
             ("ashby", "deadco"),
         )
 
@@ -340,7 +340,7 @@ def test_delete_companies_batch():
         deleted = queries.delete_companies_batch([("ashby", "co1"), ("lever", "co2")])
         assert deleted == 2
         mock_cur.executemany.assert_called_once_with(
-            "DELETE FROM companies WHERE ats_platform = %s AND ats_identifier = %s",
+            queries._DELETE_COMPANY_SQL,
             [("ashby", "co1"), ("lever", "co2")],
         )
 
