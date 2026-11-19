@@ -9336,12 +9336,6 @@
     "ats_identifier": "highmarkhealth|wd1|highmark"
   },
   {
-    "company_name": "Hilbert",
-    "career_url": "https://jobs.ashbyhq.com/hilberts",
-    "ats_platform": "ashby",
-    "ats_identifier": "hilberts"
-  },
-  {
     "company_name": "Hilcorp",
     "career_url": "https://hec.wd5.myworkdayjobs.com/hilcorp_energy_company",
     "ats_platform": "workday",
@@ -19699,8 +19693,8 @@
   },
   {
     "company_name": "TrueLayer",
-    "career_url": "https://boards.greenhouse.io/truelayer",
-    "ats_platform": "greenhouse",
+    "career_url": "https://jobs.ashbyhq.com/truelayer",
+    "ats_platform": "ashby",
     "ats_identifier": "truelayer"
   },
   {
