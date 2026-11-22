@@ -33,7 +33,7 @@ graphify update .                                         # update AST knowledge
 - **Environment Isolation**: Production uses `.env` (`DATABASE_URL`, `DIGEST_EMAIL`); staging uses `.env.stage` (`DATABASE_URL_STAGING`, `DIGEST_EMAIL_TEST`). Use `--staging` flag or `DB_ENV=staging`.
 - **Scraper Concurrency & Rate Limits**:
   - Fast platforms (Greenhouse, Lever, SmartRecruiters, Teamtailor) use a 30-worker semaphore.
-  - Workday uses a dedicated 20-worker pool; identifiers must follow `tenant|wdN|site` format.
+  - Workday has no worker pool: request starts are spaced 1 s apart per pod (wd1, wd5, ...), and a pod that answers with a Cloudflare challenge gets no requests for 1 day. Identifiers must follow `tenant|wdN|site` format.
   - Ashby uses a serialized pacing lock (`asyncio.Lock()` with 0.5s pause) to avoid 429 rate limits and GraphQL drops.
 - **Job Description Storage**: Job descriptions are never persisted to PostgreSQL (to save space). They are inspected in-memory during matching. Ashby and SmartRecruiters list endpoints omit descriptions; full descriptions are fetched lazily in `jobs/enrich.py` only for candidates passing title/location pre-filtering.
 - **Safety Circuit Breakers**:
