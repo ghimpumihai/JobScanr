@@ -29,6 +29,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Show the TLS defaults of this Python  # context for Cloudflare challenge rates
+        run: python -c "import ssl; print(ssl.OPENSSL_VERSION, len(ssl.create_default_context().get_ciphers()), 'default ciphers')"
       - name: Scan Workday boards
         shell: bash  # enables pipefail: without it, `| tee` hides a failed scan
         run: python -m jobs.scrape_and_notify --platforms workday --no-email --failures-file failures.json 2>&1 | tee scrape.log

@@ -152,9 +152,15 @@ class BaseClient(ABC):
 
 
 def make_http_client() -> httpx.AsyncClient:
+    limits = httpx.Limits(max_connections=20)
+    # Workday's Cloudflare appears to challenge CPython's short default cipher list (setup-python builds), so
+    # offer OpenSSL's standard one there. Certificate checks and the User-Agent are unchanged.
+    tls = httpx.create_ssl_context()
+    tls.set_ciphers("DEFAULT")
     return httpx.AsyncClient(
         timeout=httpx.Timeout(20.0),
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
-        limits=httpx.Limits(max_connections=20),
+        limits=limits,
+        mounts={"all://*.myworkdayjobs.com": httpx.AsyncHTTPTransport(verify=tls, limits=limits)},
     )
