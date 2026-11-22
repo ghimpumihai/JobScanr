@@ -54,7 +54,7 @@ Most of this is one-off reports less than a week old. The cause is not establish
 tls = httpx.create_ssl_context()
 tls.set_ciphers("DEFAULT")
 # ...
-mounts={"all://*.myworkdayjobs.com": httpx.AsyncHTTPTransport(verify=tls, limits=limits)}
+mounts = {"all://*.myworkdayjobs.com": httpx.AsyncHTTPTransport(verify=tls, limits=limits)}
 ```
 
 Unchanged: the `JobScanr/0.1` User-Agent, certificate and hostname checks, 1 s pacing per pod, the 1-day back-off after
