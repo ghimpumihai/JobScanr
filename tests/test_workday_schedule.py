@@ -351,6 +351,30 @@ def test_run_that_skips_workday_never_touches_workday_state():
     assert load.called and set(save.call_args.args[0]) == {1}
 
 
+def test_boards_are_scanned_in_a_shuffled_order():
+    """CI only ever tried the same 5 of wd1's 683 boards: the order was fixed and the pod is dropped after 5."""
+    seen: list = []
+
+    async def scrape(cs, **kw):
+        seen.extend(c["id"] for c in cs)
+        return [], []
+
+    with (
+        patch("db.queries.get_all_companies", return_value=[_company(i, f"t{i}") for i in range(4)]),
+        patch("db.queries.get_active_users", return_value=[]),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff"),
+        patch("db.queries.upsert_jobs", return_value=[]),
+        patch("db.queries.delete_stale_jobs", return_value=0),
+        patch.object(sn, "scrape_all", scrape),
+        patch("random.shuffle", side_effect=lambda xs: xs.reverse()),
+    ):
+        assert asyncio.run(sn.run_pipeline(_args(no_email=True))) == 0
+    assert seen == [3, 2, 1, 0]
+
+
 def test_no_email_stores_but_sends_nothing():
     ret, send, mark = _run_pipeline(_args(platforms="workday", no_email=True), [{"id": 7}])
     assert ret == 0 and not send.called and not mark.called

@@ -14,6 +14,7 @@ import collections
 import hashlib
 import json
 import logging
+import random
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -187,6 +188,8 @@ async def run_pipeline(args) -> int:
 
     profile = config.load_profile(args.profile) if getattr(args, "profile", None) else config.PROFILE
     companies = _select_platforms(queries.get_all_companies(), args.platforms, args.skip_platforms)
+    # A pod is dropped after a few challenges, so a fixed order would only ever try the same few boards on it.
+    random.shuffle(companies)
     active_users: list[dict] = []
     if not getattr(args, "profile", None):
         try:
