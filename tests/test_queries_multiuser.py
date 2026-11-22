@@ -432,4 +432,7 @@ def test_migrate_profile_to_user_db_execution():
         assert "SAVEPOINT" in mock_cur.execute.call_args_list[0][0][0]
         assert "INSERT INTO auth.users" in mock_cur.execute.call_args_list[1][0][0]
         assert "RELEASE SAVEPOINT" in mock_cur.execute.call_args_list[2][0][0]
-        assert "INSERT INTO users" in mock_cur.execute.call_args_list[3][0][0]
+        upsert = mock_cur.execute.call_args_list[3][0][0]
+        assert "INSERT INTO users" in upsert
+        # Re-running the script must not erase contact details saved in the web app.
+        assert "resume_data" not in upsert.split("DO UPDATE", 1)[1]

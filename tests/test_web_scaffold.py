@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+from jobs.apply import cv_security
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = REPO_ROOT / "web"
 
@@ -78,3 +80,27 @@ def test_real_users_never_get_mock_data_fallbacks():
     for page in ("applications", "matches", "settings"):
         text = (WEB_ROOT / "src" / "routes" / "(app)" / page / "+page.server.ts").read_text(encoding="utf-8")
         assert "loadError" in text, f"{page} must report load errors instead of silently showing mock data"
+
+
+def test_cv_upload_limits_match_worker_scanner():
+    """The web upload check must not drift from what the worker accepts at submission time."""
+    text = (WEB_ROOT / "src" / "lib" / "cvFile.ts").read_text(encoding="utf-8")
+    size = re.search(r"MAX_CV_SIZE = (\d+) \* 1024 \* 1024", text)
+    assert size and int(size[1]) * 1024 * 1024 == cv_security.MAX_CV_SIZE
+    assert set(re.findall(r"^  '(\.\w+)':", text, re.MULTILINE)) == cv_security.ALLOWED_EXTENSIONS
+
+
+def test_no_service_role_key_in_web_source():
+    for path in (WEB_ROOT / "src").rglob("*"):
+        if path.suffix in (".ts", ".svelte", ".html"):
+            assert "service_role" not in path.read_text(encoding="utf-8").lower(), path
+
+
+def test_settings_actions_keep_cv_and_screening_guards():
+    server = (WEB_ROOT / "src" / "routes" / "(app)" / "settings" / "+page.server.ts").read_text(encoding="utf-8")
+    assert ".eq('resume_uploaded_at', uploadedAt)" in server  # only the displayed CV can be confirmed
+    assert "crypto.randomUUID()" in server and "upsert" not in server  # never overwrite a confirmed CV in place
+    assert "if (!writeError.code)" in server  # unknown outcome: keep the file the row may point at
+    # As a screening_defaults key, "location" would answer "Do you need relocation support?".
+    defaults = server.split("const screening_defaults = merge(", 1)[1].split("});", 1)[0]
+    assert "location" not in defaults and "contact" not in defaults

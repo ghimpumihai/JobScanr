@@ -7,7 +7,7 @@
 web
 
 ## Stack
-SvelteKit, Tailwind CSS, TypeScript, @supabase/ssr, Supabase PostgreSQL, ReportLab
+SvelteKit, Tailwind CSS, TypeScript, @supabase/ssr, Supabase PostgreSQL
 
 ## Users
 Early-career and mid-level software engineers across Europe (UK, EU, Remote EU) actively searching for verified engineering roles without aggregator spam or ghost jobs.
@@ -27,8 +27,7 @@ Unlike broad aggregators (LinkedIn, Indeed) that surface stale, duplicate, or gh
 - Direct ATS scraping across 3,600+ companies (Greenhouse, Lever, SmartRecruiters, Teamtailor, Workday, Ashby) with rate limiters and pacing locks.
 - Supabase Auth (Magic Link & 6-digit email OTP) with SSR cookie session validation.
 - Supabase PostgreSQL with Row Level Security (RLS) ensuring strict user data isolation.
-- CV PDF/DOCX upload with document security validation (MIME sniffing, size caps) and ReportLab test PDF generator.
-- Reactive client-side single-column ATS resume preview.
+- CV PDF/DOCX upload with document security validation (MIME sniffing, size caps); the original file is submitted.
 - Groq Llama 3.3 LLM question answering with negative anti-hallucination prompts strictly grounded in CV facts, with exponential backoff and empty-fallback to manual review.
 - Emergency user kill switch to instantly freeze background worker processing of queued applications.
 
@@ -49,7 +48,7 @@ Unlike broad aggregators (LinkedIn, Indeed) that surface stale, duplicate, or gh
 ## Evidence on Hand
 - Email digest HTML template (`jobs/notify.py`) containing the exact design language, badge styles, telemetry status cards, and layout rhythm.
 - Issue #46: SvelteKit + Tailwind CSS application scaffold, routing (`/matches`, `/applications`, `/profile`, `/settings`), and Supabase Auth.
-- Issue #47: CV JSON editor, ATS preview, search filters, and auto-apply controls.
+- Issue #47: CV upload and confirmation, candidate details, search filters, and auto-apply controls.
 - Issue #48: Applications audit dashboard, status tabs, screening review drawer, and emergency kill switch.
 - Production and staging Supabase database schema (`db/schema.sql`).
 - Grounded LLM question answering spike (`docs/llm_question_answering_spike.md`).

@@ -56,10 +56,21 @@ export interface UserProfile {
   id: number;
   email: string;
   full_name?: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  github?: string;
+  portfolio?: string;
+  requires_sponsorship?: string;
+  years_experience?: number;
+  notice_period_days?: number;
   resume_filename?: string;
   resume_storage_path?: string;
   resume_content_type?: string;
   resume_uploaded_at?: string;
+  /** Exact stored timestamp; resume_uploaded_at is formatted for display. */
+  resume_uploaded_at_raw?: string;
+  resume_confirmed_at?: string;
   resume_size_kb?: number;
   seniority_levels: string[];
   preferred_locations: string[];

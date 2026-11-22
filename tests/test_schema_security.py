@@ -30,6 +30,22 @@ def test_users_trigger_confines_resume_path_to_owner_folder():
     assert re.search(r"CREATE TRIGGER trg_protect_user_worker_fields\s+BEFORE UPDATE ON users", SCHEMA)
 
 
+def test_users_trigger_gates_auto_submit_on_confirmed_cv():
+    assert "ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_confirmed_at TIMESTAMPTZ" in SCHEMA
+    fn = SCHEMA[SCHEMA.index("FUNCTION protect_user_worker_fields") :]
+    fn = fn[: fn.index("$$ LANGUAGE plpgsql")]
+    # AC-11: a new CV clears the confirmation and demotes auto_submit...
+    assert (
+        "NEW.resume_storage_path IS DISTINCT FROM OLD.resume_storage_path\n           OR NEW.resume_uploaded_at" in fn
+    )
+    reset = fn.index("NEW.resume_confirmed_at := NULL")
+    assert reset < fn.index("NEW.auto_apply_mode := 'approval_required'")
+    # ...before the AC-10 check, so replacing a CV does not raise.
+    assert "NEW.resume_storage_path IS NULL OR NEW.resume_confirmed_at IS NULL" in fn
+    assert reset < fn.index("RAISE EXCEPTION 'Confirm your CV")
+    assert "NEW.max_daily_applications IS NULL OR NEW.max_daily_applications NOT BETWEEN 5 AND 25" in fn
+
+
 def test_workday_scan_tables_are_backend_only():
     for table in ("workday_board_state", "workday_pod_backoff"):
         assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in SCHEMA

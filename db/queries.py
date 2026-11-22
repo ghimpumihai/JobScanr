@@ -588,6 +588,7 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
     """Atomically claim the next eligible queued application using SELECT ... FOR UPDATE OF a SKIP LOCKED.
 
     Enforces:
+    - Confirmed CV: replacing it clears the confirmation, so applications already queued wait for a new review.
     - 60s domain throttle: Excludes applications whose company board had an active lock within domain_throttle_seconds.
     - User daily cap: Submissions today for user < user.max_daily_applications (default 10).
     - User per-company cap: Submissions for user at company < user.max_apps_per_company (default 2).
@@ -607,6 +608,7 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
             WHERE a.status = 'queued'
               AND (a.next_attempt_at IS NULL OR a.next_attempt_at <= NOW())
               AND u.auto_apply_mode != 'disabled'
+              AND u.resume_confirmed_at IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM applications active_apps
                   JOIN job_postings active_jp ON active_apps.job_posting_id = active_jp.id

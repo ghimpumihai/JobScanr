@@ -1,9 +1,12 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import type { SubmitFunction } from '@sveltejs/kit';
+  import type { HTMLInputAttributes } from 'svelte/elements';
   import Icon from '$lib/components/Icon.svelte';
-  import type { PageData } from './$types';
+  import type { AutoApplyMode } from '$lib/types';
+  import type { ActionData, PageData } from './$types';
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   const ALL_SENIORITY_LEVELS = [
     'Internship / Working Student',
@@ -16,8 +19,46 @@
     'Lead / Principal (8+ yrs)'
   ];
 
-  // Seeded from the stored profile so saving never overwrites it with demo values.
-  // svelte-ignore state_referenced_locally -- form fields are seeded once from the loaded profile
+  const AUTO_APPLY_MODES: { value: AutoApplyMode; label: string; help: string }[] = [
+    {
+      value: 'approval_required',
+      label: 'Approval required',
+      help: 'Matches and digests continue; nothing new is submitted automatically.'
+    },
+    {
+      value: 'auto_submit',
+      label: 'Automatic submission',
+      help: 'Eligible Greenhouse and Lever applications are queued for submission. Needs a confirmed CV.'
+    },
+    { value: 'disabled', label: 'Paused', help: 'No matching, no digest, no applications.' }
+  ];
+
+  const INPUT_CLASS =
+    'w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue';
+
+  // Saved values: follow every save and upload. The CV, confirmation and auto-apply cards read these.
+  const saved = $derived(data.profile);
+  const confirmed = $derived(Boolean(saved?.resume_filename && saved.resume_confirmed_at));
+  let mode = $derived(data.profile?.auto_apply_mode ?? 'approval_required');
+  let dailyCap = $derived(data.profile?.max_daily_applications ?? 10);
+
+  const summary = $derived([
+    ['CV', saved?.resume_filename],
+    ['Name', saved?.full_name],
+    ['Email', saved?.email],
+    ['Phone', saved?.phone],
+    ['Location', saved?.location],
+    ['LinkedIn', saved?.linkedin],
+    ['GitHub', saved?.github],
+    ['Portfolio', saved?.portfolio],
+    ['Authorized to work', { yes: 'Yes', no: 'No' }[saved?.work_authorization ?? '']],
+    ['Needs sponsorship', { yes: 'Yes', no: 'No' }[saved?.requires_sponsorship ?? '']],
+    ['Years of experience', saved?.years_experience?.toString()],
+    ['Notice period (days)', saved?.notice_period_days?.toString()]
+  ]);
+
+  // Form fields: seeded once, so saving never overwrites them with demo values and an upload keeps unsaved edits.
+  // svelte-ignore state_referenced_locally
   const profile = data.profile;
   let selectedLevels = $state<string[]>([...(profile?.seniority_levels ?? [])]);
   let locations = $state<string[]>([...(profile?.preferred_locations ?? [])]);
@@ -27,14 +68,34 @@
   let newLocation = $state('');
   let newTargetKeyword = $state('');
   let newKeyword = $state('');
-  let toastMessage = $state<string | null>(null);
+  let pending = $state(false);
+  // svelte-ignore state_referenced_locally -- downloadCv posts without JavaScript, so its result arrives on load
+  let notice = $state(form ? { text: form.error ?? form.message ?? '', error: Boolean(form.error) } : null);
+  let noticeTimer: ReturnType<typeof setTimeout>;
 
-  function showToast(msg: string) {
-    toastMessage = msg;
-    setTimeout(() => {
-      toastMessage = null;
-    }, 3500);
+  function showNotice(text: string, error: boolean) {
+    clearTimeout(noticeTimer);
+    notice = { text, error };
+    // Errors stay until dismissed.
+    if (!error) noticeTimer = setTimeout(() => (notice = null), 6000);
   }
+
+  const submit: SubmitFunction = ({ formElement }) => {
+    pending = true;
+    return async ({ result, update }) => {
+      pending = false;
+      if (result.type === 'success') {
+        showNotice((result.data?.message as string) ?? 'Saved.', false);
+      } else if (result.type === 'failure') {
+        showNotice((result.data?.error as string) ?? 'Could not save.', true);
+      } else if (result.type === 'error') {
+        // Not update(): it would replace the page with an error page and lose unsaved edits.
+        showNotice('The request failed. Check your connection and try again.', true);
+        return;
+      }
+      await update({ reset: result.type === 'success' && formElement.id === 'cvForm' });
+    };
+  };
 
   function toggleSeniority(level: string) {
     if (selectedLevels.includes(level)) {
@@ -91,106 +152,143 @@
       Could not load your settings. Saving is disabled so nothing gets overwritten. Please reload.
     </div>
   {/if}
-  <form
-    method="POST"
-    action="?/savePreferences"
-    use:enhance={() => {
-      return async ({ result, update }) => {
-        if (result.type === 'success') {
-          showToast((result.data?.message as string) ?? 'Preferences saved.');
-        } else {
-          showToast((result.type === 'failure' && (result.data?.error as string)) || 'Could not save preferences.');
-        }
-        await update({ reset: false });
-      };
-    }}
-    class="space-y-5"
-  >
+
+  <!-- Card 1: CV -->
+  <div class="card overflow-hidden">
+    <div class="border-b border-border-subtle p-6">
+      <h1 class="text-lg font-bold leading-snug text-content-primary">CV</h1>
+      <p class="mt-1 text-xs text-content-muted">
+        Your original file is sent with applications exactly as you uploaded it.
+      </p>
+    </div>
+    <div class="space-y-4 p-6">
+      <div class="flex flex-col justify-between gap-4 rounded-md border border-border-main bg-subtle p-4 sm:flex-row sm:items-center">
+        <div class="flex min-w-0 items-start gap-3">
+          <Icon name="document" size={24} class="mt-0.5 shrink-0 text-brand-blue" />
+          <div class="min-w-0">
+            <div class="break-words font-semibold text-content-primary">
+              {saved?.resume_filename ?? 'No CV uploaded'}
+            </div>
+            {#if saved?.resume_uploaded_at}
+              <div class="text-xs text-content-caption">Uploaded {saved.resume_uploaded_at}</div>
+            {/if}
+            {#if saved?.resume_filename}
+              <div class="mt-1.5">
+                {#if confirmed}
+                  <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">Confirmed</span>
+                {:else}
+                  <span class="status-badge bg-signal-amber-bg text-signal-amber-text">Needs confirmation</span>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        </div>
+        {#if saved?.resume_filename}
+          <!-- No use:enhance: the action redirects to a download on the storage origin. -->
+          <form method="POST" action="?/downloadCv" class="shrink-0">
+            <button type="submit" class="btn-secondary !text-xs">
+              <Icon name="download" size={13} />
+              Download CV
+            </button>
+          </form>
+        {/if}
+      </div>
+
+      <form id="cvForm" method="POST" action="?/uploadCv" enctype="multipart/form-data" use:enhance={submit}>
+        <label for="cv" class="mb-1 block text-xs font-semibold text-content-primary">
+          {saved?.resume_filename ? 'Replace CV' : 'Upload CV'}
+          <span class="font-normal text-content-caption">(PDF, DOCX or DOC, up to 2 MB)</span>
+        </label>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            id="cv"
+            name="cv"
+            type="file"
+            accept=".pdf,.docx,.doc"
+            required
+            aria-describedby="cvHelp"
+            class="w-full rounded-md border border-dashed border-border-strong bg-card px-3 py-4 text-xs text-content-primary"
+          />
+          <button type="submit" class="btn-secondary !text-xs disabled:opacity-60" disabled={!saved || pending}>
+            Upload
+          </button>
+        </div>
+        <p id="cvHelp" class="mt-1 text-[11px] text-content-caption">
+          Choose a file or drop it on the field. A new CV must be confirmed again, and automatic submission stays off until
+          then.
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <form method="POST" action="?/savePreferences" use:enhance={submit} class="space-y-5">
     <input type="hidden" name="seniorityLevels" value={JSON.stringify(selectedLevels)} />
     <input type="hidden" name="locations" value={JSON.stringify(locations)} />
     <input type="hidden" name="targetKeywords" value={JSON.stringify(targetKeywords)} />
     <input type="hidden" name="excludedKeywords" value={JSON.stringify(excludedKeywords)} />
 
-    <!-- Card 1: CV & Candidate Identity -->
+    <!-- Card 2: Candidate details & screening answers -->
     <div class="card overflow-hidden">
       <div class="border-b border-border-subtle p-6">
-        <h1 class="text-lg font-bold leading-snug text-content-primary">
-          CV &amp; Candidate Identity
-        </h1>
-        <p class="mt-1 text-xs text-content-muted">
-          Your uploaded resume is parsed and used strictly to ground screening answers.
-        </p>
+        <h2 class="text-lg font-bold leading-snug text-content-primary">Candidate Details &amp; Screening Answers</h2>
+        <p class="mt-1 text-xs text-content-muted">Sent to employers when an application asks for them.</p>
       </div>
-
-      <div class="p-6">
-        <!-- High-contrast CV Card -->
-        <div class="mb-5 flex flex-col justify-between gap-4 rounded-md border border-border-main bg-subtle p-4 sm:flex-row sm:items-center">
-          <div class="flex items-start gap-3">
-            <Icon name="document" size={24} class="mt-0.5 shrink-0 text-brand-blue" />
-            <div>
-              <div class="font-semibold text-content-primary">
-                {profile?.resume_filename ?? 'No resume uploaded'}
-              </div>
-              <div class="text-xs text-content-caption">
-                {#if profile?.resume_uploaded_at}Uploaded {profile.resume_uploaded_at} · {/if}Supabase Secure Storage
-              </div>
-              <div class="mt-1.5">
-                <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">
-                  Ready for ATS Dispatch
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex shrink-0 gap-2">
-            <button
-              type="button"
-              class="btn-secondary !text-xs"
-              onclick={() => showToast('Download started for resume file.')}
-            >
-              <Icon name="download" size={13} />
-              Download CV
-            </button>
-            <button
-              type="button"
-              class="btn-secondary !text-xs"
-              onclick={() => showToast('Upload dialog opened: PDF or DOCX max 2MB.')}
-            >
-              Replace CV
-            </button>
-          </div>
+      <div class="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+        {@render field('fullName', 'First and last name', profile?.full_name, { autocomplete: 'name', maxlength: 120 })}
+        <div>
+          <label for="contactEmail" class="mb-1 block text-xs font-semibold text-content-primary">Contact Email</label>
+          <input
+            id="contactEmail"
+            type="email"
+            readonly
+            value={profile?.email ?? ''}
+            class="w-full rounded-md border border-border-main bg-subtle px-3 py-2 text-xs text-content-muted outline-none"
+          />
         </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="fullName" class="mb-1 block text-xs font-semibold text-content-primary">
-              Full Name
-            </label>
-            <input
-              id="fullName"
-              name="fullName"
-              type="text"
-              value={profile?.full_name ?? ''}
-              class="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue"
-            />
-          </div>
-          <div>
-            <label for="contactEmail" class="mb-1 block text-xs font-semibold text-content-primary">
-              Contact Email
-            </label>
-            <input
-              id="contactEmail"
-              type="email"
-              readonly
-              value={profile?.email ?? ''}
-              class="w-full rounded-md border border-border-main bg-subtle px-3 py-2 text-xs text-content-muted outline-none"
-            />
-          </div>
+        {@render field('phone', 'Phone', profile?.phone, { type: 'tel', autocomplete: 'tel', maxlength: 120 })}
+        {@render field('location', 'Current location', profile?.location, { maxlength: 120 })}
+        {@render field('linkedin', 'LinkedIn', profile?.linkedin, { type: 'url', maxlength: 300 })}
+        {@render field('github', 'GitHub', profile?.github, { type: 'url', maxlength: 300 })}
+        {@render field('portfolio', 'Portfolio', profile?.portfolio, { type: 'url', maxlength: 300 })}
+        {@render field('yearsExperience', 'Years of experience', profile?.years_experience, {
+          type: 'number',
+          min: 0,
+          max: 50
+        })}
+        {@render field('noticePeriodDays', 'Notice period (days)', profile?.notice_period_days, {
+          type: 'number',
+          min: 0,
+          max: 365
+        })}
+        <div>
+          <label for="workAuthorization" class="mb-1 block text-xs font-semibold text-content-primary">
+            Authorized to work in your target countries?
+          </label>
+          <select id="workAuthorization" name="workAuth" value={profile?.work_authorization ?? ''} class={INPUT_CLASS}>
+            <option value="" disabled>Select…</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div>
+          <label for="requiresSponsorship" class="mb-1 block text-xs font-semibold text-content-primary">
+            Need visa sponsorship, now or in the future?
+          </label>
+          <select
+            id="requiresSponsorship"
+            name="requiresSponsorship"
+            value={profile?.requires_sponsorship ?? ''}
+            class={INPUT_CLASS}
+          >
+            <option value="" disabled>Select…</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
         </div>
       </div>
     </div>
 
-  <!-- Card 2: Job Search & Matching Filters -->
+  <!-- Card 3: Job Search & Matching Filters -->
   <div class="card overflow-hidden">
     <div class="border-b border-border-subtle p-6">
       <h2 class="text-lg font-bold leading-snug text-content-primary">
@@ -335,28 +433,8 @@
         </div>
       </div>
 
-      <!-- Work Authorization -->
-      <div>
-        <label for="workAuthorization" class="mb-1 block text-xs font-semibold text-content-primary">
-          Work Authorization Default
-        </label>
-        <select
-          id="workAuthorization"
-          name="workAuth"
-          value={profile?.work_authorization ?? ''}
-          class="w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue"
-        >
-          <option value="" disabled>Select…</option>
-          <option value="yes">Yes, authorized to work in my target countries</option>
-          <option value="no">No, I need authorization or sponsorship</option>
-        </select>
-        <p class="mt-1 text-[11px] text-content-caption">
-          Pre-filled in ATS screening questions to prevent application drops.
-        </p>
-      </div>
-
       <div class="flex justify-end pt-3">
-        <button type="submit" class="btn-action disabled:opacity-60" disabled={!profile}>
+        <button type="submit" class="btn-action disabled:opacity-60" disabled={!saved || pending}>
           Save Preferences
           <Icon name="arrow-right" size={12} />
         </button>
@@ -365,7 +443,98 @@
   </div>
 </form>
 
-  <!-- Card 3: Account & Session -->
+  <!-- Card 4: Review & Confirm -->
+  <div class="card overflow-hidden">
+    <div class="border-b border-border-subtle p-6">
+      <h2 class="text-lg font-bold leading-snug text-content-primary">Review &amp; Confirm</h2>
+      <p class="mt-1 text-xs text-content-muted">
+        These are your saved values. Edits above count only after you save them.
+      </p>
+    </div>
+    <div class="space-y-4 p-6">
+      <dl class="grid grid-cols-1 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+        {#each summary as [label, value]}
+          <div class="min-w-0">
+            <dt class="text-content-caption">{label}</dt>
+            <dd class="break-words font-semibold text-content-primary">{value || 'Not set'}</dd>
+          </div>
+        {/each}
+      </dl>
+      <form method="POST" action="?/confirmCv" use:enhance={submit} class="flex flex-wrap items-center justify-end gap-3">
+        <input type="hidden" name="resumeUploadedAt" value={saved?.resume_uploaded_at_raw ?? ''} />
+        {#if confirmed}
+          <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">Confirmed</span>
+        {/if}
+        <button
+          type="submit"
+          class="btn-action disabled:opacity-60"
+          disabled={!saved?.resume_filename || confirmed || pending}
+        >
+          <Icon name="check" size={12} />
+          Confirm CV and details
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Card 5: Auto-Apply -->
+  <div class="card overflow-hidden">
+    <div class="border-b border-border-subtle p-6">
+      <h2 class="text-lg font-bold leading-snug text-content-primary">Auto-Apply</h2>
+      <p class="mt-1 text-xs text-content-muted">
+        Applications already queued are still sent unless you choose Paused.
+      </p>
+    </div>
+    <form method="POST" action="?/saveAutoApply" use:enhance={submit} class="space-y-5 p-6">
+      <fieldset class="space-y-3">
+        <legend class="mb-2 text-xs font-semibold text-content-primary">Mode</legend>
+        {#each AUTO_APPLY_MODES as option}
+          <div class="flex items-start gap-2">
+            <input
+              id="mode-{option.value}"
+              type="radio"
+              name="autoApplyMode"
+              value={option.value}
+              bind:group={mode}
+              disabled={option.value === 'auto_submit' && !confirmed}
+              aria-describedby="mode-{option.value}-help"
+              class="mt-0.5"
+            />
+            <div class="text-xs">
+              <label for="mode-{option.value}" class="font-semibold text-content-primary">{option.label}</label>
+              <p id="mode-{option.value}-help" class="text-content-muted">
+                {option.help}
+                {#if option.value === 'auto_submit' && !confirmed}Confirm your CV above to enable this.{/if}
+              </p>
+            </div>
+          </div>
+        {/each}
+      </fieldset>
+      <div>
+        <label for="maxDailyApplications" class="mb-1 block text-xs font-semibold text-content-primary">
+          Daily application limit: <output for="maxDailyApplications">{dailyCap}</output>
+        </label>
+        <input
+          id="maxDailyApplications"
+          name="maxDailyApplications"
+          type="range"
+          min="5"
+          max="25"
+          step="1"
+          bind:value={dailyCap}
+          class="w-full max-w-sm"
+        />
+      </div>
+      <div class="flex justify-end">
+        <button type="submit" class="btn-action disabled:opacity-60" disabled={!saved || pending}>
+          Save Auto-Apply
+          <Icon name="arrow-right" size={12} />
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Card 6: Account & Session -->
   <div class="card overflow-hidden">
     <div class="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -385,9 +554,21 @@
   </div>
 </div>
 
-<!-- Toast Notice -->
-{#if toastMessage}
-  <div class="fixed bottom-6 right-6 z-50 rounded-md bg-content-primary px-5 py-3 text-xs font-medium text-card shadow-lg transition-all">
-    {toastMessage}
+<!-- The region stays in the page so screen readers announce each new message. -->
+<div aria-live="polite" class="fixed bottom-6 right-6 z-50 max-w-[calc(100vw-3rem)]">
+  {#if notice}
+    <div class="flex items-start gap-3 rounded-md bg-content-primary px-5 py-3 text-xs font-medium text-card shadow-lg">
+      <span>{#if notice.error}<strong>Error:</strong>{' '}{/if}{notice.text}</span>
+      <button type="button" onclick={() => (notice = null)} aria-label="Dismiss message">
+        <Icon name="close" size={12} />
+      </button>
+    </div>
+  {/if}
+</div>
+
+{#snippet field(id: string, label: string, value: string | number | undefined, attributes: HTMLInputAttributes)}
+  <div>
+    <label for={id} class="mb-1 block text-xs font-semibold text-content-primary">{label}</label>
+    <input {id} name={id} type="text" value={value ?? ''} class={INPUT_CLASS} {...attributes} />
   </div>
-{/if}
+{/snippet}
