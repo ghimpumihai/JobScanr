@@ -70,7 +70,8 @@ def get_candidate_names(user: User) -> tuple[str, str, str]:
     resume_data = user.get("resume_data") or {}
     first_name = (resume_data.get("first_name") or "").strip()
     last_name = (resume_data.get("last_name") or "").strip()
-    full_name = (resume_data.get("full_name") or resume_data.get("name") or "").strip()
+    defaults = user.get("screening_defaults") or {}  # the web settings page saves full_name here
+    full_name = (resume_data.get("full_name") or resume_data.get("name") or defaults.get("full_name") or "").strip()
 
     if first_name and last_name:
         if not full_name:

@@ -14,6 +14,7 @@ from jobs.apply.runner import (
     check_posting_liveness,
     process_application,
     reap_stuck_applications,
+    resolve_submitter,
     run_queue_worker,
 )
 
@@ -50,7 +51,7 @@ def test_claim_next_queued_application_success():
     # 5: ats_platform, 6: ats_identifier, 7: job_url, 8: job_title,
     # 9: attempt_token, 10: attempts,
     # 11: screening_defaults, 12: resume_data, 13: resume_storage_path,
-    # 14: resume_filename, 15: resume_content_type
+    # 14: resume_filename, 15: resume_content_type, 16: auth_user_id, 17: email
     mock_cur.fetchone.return_value = (
         101,
         1,
@@ -68,6 +69,8 @@ def test_claim_next_queued_application_success():
         "1/resume.pdf",
         "resume.pdf",
         "application/pdf",
+        "00000000-0000-0000-0000-000000000001",
+        "jane@example.com",
     )
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
@@ -82,6 +85,9 @@ def test_claim_next_queued_application_success():
         assert claim["screening_defaults"]["first_name"] == "Jane"
         assert claim["resume_data"]["skills"] == ["python", "distributed systems"]
         assert claim["resume_storage_path"] == "1/resume.pdf"
+        assert claim["email"] == "jane@example.com"
+        claim_sql = mock_cur.execute.call_args_list[0][0][0]
+        assert claim_sql.index("usr.auth_user_id") < claim_sql.index("usr.email")  # row index 17
 
         # Verify event was logged
         assert mock_cur.execute.call_count == 2
@@ -401,6 +407,37 @@ def test_process_application_greenhouse_ready_submitted(sample_claim):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("platform", ["greenhouse", "lever"])
+def test_process_application_submits_account_email_and_web_saved_name(sample_claim, platform):
+    """Regression: the worker used to send an empty email and the name "Candidate"."""
+    sample_claim.ats_platform = platform
+    sample_claim.email = "jane@example.com"
+    sample_claim.resume_data = {}
+    sample_claim.screening_defaults = {"full_name": "Jane Doe"}  # where /settings saves the name
+
+    async def run():
+        submitter = resolve_submitter(platform)
+        submitter.fetch_questions = AsyncMock(return_value=[])
+        submitter.submit = AsyncMock(return_value=SubmitResponse(status="submitted"))
+        with (
+            patch("jobs.apply.runner.check_posting_liveness", new_callable=AsyncMock, return_value=True),
+            patch("jobs.apply.runner.download_resume_stream") as mock_download,
+            patch("jobs.apply.runner.resolve_submitter", return_value=submitter),
+            patch("jobs.apply.runner.transition_application_status"),
+        ):
+            mock_download.return_value = (io.BytesIO(b"%PDF-1.4 dummy pdf"), "resume.pdf", "application/pdf")
+            await process_application(sample_claim)
+
+        payload = submitter.submit.call_args.kwargs["payload"]
+        assert payload["email"] == "jane@example.com"
+        if platform == "greenhouse":
+            assert (payload["first_name"], payload["last_name"]) == ("Jane", "Doe")
+        else:
+            assert payload["name"] == "Jane Doe"
+
+    asyncio.run(run())
+
+
 def test_process_application_dry_run_simulation(sample_claim):
     async def run():
         mock_submitter = MagicMock()
@@ -583,6 +620,7 @@ def test_run_queue_worker_processes_and_exits():
             "resume_storage_path": "1/resume.pdf",
             "resume_filename": "resume.pdf",
             "resume_content_type": "application/pdf",
+            "email": "jane@example.com",
         }
 
         with (
@@ -599,6 +637,7 @@ def test_run_queue_worker_processes_and_exits():
             claim_arg = mock_process.call_args[0][0]
             assert isinstance(claim_arg, ApplicationClaim)
             assert claim_arg.id == 101
+            assert claim_arg.email == "jane@example.com"
 
     asyncio.run(run())
 

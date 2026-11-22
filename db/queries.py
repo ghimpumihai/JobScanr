@@ -644,7 +644,7 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
                comp.ats_platform, comp.ats_identifier, jp.url AS job_url, jp.title AS job_title,
                u_app.attempt_token, u_app.attempts,
                usr.screening_defaults, usr.resume_data, usr.resume_storage_path, usr.resume_filename, usr.resume_content_type,
-               usr.auth_user_id
+               usr.auth_user_id, usr.email
         FROM updated u_app
         JOIN job_postings jp ON u_app.job_posting_id = jp.id
         JOIN companies comp ON jp.company_id = comp.id
@@ -677,6 +677,7 @@ def claim_next_queued_application(domain_throttle_seconds: int = 60) -> dict | N
             "resume_filename": row[14],
             "resume_content_type": row[15],
             "auth_user_id": str(row[16]) if len(row) > 16 and row[16] is not None else None,
+            "email": row[17] if len(row) > 17 else None,
         }
 
         cur.execute(
