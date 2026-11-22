@@ -115,6 +115,19 @@ def test_get_candidate_names_from_full_name():
     assert last == "Smith"
 
 
+def test_get_candidate_names_web_saved_name_is_used_after_resume_data():
+    user: User = {
+        "auth_user_id": "u1",
+        "email": "test@example.com",
+        "resume_data": {},
+        "profile_filters": {},
+        "screening_defaults": {"full_name": "Jane Doe"},
+    }
+    assert get_candidate_names(user) == ("Jane Doe", "Jane", "Doe")
+    user["resume_data"] = {"full_name": "Alex Smith"}
+    assert get_candidate_names(user) == ("Alex Smith", "Alex", "Smith")
+
+
 def test_get_candidate_names_from_email_fallback():
     user: User = {
         "auth_user_id": "u1",

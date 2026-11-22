@@ -61,6 +61,7 @@ class ApplicationClaim:
     resume_filename: str | None
     resume_content_type: str | None
     auth_user_id: str | None = None  # owner's Supabase auth UUID; binds resume_storage_path to its owner
+    email: str | None = None
 
 
 @dataclass
@@ -243,6 +244,7 @@ async def process_application(
 
     user_dict: dict[str, Any] = {
         "id": claim.user_id,
+        "email": claim.email or "",
         "screening_defaults": claim.screening_defaults,
         "resume_data": claim.resume_data,
         "resume_storage_path": claim.resume_storage_path,
@@ -481,6 +483,7 @@ async def run_queue_worker(
                 resume_filename=claim_dict["resume_filename"],
                 resume_content_type=claim_dict["resume_content_type"],
                 auth_user_id=claim_dict.get("auth_user_id"),
+                email=claim_dict.get("email"),
             )
 
             result = await process_application(claim, dry_run=dry_run, client=http_client)
