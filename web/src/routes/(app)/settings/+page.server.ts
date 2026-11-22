@@ -1,20 +1,30 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import type { UserProfile } from '$lib/types';
 import { isSupabaseConfigured } from '$lib/supabase/server';
+import { checkCvFile } from '$lib/cvFile';
+import { safeHttpUrl } from '$lib/safeUrl';
 
 const MOCK_PROFILE: UserProfile = {
   id: 1,
   email: 'stefan@example.com',
   full_name: 'Stefan Ghimpu',
+  phone: '+40 700 000 000',
+  location: 'Bucharest, Romania',
+  linkedin: 'https://linkedin.com/in/example',
+  github: 'https://github.com/example',
   resume_filename: 'stefan_ghimpu_cv_2026.pdf',
   resume_size_kb: 142,
   resume_uploaded_at: 'Oct 12, 2026',
+  resume_uploaded_at_raw: '2026-10-12T09:00:00+00:00',
   seniority_levels: ['Graduate / New Grad', 'Entry Level (0-1 yrs)', 'Junior (1-2 yrs)'],
   preferred_locations: ['London', 'Berlin', 'Amsterdam', 'Dublin', 'Paris', 'Remote EU'],
   target_keywords: ['Backend', 'Python', 'Go', 'Distributed Systems', 'Platform'],
   excluded_keywords: ['Senior', 'Lead', 'Principal', 'Staff', 'Clearance', 'C++'],
   work_authorization: 'yes',
+  requires_sponsorship: 'no',
+  years_experience: 1,
+  notice_period_days: 30,
   auto_apply_mode: 'approval_required',
   max_daily_applications: 10,
   max_apps_per_company: 2
@@ -36,7 +46,45 @@ const LEVEL_TOKENS: Record<string, string[]> = {
 
 const MAX_LIST_ITEMS = 50;
 const MAX_ITEM_LENGTH = 60;
-const MAX_NAME_LENGTH = 120;
+const MAX_TEXT_LENGTH = 120;
+const MAX_URL_LENGTH = 300;
+const URL_FIELDS = ['linkedin', 'github', 'portfolio'] as const;
+const AUTO_APPLY_MODES = ['approval_required', 'auto_submit', 'disabled'];
+const DEMO_RESULT = { success: true, message: 'Demo mode: nothing is stored.' };
+
+function isLiveUser(locals: App.Locals): boolean {
+  return Boolean(locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id');
+}
+
+/** undefined = field absent (leave stored value alone), '' = clear it. */
+function parseText(formData: FormData, name: string): string | undefined {
+  return formData.get(name)?.toString().trim();
+}
+
+/** undefined = field absent, '' = clear it, null = invalid. Never coerces: the worker would submit a bad value as 0. */
+function parseInteger(raw: string | undefined, min: number, max: number): number | '' | null | undefined {
+  if (!raw) return raw as '' | undefined;
+  const value = Number(raw);
+  return /^\d{1,3}$/.test(raw) && value >= min && value <= max ? value : null;
+}
+
+/** Returns a copy of `stored` with defined values set and empty ones removed; other keys are untouched. */
+function merge(stored: Record<string, unknown> | null | undefined, changes: Record<string, unknown>) {
+  const result = { ...(stored ?? {}) };
+  for (const [key, value] of Object.entries(changes)) {
+    if (value === '') delete result[key];
+    else if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
+/** P0001 = RAISE EXCEPTION in protect_user_worker_fields (db/schema.sql), whose messages are written for users. */
+function writeFailure(error: { code?: string; message: string }, fallback: string) {
+  console.error('Settings write failed:', error.message);
+  return error.code === 'P0001' ? fail(400, { error: error.message }) : fail(500, { error: fallback });
+}
+
+const boolLabel = (value: unknown) => (value === true ? 'yes' : value === false ? 'no' : '');
 
 /** undefined = field absent (leave stored value alone), null = present but invalid. */
 function parseList(raw: FormDataEntryValue | null): string[] | undefined | null {
@@ -57,10 +105,7 @@ function parseList(raw: FormDataEntryValue | null): string[] | undefined | null 
 }
 
 export const load: PageServerLoad = async ({ locals }) => {
-  const isLiveUser =
-    locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id';
-
-  if (isLiveUser) {
+  if (isLiveUser(locals)) {
     const { data, error } = await locals.supabase
       .from('users')
       .select('*')
@@ -72,15 +117,22 @@ export const load: PageServerLoad = async ({ locals }) => {
       return { profile: null, loadError: true };
     }
 
-    const wa = data.screening_defaults?.work_authorization;
+    const urls = data.resume_data?.urls ?? {};
     const liveProfile: UserProfile = {
       id: data.id,
       email: data.email,
       full_name: data.screening_defaults?.full_name ?? '',
+      phone: data.resume_data?.phone,
+      location: data.resume_data?.location,
+      linkedin: urls.linkedin,
+      github: urls.github,
+      portfolio: urls.portfolio,
       resume_filename: data.resume_filename ?? undefined,
       resume_storage_path: data.resume_storage_path,
       resume_content_type: data.resume_content_type,
       resume_uploaded_at: data.resume_uploaded_at ? new Date(data.resume_uploaded_at).toLocaleDateString() : undefined,
+      resume_uploaded_at_raw: data.resume_uploaded_at ?? undefined,
+      resume_confirmed_at: data.resume_confirmed_at ?? undefined,
       seniority_levels: Object.keys(LEVEL_TOKENS).filter((label) =>
         LEVEL_TOKENS[label].some((t) => (data.profile_filters?.levels ?? []).includes(t))
       ),
@@ -88,7 +140,10 @@ export const load: PageServerLoad = async ({ locals }) => {
       // The matcher reads `titles`; this is the same list.
       target_keywords: data.profile_filters?.titles ?? [],
       excluded_keywords: data.profile_filters?.excluded_title_keywords ?? [],
-      work_authorization: wa === true ? 'yes' : wa === false ? 'no' : '',
+      work_authorization: boolLabel(data.screening_defaults?.work_authorization),
+      requires_sponsorship: boolLabel(data.screening_defaults?.requires_sponsorship),
+      years_experience: data.screening_defaults?.years_experience,
+      notice_period_days: data.screening_defaults?.notice_period_days,
       auto_apply_mode: data.auto_apply_mode || 'approval_required',
       max_daily_applications: data.max_daily_applications ?? 10,
       max_apps_per_company: data.max_apps_per_company ?? 2
@@ -102,8 +157,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
   savePreferences: async ({ request, locals }) => {
     const formData = await request.formData();
-    const fullName = formData.get('fullName')?.toString().trim();
-    const workAuth = formData.get('workAuth')?.toString();
+    const fullName = parseText(formData, 'fullName');
+    const workAuth = parseText(formData, 'workAuth');
+    const sponsorship = parseText(formData, 'requiresSponsorship');
+    const contact = { phone: parseText(formData, 'phone'), location: parseText(formData, 'location') };
+    const urls = Object.fromEntries(URL_FIELDS.map((name) => [name, parseText(formData, name)]));
+    const years = parseInteger(parseText(formData, 'yearsExperience'), 0, 50);
+    const noticeDays = parseInteger(parseText(formData, 'noticePeriodDays'), 0, 365);
 
     const levelLabels = parseList(formData.get('seniorityLevels'));
     if (levelLabels && !levelLabels.every((l) => l in LEVEL_TOKENS)) {
@@ -119,23 +179,29 @@ export const actions: Actions = {
     if (levelLabels === null || Object.values(lists).some((v) => v === null)) {
       return fail(400, { error: 'Invalid list value. Use short text items only (max 50 items, 60 characters each).' });
     }
-    if (fullName && fullName.length > MAX_NAME_LENGTH) {
-      return fail(400, { error: 'Name is too long.' });
+    if (fullName && fullName.split(/\s+/).length < 2) {
+      return fail(400, { error: 'Enter your first and last name. Applications need both.' });
+    }
+    if ([fullName, contact.phone, contact.location].some((v) => v && v.length > MAX_TEXT_LENGTH)) {
+      return fail(400, { error: `Name, phone and location can have at most ${MAX_TEXT_LENGTH} characters each.` });
+    }
+    if (Object.values(urls).some((v) => v && (v.length > MAX_URL_LENGTH || safeHttpUrl(v) === '#'))) {
+      return fail(400, { error: 'Profile links must be full http:// or https:// addresses.' });
     }
     if (workAuth && workAuth !== 'yes' && workAuth !== 'no') {
       return fail(400, { error: 'Work authorization must be Yes or No.' });
     }
-
-    const isLiveUser =
-      locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id';
-    if (!isLiveUser) {
-      // Demo / unconfigured prototype mode: nothing is persisted.
-      return { success: true, message: 'Demo mode: preferences are not stored.' };
+    if (sponsorship && sponsorship !== 'yes' && sponsorship !== 'no') {
+      return fail(400, { error: 'Visa sponsorship must be Yes or No.' });
     }
+    if (years === null) return fail(400, { error: 'Years of experience must be a whole number from 0 to 50.' });
+    if (noticeDays === null) return fail(400, { error: 'Notice period must be a whole number of days from 0 to 365.' });
+
+    if (!isLiveUser(locals)) return DEMO_RESULT;
 
     const { data: existingUser, error: readError } = await locals.supabase
       .from('users')
-      .select('screening_defaults, profile_filters')
+      .select('screening_defaults, profile_filters, resume_data')
       .eq('auth_user_id', locals.user!.id)
       .single();
     if (readError || !existingUser) {
@@ -143,12 +209,20 @@ export const actions: Actions = {
       return fail(500, { error: 'Could not load your current preferences. Nothing was saved.' });
     }
 
-    const screening_defaults = {
-      ...(existingUser.screening_defaults ?? {}),
-      ...(fullName ? { full_name: fullName } : {}),
-      // The apply worker expects a real boolean here, never free text.
-      ...(workAuth ? { work_authorization: workAuth === 'yes' } : {})
-    };
+    const screening_defaults = merge(existingUser.screening_defaults, {
+      full_name: fullName || undefined,
+      // The apply worker expects real booleans here, never free text.
+      work_authorization: workAuth ? workAuth === 'yes' : undefined,
+      requires_sponsorship: sponsorship ? sponsorship === 'yes' : undefined,
+      years_experience: years,
+      notice_period_days: noticeDays
+    });
+    // Not screening_defaults: the worker matches its keys inside question text, so "location" would answer
+    // "Do you need relocation support?".
+    const resume_data = merge(existingUser.resume_data, {
+      ...contact,
+      urls: merge(existingUser.resume_data?.urls, urls)
+    });
     const profile_filters = {
       ...(existingUser.profile_filters ?? {}),
       ...Object.fromEntries(Object.entries(lists).filter(([, v]) => v !== undefined))
@@ -156,13 +230,159 @@ export const actions: Actions = {
 
     const { error: writeError } = await locals.supabase
       .from('users')
-      .update({ screening_defaults, profile_filters })
+      .update({ screening_defaults, profile_filters, resume_data })
       .eq('auth_user_id', locals.user!.id);
-    if (writeError) {
-      console.error('Failed to save user preferences:', writeError.message);
-      return fail(500, { error: 'Could not save preferences. Please try again.' });
+    if (writeError) return writeFailure(writeError, 'Could not save preferences. Please try again.');
+
+    return { success: true, message: 'Preferences saved.' };
+  },
+
+  uploadCv: async ({ request, locals }) => {
+    const file = (await request.formData()).get('cv');
+    if (!(file instanceof File)) return fail(400, { error: 'Choose a CV file to upload.' });
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const cv = checkCvFile(file.name, bytes);
+    if (!cv.ok) return fail(400, { error: cv.error });
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    const { data: previous, error: readError } = await locals.supabase
+      .from('users')
+      .select('resume_storage_path, auto_apply_mode')
+      .eq('auth_user_id', locals.user!.id)
+      .single();
+    if (readError || !previous) {
+      console.error('Failed to read current CV:', readError?.message);
+      return fail(500, { error: 'Could not load your profile. Nothing was uploaded.' });
     }
 
-    return { success: true, message: "Preferences saved. Active for tomorrow's 06:00 UTC scan." };
+    // A new object per upload: overwriting in place could change the bytes behind a confirmed CV.
+    const bucket = locals.supabase.storage.from('resumes');
+    const path = `${locals.user!.id}/${crypto.randomUUID()}${cv.extension}`;
+    const { error: uploadError } = await bucket.upload(path, bytes, { contentType: cv.contentType });
+    if (uploadError) {
+      console.error('CV upload failed:', uploadError.message);
+      return fail(500, { error: 'The upload failed. Your previous CV, if any, is unchanged.' });
+    }
+
+    const { error: writeError } = await locals.supabase
+      .from('users')
+      .update({
+        resume_storage_path: path,
+        resume_filename: cv.filename,
+        resume_content_type: cv.contentType,
+        resume_uploaded_at: new Date().toISOString()
+      })
+      .eq('auth_user_id', locals.user!.id)
+      .select('id')
+      .single();
+    if (writeError) {
+      // No code = the connection failed, so the row may already point at the new file: keep it.
+      if (!writeError.code) {
+        console.error('CV row update unconfirmed:', writeError.message);
+        return fail(500, { error: 'The connection failed. Reload to see which CV is active.' });
+      }
+      const { error: cleanupError } = await bucket.remove([path]);
+      if (cleanupError) console.error('Could not remove unused CV:', cleanupError.message);
+      return writeFailure(writeError, 'Could not save the new CV. Your previous CV, if any, is unchanged.');
+    }
+
+    if (previous.resume_storage_path) {
+      const { error: cleanupError } = await bucket.remove([previous.resume_storage_path]);
+      if (cleanupError) console.error('Could not remove replaced CV:', cleanupError.message);
+    }
+    const demoted = previous.auto_apply_mode === 'auto_submit' ? ' Automatic submission is off until you do.' : '';
+    return { success: true, message: `CV uploaded. Review and confirm your details.${demoted}` };
+  },
+
+  downloadCv: async ({ locals }) => {
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+    const { data, error } = await locals.supabase
+      .from('users')
+      .select('resume_storage_path, resume_filename')
+      .eq('auth_user_id', locals.user!.id)
+      .single();
+    if (error) {
+      console.error('Failed to read CV path:', error.message);
+      return fail(500, { error: 'Could not load your CV. Please try again.' });
+    }
+    if (!data.resume_storage_path) return fail(404, { error: 'You have not uploaded a CV yet.' });
+
+    const { data: link, error: linkError } = await locals.supabase.storage
+      .from('resumes')
+      .createSignedUrl(data.resume_storage_path, 60);
+    if (linkError) {
+      console.error('Failed to sign CV link:', linkError.message);
+      return fail(500, { error: 'Could not create a download link. Please try again.' });
+    }
+    // Not the client's `download` option: it encodes the filename twice ("ș.pdf" becomes "%C8%99.pdf").
+    redirect(303, `${link.signedUrl}&download=${encodeURIComponent(data.resume_filename ?? '')}`);
+  },
+
+  confirmCv: async ({ request, locals }) => {
+    const uploadedAt = parseText(await request.formData(), 'resumeUploadedAt');
+    if (!uploadedAt) return fail(400, { error: 'Upload a CV before confirming.' });
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    const { data, error } = await locals.supabase
+      .from('users')
+      .select('resume_storage_path, screening_defaults')
+      .eq('auth_user_id', locals.user!.id)
+      .single();
+    if (error) {
+      console.error('Failed to read profile for confirmation:', error.message);
+      return fail(500, { error: 'Could not load your profile. Nothing was confirmed.' });
+    }
+    const saved = data.screening_defaults ?? {};
+    const missing = [
+      !data.resume_storage_path && 'a CV',
+      String(saved.full_name ?? '').trim().split(/\s+/).length < 2 && 'your first and last name',
+      typeof saved.work_authorization !== 'boolean' && 'work authorization',
+      typeof saved.requires_sponsorship !== 'boolean' && 'visa sponsorship'
+    ].filter(Boolean);
+    if (missing.length) return fail(400, { error: `Save these before confirming: ${missing.join(', ')}.` });
+
+    // Matching the displayed upload time means only the CV the user was looking at can be confirmed.
+    const { data: updated, error: writeError } = await locals.supabase
+      .from('users')
+      .update({ resume_confirmed_at: new Date().toISOString() })
+      .eq('auth_user_id', locals.user!.id)
+      .eq('resume_uploaded_at', uploadedAt)
+      .select('id');
+    if (writeError) return writeFailure(writeError, 'Could not confirm your CV. Please try again.');
+    if (!updated.length) return fail(409, { error: 'Your CV changed since this page loaded. Reload and review it.' });
+    return { success: true, message: 'CV and details confirmed.' };
+  },
+
+  saveAutoApply: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const mode = parseText(formData, 'autoApplyMode');
+    const cap = parseInteger(parseText(formData, 'maxDailyApplications'), 5, 25);
+    if (!mode || !AUTO_APPLY_MODES.includes(mode)) return fail(400, { error: 'Choose an auto-apply mode.' });
+    if (!cap) return fail(400, { error: 'The daily limit must be a whole number from 5 to 25.' });
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    if (mode === 'auto_submit') {
+      const { data, error } = await locals.supabase
+        .from('users')
+        .select('resume_storage_path, resume_confirmed_at')
+        .eq('auth_user_id', locals.user!.id)
+        .single();
+      if (error) {
+        console.error('Failed to read CV confirmation:', error.message);
+        return fail(500, { error: 'Could not check your CV confirmation. Nothing was saved.' });
+      }
+      if (!data.resume_storage_path || !data.resume_confirmed_at) {
+        return fail(400, { error: 'Confirm your CV before enabling automatic submission.' });
+      }
+    }
+
+    const { error: writeError } = await locals.supabase
+      .from('users')
+      .update({ auto_apply_mode: mode, max_daily_applications: cap })
+      .eq('auth_user_id', locals.user!.id)
+      .select('id')
+      .single();
+    if (writeError) return writeFailure(writeError, 'Could not save auto-apply settings. Please try again.');
+    return { success: true, message: 'Auto-apply settings saved.' };
   }
 };

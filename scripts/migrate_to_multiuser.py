@@ -102,8 +102,7 @@ def migrate_profile_to_user(
             )
             ON CONFLICT (email) DO UPDATE
                 SET profile_filters = EXCLUDED.profile_filters,
-                    screening_defaults = EXCLUDED.screening_defaults,
-                    resume_data = EXCLUDED.resume_data
+                    screening_defaults = EXCLUDED.screening_defaults
             RETURNING id, auth_user_id, email
             """,
             {

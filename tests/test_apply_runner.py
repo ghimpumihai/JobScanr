@@ -88,6 +88,8 @@ def test_claim_next_queued_application_success():
         assert claim["email"] == "jane@example.com"
         claim_sql = mock_cur.execute.call_args_list[0][0][0]
         assert claim_sql.index("usr.auth_user_id") < claim_sql.index("usr.email")  # row index 17
+        # A replaced CV is unconfirmed; applications queued before the replacement must wait too.
+        assert "AND u.resume_confirmed_at IS NOT NULL" in claim_sql
 
         # Verify event was logged
         assert mock_cur.execute.call_count == 2

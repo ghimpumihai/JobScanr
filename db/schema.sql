@@ -93,6 +93,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_storage_path TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_filename TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_content_type TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_uploaded_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_confirmed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS user_job_matches (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -253,7 +254,8 @@ EXCEPTION
 END $$;
 
 -- users: the apply worker downloads users.resume_storage_path with the service-role key (which bypasses
--- storage RLS), so a user may only point it at their own folder in the resumes bucket.
+-- storage RLS), so a user may only point it at their own folder in the resumes bucket. Users can update their
+-- own row with the public anon key, so the CV confirmation and the daily cap are enforced here, not in the UI.
 CREATE OR REPLACE FUNCTION protect_user_worker_fields()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -266,6 +268,21 @@ BEGIN
                OR split_part(NEW.resume_storage_path, '/', 1) <> auth.uid()::text THEN
                 RAISE EXCEPTION 'resume_storage_path must be inside your own folder';
             END IF;
+        END IF;
+        IF NEW.resume_storage_path IS DISTINCT FROM OLD.resume_storage_path
+           OR NEW.resume_uploaded_at IS DISTINCT FROM OLD.resume_uploaded_at THEN
+            NEW.resume_confirmed_at := NULL; -- a new CV needs a new review
+            IF NEW.auto_apply_mode = 'auto_submit' THEN
+                NEW.auto_apply_mode := 'approval_required';
+            END IF;
+        END IF;
+        IF NEW.auto_apply_mode = 'auto_submit'
+           AND (NEW.resume_storage_path IS NULL OR NEW.resume_confirmed_at IS NULL) THEN
+            RAISE EXCEPTION 'Confirm your CV before enabling automatic submission';
+        END IF;
+        IF NEW.max_daily_applications IS DISTINCT FROM OLD.max_daily_applications
+           AND (NEW.max_daily_applications IS NULL OR NEW.max_daily_applications NOT BETWEEN 5 AND 25) THEN
+            RAISE EXCEPTION 'max_daily_applications must be between 5 and 25';
         END IF;
     END IF;
     RETURN NEW;
