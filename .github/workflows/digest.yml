@@ -33,6 +33,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Scrape careers and notify
+        shell: bash  # enables pipefail: without it, `| tee` hides a failed scan
         # Workday is scanned by workday.yml; its jobs are already stored and get emailed here.
         run: python -m jobs.scrape_and_notify --skip-platforms workday --failures-file failures.json 2>&1 | tee scrape.log
         env:

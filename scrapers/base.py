@@ -19,7 +19,7 @@ WS_RE = re.compile(r"\s+")
 
 
 class BlockedByChallenge(RuntimeError):
-    """The host answered with a Cloudflare bot-management challenge (HTTP 429 + ``cf-mitigated: challenge``).
+    """The host answered with a Cloudflare bot-management challenge (an error status + ``cf-mitigated: challenge``).
 
     A challenge is not a transient rate limit: retrying cannot pass it, and every retry is more automated
     traffic against a host that has told us to stop. Callers must not retry and must not treat it as a dead
@@ -125,7 +125,7 @@ class BaseClient(ABC):
                 if r.status_code < 400:
                     challenge_tracker.record_ok(host_key)
                     return r
-                if r.status_code == 429 and r.headers.get("cf-mitigated", "").lower() == "challenge":
+                if r.headers.get("cf-mitigated", "").lower() == "challenge":  # 429 from Workday, usually 403 elsewhere
                     challenge_tracker.record_block(host_key)
                     raise BlockedByChallenge(f"{host_key} answered with a Cloudflare challenge for {url}")
                 if r.status_code == 404:

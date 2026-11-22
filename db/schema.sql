@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS workday_board_state (
 );
 
 -- Per Workday pod (wd1.myworkdayjobs.com, ...) that answered with a Cloudflare challenge: no requests until
--- challenged_until, then one probe; backoff_days doubles (2 -> 14) each time the probe is challenged again.
+-- challenged_until, then one probe; a challenged probe backs off again for the same backoff_days.
 CREATE TABLE IF NOT EXISTS workday_pod_backoff (
     pod              TEXT PRIMARY KEY,
     challenged_until TIMESTAMPTZ NOT NULL,
