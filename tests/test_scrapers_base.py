@@ -69,3 +69,37 @@ def test_retry_after_sleep_is_capped(monkeypatch):
 
     asyncio.run(run())
     assert slept and max(slept) <= 60
+
+
+def test_workday_alone_gets_openssl_default_ciphers(monkeypatch):
+    import ssl
+
+    import httpx
+
+    from scrapers.base import make_http_client
+
+    # Distro Pythons already default to OpenSSL's list, so force CPython's own short list, as in CI.
+    real = ssl.create_default_context
+
+    def short_context(*args, **kwargs):
+        ctx = real(*args, **kwargs)
+        ctx.set_ciphers("ECDH+AESGCM")
+        return ctx
+
+    def names(ctx):
+        return [c["name"] for c in ctx.get_ciphers()]
+
+    openssl_default = real()
+    openssl_default.set_ciphers("DEFAULT")
+    monkeypatch.setattr(ssl, "create_default_context", short_context)
+    client = make_http_client()
+
+    def tls(url):
+        return client._transport_for_url(httpx.URL(url))._pool._ssl_context
+
+    workday = tls("https://acme.wd1.myworkdayjobs.com/wday/cxs/a/b/jobs")
+    assert names(workday) == names(openssl_default)
+    assert workday.verify_mode == ssl.CERT_REQUIRED and workday.check_hostname
+    assert workday.minimum_version == openssl_default.minimum_version
+    for other in ("https://boards-api.greenhouse.io/x", "https://notmyworkdayjobs.com/x"):
+        assert names(tls(other)) == names(short_context())
