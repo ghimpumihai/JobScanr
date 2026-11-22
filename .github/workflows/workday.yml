@@ -30,6 +30,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Scan Workday boards
+        shell: bash  # enables pipefail: without it, `| tee` hides a failed scan
         run: python -m jobs.scrape_and_notify --platforms workday --no-email --failures-file failures.json 2>&1 | tee scrape.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

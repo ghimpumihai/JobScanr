@@ -41,7 +41,8 @@ ENRICH_TTL = timedelta(days=7)
 # A blocked board falls back to its cached listing (its jobs stay listed, matchable and unpruned) only while the
 # cache is younger than the job-pruning window. shortcut: assumes the jobs are still live while we can't look.
 BLOCKED_CACHE_MAX_AGE = timedelta(days=30)
-BACKOFF_FIRST_DAYS, BACKOFF_MAX_DAYS = 2, 14
+# Flat and short: blocks have cleared within a day, and a probe costs one request per pod.
+BACKOFF_DAYS = 1
 
 
 def _tag(jobs: list[JobPosting], company: Company | dict) -> list[JobPosting]:
@@ -153,7 +154,6 @@ async def scrape_all(
                         "ats_identifier": company.get("ats_identifier"),
                         "career_url": company.get("career_url"),
                         "error": str(result),
-                        "status_code": 429,
                         "blocked": True,
                     }
                 )
@@ -204,17 +204,19 @@ async def run_pipeline(args) -> int:
             }
         ]
 
-    try:
-        workday_states = queries.get_workday_board_states()
-    except Exception as e:  # first run before the schema is applied, or a read failure: scan without the cache
-        logger.warning("Could not load Workday board state, scanning without it: %s", e)
-        workday_states = {}
-
-    try:
-        backoff = queries.get_workday_pod_backoff()
-    except Exception as e:
-        logger.warning("Could not load Workday pod back-off, probing every pod: %s", e)
-        backoff = {}
+    workday_states: dict[int, dict] = {}
+    backoff: dict[str, dict] = {}
+    # A run that skips Workday must not load this state: saving its stale copy at the end would overwrite
+    # whatever a Workday run stored in the meantime.
+    if any(c.get("ats_platform") == "workday" for c in companies):
+        try:
+            workday_states = queries.get_workday_board_states()
+        except Exception as e:  # first run before the schema is applied, or a read failure: scan without the cache
+            logger.warning("Could not load Workday board state, scanning without it: %s", e)
+        try:
+            backoff = queries.get_workday_pod_backoff()
+        except Exception as e:
+            logger.warning("Could not load Workday pod back-off, probing every pod: %s", e)
     now = datetime.now(timezone.utc)
     for pod, b in backoff.items():
         # B9: no requests while backed off; afterwards one challenge (not five) blocks the pod again
@@ -245,11 +247,12 @@ async def run_pipeline(args) -> int:
     if blocked:
         by_platform = collections.Counter(c.get("ats_platform") for c in blocked)
         logger.warning(
-            "%d of %d companies were not scraped today because the host answered with a Cloudflare challenge, %s. "
-            "They are skipped (not failures) and retried on the next run.",
+            "%d of %d companies were not scraped, %s: their host is in back-off or answered with a Cloudflare "
+            "challenge (hosts that challenged this run: %s). They are skipped, not failures.",
             len(blocked),
             len(companies),
             ", ".join(f"{p}={n}" for p, n in sorted(by_platform.items())),
+            ", ".join(sorted(challenge_tracker.challenged)) or "none",
         )
 
     if failures:
@@ -446,7 +449,7 @@ def _save_workday(args, jobs: list[dict], states: dict[int, dict], backoff: dict
     }
     pod_upserts, pod_deletes = _plan_backoff(backoff, blocked_pods, challenge_tracker.answered, now)
     for pod, b in pod_upserts.items():
-        logger.warning("Workday pod %s challenged us: no requests to it for %d days.", pod, b["days"])
+        logger.warning("Workday pod %s challenged us: no requests to it for %d day(s).", pod, b["days"])
     if args.dry_run:
         logger.info("[dry-run] Workday board state and pod back-off not saved (%d boards).", len(states))
         return
@@ -471,14 +474,12 @@ def _cache_fresh(state: dict) -> bool:
 def _plan_backoff(
     backoff: dict[str, dict], blocked: set[str], answered: set[str], now: datetime
 ) -> tuple[dict[str, dict], set[str]]:
-    """New back-off rows for Workday pods blocked this run (doubling on repeat), and rows to clear."""
+    """New back-off rows for Workday pods blocked this run, and rows to clear."""
     upserts = {}
     for pod in blocked:
         if not pod.endswith(".myworkdayjobs.com"):
             continue
-        prev = backoff.get(pod)
-        days = min(prev["days"] * 2, BACKOFF_MAX_DAYS) if prev else BACKOFF_FIRST_DAYS
-        upserts[pod] = {"until": now + timedelta(days=days), "days": days}
+        upserts[pod] = {"until": now + timedelta(days=BACKOFF_DAYS), "days": BACKOFF_DAYS}
     return upserts, {p for p in backoff if p in answered and p not in blocked}
 
 

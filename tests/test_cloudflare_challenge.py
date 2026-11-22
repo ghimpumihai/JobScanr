@@ -191,3 +191,20 @@ def test_link_fixer_ignores_blocked_entries_and_does_not_fall_back_to_the_log(tm
     assert "Ignoring 1 companies blocked" in out and "Nothing to fix" in out
     assert "No failures detected" in report.read_text()
     assert json.loads(companies.read_text())[0]["ats_identifier"] == "blocked|wd1|site"  # untouched
+
+
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_a_challenge_is_recognised_whatever_its_status(status):
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(status, headers={"cf-mitigated": "challenge"})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            with pytest.raises(BlockedByChallenge):
+                await _Client(http).request_with_retry("GET", "https://a.wd1.myworkdayjobs.com/x")
+
+    _run(run())
+    assert len(calls) == 1

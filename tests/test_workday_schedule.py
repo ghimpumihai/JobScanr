@@ -162,15 +162,14 @@ def test_primed_pod_is_blocked_by_a_single_challenge():
     assert len(calls) == 1 and challenge_tracker.is_blocked(POD)
 
 
-def test_plan_backoff_starts_doubles_caps_and_clears():
+def test_plan_backoff_is_flat_and_clears():
     now = datetime.now(timezone.utc)
     up, down = sn._plan_backoff({}, {POD, "boards.greenhouse.io"}, set(), now)
-    assert up == {POD: {"until": now + timedelta(days=2), "days": 2}} and not down  # non-Workday hosts ignored
+    one_day = {POD: {"until": now + timedelta(days=1), "days": 1}}
+    assert up == one_day and not down  # non-Workday hosts ignored
 
-    up, _ = sn._plan_backoff({POD: {"until": now, "days": 2}}, {POD}, set(), now)
-    assert up[POD]["days"] == 4
-    up, _ = sn._plan_backoff({POD: {"until": now, "days": 8}}, {POD}, set(), now)
-    assert up[POD]["days"] == 14
+    up, _ = sn._plan_backoff({POD: {"until": now, "days": 4}}, {POD}, set(), now)
+    assert up == one_day  # a challenged probe doesn't wait longer
 
     up, down = sn._plan_backoff({POD: {"until": now, "days": 4}}, set(), {POD}, now)
     assert not up and down == {POD}  # the probe got through
@@ -203,7 +202,7 @@ def test_aborted_run_still_saves_pod_backoff():
     ):
         assert asyncio.run(sn.run_pipeline(args)) == 1
     upserts, _ = save.call_args.args
-    assert upserts[POD]["days"] == 2
+    assert upserts[POD]["days"] == 1
 
 
 def test_small_pod_that_only_challenged_is_backed_off_and_tiny_samples_dont_abort():
@@ -317,6 +316,39 @@ def test_digest_sends_jobs_stored_by_earlier_runs():
     assert ret == 0
     send.assert_called_once_with(stored)
     mark.assert_called_once_with([7])
+
+
+def test_run_that_skips_workday_never_touches_workday_state():
+    """A digest used to re-save every cached board from its own stale snapshot."""
+    from unittest.mock import MagicMock
+
+    load, save = MagicMock(return_value={1: {"queries": {"k": {}}}}), MagicMock()
+    companies = [_company(1, "wd"), {"id": 2, "name": "gh", "ats_platform": "greenhouse", "ats_identifier": "gh"}]
+
+    async def scrape(cs, **kw):
+        return [], []
+
+    def run(args):
+        with (
+            patch("db.queries.get_all_companies", return_value=companies),
+            patch("db.queries.get_active_users", return_value=[]),
+            patch("db.queries.get_workday_board_states", load),
+            patch("db.queries.get_workday_pod_backoff", return_value={}),
+            patch("db.queries.save_workday_board_states", save),
+            patch("db.queries.save_workday_pod_backoff"),
+            patch("db.queries.upsert_jobs", return_value=[]),
+            patch("db.queries.delete_stale_jobs", return_value=0),
+            patch("db.queries.get_unnotified_jobs", return_value=[]),
+            patch("jobs.notify.email_configured", return_value=True),
+            patch.object(sn, "scrape_all", scrape),
+        ):
+            assert asyncio.run(sn.run_pipeline(args)) == 0
+
+    run(_args(skip_platforms="workday"))
+    assert not load.called and save.call_args.args[0] == {}  # nothing to write
+
+    run(_args(platforms="workday", no_email=True))
+    assert load.called and set(save.call_args.args[0]) == {1}
 
 
 def test_no_email_stores_but_sends_nothing():
