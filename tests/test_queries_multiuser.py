@@ -248,6 +248,26 @@ def test_delete_stale_jobs_protects_applications():
         assert params == (30,)
 
 
+def test_close_unlisted_applications_closes_only_to_apply_rows_with_an_event():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.rowcount = 3
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        closed = queries.close_unlisted_applications(days=30)
+
+    assert closed == 3
+    mock_cur.execute.assert_called_once()
+    sql, params = mock_cur.execute.call_args[0]
+    assert "UPDATE applications a SET status = 'stale_closed'" in sql
+    assert "a.status = 'manual_apply'" in sql  # never Applied or Not Interested rows
+    assert "jp.last_seen_at < NOW() - make_interval(days => %s)" in sql
+    assert "SELECT id, 'manual_apply', 'stale_closed', 'posting_unlisted' FROM closed" in sql
+    assert params == (30,)
+
+
 # ---------------------------------------------------------------------------
 # Schema and Row Level Security (RLS) assertions
 # ---------------------------------------------------------------------------
@@ -301,60 +321,6 @@ def test_schema_sql_rls_policies_and_tamper_trigger():
     # Trigger protecting queue status fields
     assert "CREATE OR REPLACE FUNCTION protect_application_queue_fields()" in schema_text
     assert "trg_protect_application_queue_fields ON applications" in schema_text
-    assert "Authenticated users cannot mutate queue status fields" in schema_text
-
-
-def test_queue_status_protection_trigger_logic():
-    """Unit test verifying the trigger logic behavior across different roles and fields."""
-
-    def simulate_trigger(role: str, old_row: dict, new_row: dict):
-        if role == "authenticated":
-            if (
-                new_row.get("status") != old_row.get("status")
-                or new_row.get("locked_at") != old_row.get("locked_at")
-                or new_row.get("attempt_token") != old_row.get("attempt_token")
-                or new_row.get("attempts") != old_row.get("attempts")
-                or new_row.get("next_attempt_at") != old_row.get("next_attempt_at")
-            ):
-                raise PermissionError("Authenticated users cannot mutate queue status fields")
-        return new_row
-
-    old = {
-        "status": "queued",
-        "locked_at": None,
-        "attempt_token": None,
-        "attempts": 0,
-        "next_attempt_at": "2026-10-11T12:00:00Z",
-        "submitted_payload": {},
-    }
-
-    # Authenticated user updating submitted_payload: allowed
-    new_payload = {**old, "submitted_payload": {"answers": {"q1": "yes"}}}
-    assert simulate_trigger("authenticated", old, new_payload) == new_payload
-
-    # Authenticated user attempting to mutate status: rejected
-    with pytest.raises(PermissionError, match="Authenticated users cannot mutate queue status fields"):
-        simulate_trigger("authenticated", old, {**old, "status": "submitting"})
-
-    # Authenticated user attempting to mutate locked_at: rejected
-    with pytest.raises(PermissionError, match="Authenticated users cannot mutate queue status fields"):
-        simulate_trigger("authenticated", old, {**old, "locked_at": "2026-10-11T12:00:00Z"})
-
-    # Authenticated user attempting to mutate attempt_token: rejected
-    with pytest.raises(PermissionError, match="Authenticated users cannot mutate queue status fields"):
-        simulate_trigger("authenticated", old, {**old, "attempt_token": "token-123"})
-
-    # Authenticated user attempting to mutate attempts: rejected
-    with pytest.raises(PermissionError, match="Authenticated users cannot mutate queue status fields"):
-        simulate_trigger("authenticated", old, {**old, "attempts": 1})
-
-    # Authenticated user attempting to mutate next_attempt_at: rejected
-    with pytest.raises(PermissionError, match="Authenticated users cannot mutate queue status fields"):
-        simulate_trigger("authenticated", old, {**old, "next_attempt_at": "2026-10-12T00:00:00Z"})
-
-    # Service role / worker mutating status: allowed
-    service_update = {**old, "status": "submitting", "locked_at": "2026-10-11T12:00:00Z"}
-    assert simulate_trigger("service_role", old, service_update) == service_update
 
 
 def test_schema_sql_has_resume_columns_and_storage_bucket():

@@ -229,6 +229,7 @@ def test_small_pod_that_only_challenged_is_backed_off_and_tiny_samples_dont_abor
         patch("db.queries.save_workday_pod_backoff", save),
         patch("db.queries.upsert_jobs", return_value=[]),
         patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.close_unlisted_applications", return_value=0),
         patch("jobs.notify.email_configured", return_value=False),
         patch.object(sn, "scrape_all", scrape),
     ):
@@ -301,6 +302,7 @@ def _run_pipeline(args, unnotified):
         patch("db.queries.save_workday_pod_backoff"),
         patch("db.queries.upsert_jobs", return_value=[]),
         patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.close_unlisted_applications", return_value=0),
         patch("db.queries.get_unnotified_jobs", return_value=unnotified),
         patch("db.queries.mark_notified", mark),
         patch("jobs.notify.email_configured", return_value=True),
@@ -338,6 +340,7 @@ def test_run_that_skips_workday_never_touches_workday_state():
             patch("db.queries.save_workday_pod_backoff"),
             patch("db.queries.upsert_jobs", return_value=[]),
             patch("db.queries.delete_stale_jobs", return_value=0),
+            patch("db.queries.close_unlisted_applications", return_value=0),
             patch("db.queries.get_unnotified_jobs", return_value=[]),
             patch("jobs.notify.email_configured", return_value=True),
             patch.object(sn, "scrape_all", scrape),
@@ -368,6 +371,7 @@ def test_boards_are_scanned_in_a_shuffled_order():
         patch("db.queries.save_workday_pod_backoff"),
         patch("db.queries.upsert_jobs", return_value=[]),
         patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.close_unlisted_applications", return_value=0),
         patch.object(sn, "scrape_all", scrape),
         patch("random.shuffle", side_effect=lambda xs: xs.reverse()),
     ):

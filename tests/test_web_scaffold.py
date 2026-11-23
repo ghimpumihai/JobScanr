@@ -98,9 +98,44 @@ def test_no_service_role_key_in_web_source():
 
 def test_settings_actions_keep_cv_and_screening_guards():
     server = (WEB_ROOT / "src" / "routes" / "(app)" / "settings" / "+page.server.ts").read_text(encoding="utf-8")
-    assert ".eq('resume_uploaded_at', uploadedAt)" in server  # only the displayed CV can be confirmed
+    assert "confirmCv" not in server  # the confirmation only enabled automatic submission (#48)
     assert "crypto.randomUUID()" in server and "upsert" not in server  # never overwrite a confirmed CV in place
     assert "if (!writeError.code)" in server  # unknown outcome: keep the file the row may point at
     # As a screening_defaults key, "location" would answer "Do you need relocation support?".
     defaults = server.split("const screening_defaults = merge(", 1)[1].split("});", 1)[0]
     assert "location" not in defaults and "contact" not in defaults
+
+
+def test_matches_page_links_every_platform_to_the_posting_and_queues_nothing():
+    """Nothing can be submitted without the employer's API key (#48), so every match is applied to by hand."""
+    page = (WEB_ROOT / "src/routes/(app)/matches/+page.svelte").read_text(encoding="utf-8")
+    server = (WEB_ROOT / "src/routes/(app)/matches/+page.server.ts").read_text(encoding="utf-8")
+    assert "Queue" not in page and "queue" not in server.lower()
+    assert "ats_platform === 'workday'" not in page  # the Apply link is no longer limited to Workday
+    assert re.search(r"<a\s+href=\{match\.url\}[^>]*>\s*Apply\b", page)
+
+
+# Claims that JobScanr submits, queues or verifies applications. Nothing is sent: employers accept applications
+# only with their own API key (#48, plan appendix), so none of these may come back.
+BANNED_CLAIMS = (
+    "Queue",
+    "dispatch",
+    "Approve & Submit",
+    "Acme Cloud",
+    "Verified against",
+    "Automatic submission",
+    "Submission confirmed",
+    "worker pool",
+    "Confirm CV",
+)
+
+
+def test_no_page_claims_that_applications_are_submitted_for_the_user():
+    found = [
+        f"{path.relative_to(WEB_ROOT)}: {claim}"
+        for path in (WEB_ROOT / "src").rglob("*")
+        if path.suffix in (".svelte", ".ts")
+        for claim in BANNED_CLAIMS
+        if claim in path.read_text(encoding="utf-8")
+    ]
+    assert found == []

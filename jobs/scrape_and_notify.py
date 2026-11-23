@@ -340,7 +340,14 @@ async def run_pipeline(args) -> int:
 
     new_jobs = queries.upsert_jobs(all_matched_jobs)
     stale = queries.delete_stale_jobs(days=30)
-    logger.info("Stored %d new / %d total matched; pruned %d stale.", len(new_jobs), len(all_matched_jobs), stale)
+    closed = queries.close_unlisted_applications(days=30)
+    logger.info(
+        "Stored %d new / %d total matched; pruned %d stale; closed %d unlisted application(s).",
+        len(new_jobs),
+        len(all_matched_jobs),
+        stale,
+        closed,
+    )
 
     # Build lookup by (external_id, company_id) to resolve database IDs
     job_id_lookup: dict[tuple[str, int | None], int] = {}
@@ -365,12 +372,8 @@ async def run_pipeline(args) -> int:
             match_records.append({"job_posting_id": jid, "match_score": 1.0})
 
             if auto_mode != "disabled":
-                plat = (j.get("ats_platform") or "").lower()
-                if plat in ("greenhouse", "lever"):
-                    status = "queued" if auto_mode == "auto_submit" else "pending_approval"
-                else:
-                    status = "manual_apply"
-                app_stage_items.append({"job_posting_id": jid, "status": status})
+                # No platform accepts applications without the employer's API key (#48), so all are To Apply.
+                app_stage_items.append({"job_posting_id": jid, "status": "manual_apply"})
 
         if match_records:
             queries.upsert_user_matches(uid, match_records)

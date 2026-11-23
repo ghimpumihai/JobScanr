@@ -15,7 +15,8 @@ export type ApplicationStatus =
   | 'needs_review'
   | 'failed'
   | 'manual_apply'
-  | 'stale_closed';
+  | 'stale_closed'
+  | 'dismissed';
 
 export type AutoApplyMode = 'approval_required' | 'auto_submit' | 'disabled';
 
@@ -35,21 +36,17 @@ export interface JobMatch {
 
 export interface ApplicationRecord {
   id: number;
-  job_posting_id: number;
   title: string;
   company_name: string;
   location: string;
   ats_platform: ATSPlatform;
   status: ApplicationStatus;
-  submitted_at?: string;
-  scheduled_at?: string;
-  attempt_token?: string;
-  attempts?: number;
-  screening_question?: string;
-  drafted_answer?: string;
-  work_authorization?: string;
-  resume_snapshot?: Record<string, unknown>;
-  submitted_payload?: Record<string, unknown>;
+  /** Posting link, already passed through safeHttpUrl ('#' when unsafe). */
+  url: string;
+  added_at: string;
+  /** Set by the database when the user marks it applied. */
+  applied_at: string | null;
+  last_seen_at: string | null;
 }
 
 export interface UserProfile {

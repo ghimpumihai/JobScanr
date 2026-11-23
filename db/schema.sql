@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS applications (
     user_id             BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     job_posting_id      INTEGER NOT NULL REFERENCES job_postings(id) ON DELETE RESTRICT,
     status              TEXT DEFAULT 'queued'
-                        CHECK (status IN ('queued', 'pending_approval', 'submitting', 'submitted', 'needs_review', 'failed', 'manual_apply', 'stale_closed')),
+                        CHECK (status IN ('queued', 'pending_approval', 'submitting', 'submitted', 'needs_review', 'failed', 'manual_apply', 'stale_closed', 'dismissed')),
     attempt_token       UUID,
     attempts            INTEGER DEFAULT 0,
     locked_at           TIMESTAMPTZ,
@@ -118,8 +118,17 @@ CREATE TABLE IF NOT EXISTS applications (
     resume_snapshot     JSONB,
     submitted_payload   JSONB,
     created_at          TIMESTAMPTZ DEFAULT NOW(),
+    applied_at          TIMESTAMPTZ,     -- set only by protect_application_queue_fields when the user marks it applied
     UNIQUE (user_id, job_posting_id)
 );
+
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+-- PostgreSQL named the inline CHECK above applications_status_check. Replaced so existing databases accept
+-- 'dismissed'; the worker's statuses stay allowed while its code is kept (#48, D4).
+ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_status_check;
+ALTER TABLE applications ADD CONSTRAINT applications_status_check CHECK (status IN
+    ('queued', 'pending_approval', 'submitting', 'submitted', 'needs_review', 'failed', 'manual_apply',
+     'stale_closed', 'dismissed'));
 
 CREATE TABLE IF NOT EXISTS application_events (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -129,6 +138,19 @@ CREATE TABLE IF NOT EXISTS application_events (
     reason          TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Greenhouse and Lever accept applications only with the employer's API key (#48, Task 0.2), so nothing is
+-- ever sent and every application is applied to by hand. Rows in a sending status are moved to manual_apply on
+-- every schema run. Remove this before reviving the apply worker, or it would undo the worker's queue.
+WITH moved AS (
+    UPDATE applications SET status = 'manual_apply'
+    WHERE status IN ('queued', 'pending_approval', 'needs_review', 'failed', 'submitting')
+    RETURNING id
+)
+INSERT INTO application_events (application_id, from_status, to_status, reason)
+SELECT id, NULL, 'manual_apply', 'manual_only' FROM moved;
+
+UPDATE users SET auto_apply_mode = 'approval_required' WHERE auto_apply_mode = 'auto_submit';
 
 -- Indices for high-throughput queue polling and lookups
 CREATE INDEX IF NOT EXISTS idx_applications_queued ON applications (status, next_attempt_at) WHERE status = 'queued';
@@ -195,17 +217,26 @@ CREATE POLICY "application_events_select_own" ON application_events
         WHERE u.auth_user_id = auth.uid()
     ));
 
--- Queue status tamper protection trigger for applications
+-- applications: a signed-in user (applications_update_own limits them to their own rows) may only move an
+-- application between To Apply, Applied and Not Interested, and back (#48). Every other column, including ones
+-- added later, is compared and must stay unchanged. applied_at is set here, never by the user. Backend writes
+-- (the pipeline, the unused worker) are not 'authenticated' and pass unchanged.
 CREATE OR REPLACE FUNCTION protect_application_queue_fields()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (current_user = 'authenticated' OR auth.role() = 'authenticated') THEN
-        IF (NEW.status IS DISTINCT FROM OLD.status) OR
-           (NEW.locked_at IS DISTINCT FROM OLD.locked_at) OR
-           (NEW.attempt_token IS DISTINCT FROM OLD.attempt_token) OR
-           (NEW.attempts IS DISTINCT FROM OLD.attempts) OR
-           (NEW.next_attempt_at IS DISTINCT FROM OLD.next_attempt_at) THEN
-            RAISE EXCEPTION 'Authenticated users cannot mutate queue status fields';
+        IF (to_jsonb(NEW) - 'status' - 'applied_at') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'applied_at') THEN
+            RAISE EXCEPTION 'Only the application status can be changed';
+        END IF;
+        IF (OLD.status, NEW.status) IN (('manual_apply', 'submitted'), ('stale_closed', 'submitted')) THEN
+            NEW.applied_at := NOW();
+        ELSIF (OLD.status, NEW.status) IN (('manual_apply', 'dismissed'), ('stale_closed', 'dismissed'),
+                                           ('dismissed', 'manual_apply'))
+           OR (OLD.status = 'submitted' AND NEW.status = 'manual_apply' AND OLD.applied_at IS NOT NULL) THEN
+            NEW.applied_at := NULL;
+        ELSE
+            -- also an unchanged status, so applied_at cannot be set on its own
+            RAISE EXCEPTION 'This status change is not allowed';
         END IF;
     END IF;
     RETURN NEW;
@@ -217,6 +248,34 @@ CREATE TRIGGER trg_protect_application_queue_fields
     BEFORE UPDATE ON applications
     FOR EACH ROW
     EXECUTE FUNCTION protect_application_queue_fields();
+
+-- Web users cannot insert events (no policy), so a definer function records their changes. Backend writes
+-- record their own events. The caller is checked in WHEN, where current_user is still the caller.
+CREATE OR REPLACE FUNCTION log_user_application_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+    INSERT INTO public.application_events (application_id, from_status, to_status, reason)
+    VALUES (NEW.id, OLD.status, NEW.status, 'changed_by_user');
+    RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION log_user_application_change() FROM PUBLIC;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+       AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        REVOKE ALL ON FUNCTION log_user_application_change() FROM anon, authenticated;
+    END IF;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_log_user_application_change ON applications;
+CREATE TRIGGER trg_log_user_application_change
+    AFTER UPDATE ON applications
+    FOR EACH ROW
+    WHEN (OLD.status IS DISTINCT FROM NEW.status AND (current_user = 'authenticated' OR auth.role() = 'authenticated'))
+    EXECUTE FUNCTION log_user_application_change();
 
 -- Shared catalog tables (companies, job_postings): written only by the backend, which connects with a
 -- role that bypasses RLS. Authenticated web users may read them (the matches page joins job_postings);
@@ -255,7 +314,8 @@ END $$;
 
 -- users: the apply worker downloads users.resume_storage_path with the service-role key (which bypasses
 -- storage RLS), so a user may only point it at their own folder in the resumes bucket. Users can update their
--- own row with the public anon key, so the CV confirmation and the daily cap are enforced here, not in the UI.
+-- own row with the public anon key, so these rules are enforced here, not in the UI. auto_submit is refused:
+-- Greenhouse and Lever accept applications only with the employer's API key (#48), so nothing can be sent.
 CREATE OR REPLACE FUNCTION protect_user_worker_fields()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -269,16 +329,8 @@ BEGIN
                 RAISE EXCEPTION 'resume_storage_path must be inside your own folder';
             END IF;
         END IF;
-        IF NEW.resume_storage_path IS DISTINCT FROM OLD.resume_storage_path
-           OR NEW.resume_uploaded_at IS DISTINCT FROM OLD.resume_uploaded_at THEN
-            NEW.resume_confirmed_at := NULL; -- a new CV needs a new review
-            IF NEW.auto_apply_mode = 'auto_submit' THEN
-                NEW.auto_apply_mode := 'approval_required';
-            END IF;
-        END IF;
-        IF NEW.auto_apply_mode = 'auto_submit'
-           AND (NEW.resume_storage_path IS NULL OR NEW.resume_confirmed_at IS NULL) THEN
-            RAISE EXCEPTION 'Confirm your CV before enabling automatic submission';
+        IF NEW.auto_apply_mode = 'auto_submit' THEN
+            RAISE EXCEPTION 'Automatic submission is not available';
         END IF;
         IF NEW.max_daily_applications IS DISTINCT FROM OLD.max_daily_applications
            AND (NEW.max_daily_applications IS NULL OR NEW.max_daily_applications NOT BETWEEN 5 AND 25) THEN

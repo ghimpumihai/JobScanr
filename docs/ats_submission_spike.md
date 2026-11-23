@@ -3,7 +3,16 @@
 > **Issue Reference**: #49 (Spike: Test Real Unauthenticated Submissions on Greenhouse, Lever, Ashby, SmartRecruiters, Teamtailor)  
 > **Target Downstream Dependency**: Issue #51 (Greenhouse and Lever Submitters with Question Schema Mapping)  
 > **Date**: October 2026  
-> **Status**: COMPLETED & VERIFIED
+> **Status**: COMPLETED & VERIFIED. **Corrected 2026-11-23: the Greenhouse and Lever findings are wrong** (see below)
+
+> **Correction (2026-11-23, issue #48, Task 0.2).** Greenhouse and Lever do **not** accept unauthenticated applications.
+> Each vendor's own API documentation requires the employer's API key on the submission endpoint:
+> - Greenhouse Job Board API: "This method requires HTTP Basic Auth over SSL/TLS: the Basic Auth username is your API key." Reading postings needs no key; only submitting does.
+> - Lever Postings API: `POST /v0/postings/SITE/POSTING-ID?key=APIKEY`, a key "a Super Admin of your account can generate".
+>
+> A job seeker cannot get either key, so every platform is manual apply. Lever's public postings also carry no
+> screening questions. Evidence and sample: `.specify/specs/applications-review-dashboard/plan.md`, appendix.
+> The rest of this report is kept as written in October 2026; its Greenhouse and Lever sections are superseded.
 
 ---
 
@@ -23,8 +32,8 @@ This spike investigated the mechanics, feasibility, and failure modes of unauthe
 
 | ATS Platform | Public Dispatch Endpoint | Auth Required | File Field | Bot / Captcha Protection | Feasibility Classification | Architecture Action (Issue #51) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Greenhouse** | `POST https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{id}` | None (Public Board) | `resume` (PDF) | reCAPTCHA (optional per company) | **Conditional Automation** | Automate when captcha absent & questions 100% mapped; fallback to `manual_apply` if captcha triggered. |
-| **Lever** | `POST https://api.lever.co/v0/postings/{company}/{id}` | None (Public Board) | `resume` (PDF) | reCAPTCHA/hCaptcha (optional per company) | **Conditional Automation** | Automate when captcha absent & questions 100% mapped; fallback to `manual_apply` if captcha triggered. |
+| **Greenhouse** | `POST https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{id}` | ~~None (Public Board)~~ **Yes** (employer key) | `resume` (PDF) | reCAPTCHA (optional per company) | ~~Conditional Automation~~ **Manual Apply** (corrected) | ~~Automate when captcha absent~~ Requires the employer's API key (Basic Auth); `manual_apply`. |
+| **Lever** | `POST https://api.lever.co/v0/postings/{company}/{id}` | ~~None (Public Board)~~ **Yes** (`?key=`, employer) | `resume` (PDF) | reCAPTCHA/hCaptcha (optional per company) | ~~Conditional Automation~~ **Manual Apply** (corrected) | ~~Automate when captcha absent~~ Requires the employer's API key; `manual_apply`. |
 | **Ashby** | `POST https://jobs.ashbyhq.com/api/non-user-graphql` (`submitApplication`) | None (GraphQL) | Multi-step S3 upload (`fileHandle`) | **Cloudflare Turnstile (Mandatory)** | **Manual Apply Fallback** | Flag as `manual_apply`. Prefill profile helper for user. Avoid brittle Turnstile bypass. |
 | **SmartRecruiters** | `POST https://api.smartrecruiters.com/v1/companies/{co}/postings/{id}/candidates` | **Yes** (`X-SmartToken`) | Multipart/JSON | DataDome / CSRF on web apply portal | **Manual Apply Fallback** | Flag as `manual_apply`. Direct API dispatch rejected without employer token. |
 | **Teamtailor** | `POST https://api.teamtailor.com/v1/job-applications` | **Yes** (`Token token=...`) | JSON:API document | Rails authenticity token & CSRF on web portal | **Manual Apply Fallback** | Flag as `manual_apply`. Direct API dispatch rejected without employer token. |
@@ -33,7 +42,7 @@ This spike investigated the mechanics, feasibility, and failure modes of unauthe
 
 ## 2. Greenhouse (Boards API v1)
 
-Greenhouse provides a public Job Board API allowing third-party sites and candidate portals to inspect job openings and submit applications directly without partner API keys.
+Greenhouse provides a public Job Board API for inspecting job openings. **Corrected:** submitting an application requires the employer's Job Board API key (HTTP Basic Auth); see the correction at the top.
 
 ### 2.1 Endpoints & HTTP Methods
 - **Inspect Job & Question Schema**:
@@ -113,7 +122,7 @@ stripe
 
 ## 3. Lever (Postings API v0)
 
-Lever offers an unauthenticated public Postings API historically designed for embedding career page widgets and direct application forms.
+Lever offers an unauthenticated public Postings API for listing postings. **Corrected:** applying requires an employer API key (`?key=`), and the public postings carry no screening questions; see the correction at the top.
 
 ### 3.1 Endpoints & HTTP Methods
 - **Inspect Posting Details & Custom Cards**:

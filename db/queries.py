@@ -149,6 +149,29 @@ def delete_stale_jobs(days: int = 30) -> int:
         return cur.rowcount
 
 
+def close_unlisted_applications(days: int = 30) -> int:
+    """Move To Apply rows whose posting the scanner has not seen for `days` to stale_closed, one event each.
+
+    Uses the same age as delete_stale_jobs, which keeps these postings only because applications reference them.
+    """
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH closed AS (
+                UPDATE applications a SET status = 'stale_closed'
+                FROM job_postings jp
+                WHERE jp.id = a.job_posting_id AND a.status = 'manual_apply'
+                  AND jp.last_seen_at < NOW() - make_interval(days => %s)
+                RETURNING a.id
+            )
+            INSERT INTO application_events (application_id, from_status, to_status, reason)
+            SELECT id, 'manual_apply', 'stale_closed', 'posting_unlisted' FROM closed
+            """,
+            (days,),
+        )
+        return cur.rowcount
+
+
 def get_workday_board_states() -> dict[int, dict]:
     """Cached Workday scan state per company_id (see workday_board_state in db/schema.sql)."""
     with get_connection() as conn, conn.cursor() as cur:
@@ -497,7 +520,8 @@ def get_user_recent_application_activity(user_id: int) -> dict[str, list[dict]]:
         submitted = []
         for r in cur.fetchall():
             payload = r[3] if isinstance(r[3], dict) else (json.loads(r[3]) if r[3] else {})
-            confirmation = (payload or {}).get("confirmation_id") or f"APP-{r[0]}"
+            # Nothing is submitted for the user any more (#48), so a row without an employer ID was marked by them.
+            confirmation = (payload or {}).get("confirmation_id") or "marked as applied by you"
             submitted.append(
                 {
                     "application_id": r[0],

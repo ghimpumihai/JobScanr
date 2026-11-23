@@ -1,5 +1,4 @@
-import { fail } from '@sveltejs/kit';
-import type { PageServerLoad, Actions } from './$types';
+import type { PageServerLoad } from './$types';
 import type { JobMatch } from '$lib/types';
 import { isSupabaseConfigured } from '$lib/supabase/server';
 import { safeHttpUrl } from '$lib/safeUrl';
@@ -93,11 +92,4 @@ export const load: PageServerLoad = async ({ locals }) => {
     };
   });
   return { matches, loadError: false };
-};
-
-export const actions: Actions = {
-  // Applications can only be created by the backend today (users have no INSERT policy),
-  // so these must not report success.
-  queueAllDirect: async () => fail(501, { error: 'Queueing from the web is not available yet.' }),
-  queueSingle: async () => fail(501, { error: 'Queueing from the web is not available yet.' })
 };

@@ -49,7 +49,8 @@ const MAX_ITEM_LENGTH = 60;
 const MAX_TEXT_LENGTH = 120;
 const MAX_URL_LENGTH = 300;
 const URL_FIELDS = ['linkedin', 'github', 'portfolio'] as const;
-const AUTO_APPLY_MODES = ['approval_required', 'auto_submit', 'disabled'];
+// Active and Paused. auto_submit is refused by the database: nothing can be sent without an employer key (#48).
+const AUTO_APPLY_MODES = ['approval_required', 'disabled'];
 const DEMO_RESULT = { success: true, message: 'Demo mode: nothing is stored.' };
 
 function isLiveUser(locals: App.Locals): boolean {
@@ -247,7 +248,7 @@ export const actions: Actions = {
 
     const { data: previous, error: readError } = await locals.supabase
       .from('users')
-      .select('resume_storage_path, auto_apply_mode')
+      .select('resume_storage_path')
       .eq('auth_user_id', locals.user!.id)
       .single();
     if (readError || !previous) {
@@ -255,7 +256,7 @@ export const actions: Actions = {
       return fail(500, { error: 'Could not load your profile. Nothing was uploaded.' });
     }
 
-    // A new object per upload: overwriting in place could change the bytes behind a confirmed CV.
+    // A new object per upload, removed only after the row points at it, so the row never names a missing file.
     const bucket = locals.supabase.storage.from('resumes');
     const path = `${locals.user!.id}/${crypto.randomUUID()}${cv.extension}`;
     const { error: uploadError } = await bucket.upload(path, bytes, { contentType: cv.contentType });
@@ -290,8 +291,7 @@ export const actions: Actions = {
       const { error: cleanupError } = await bucket.remove([previous.resume_storage_path]);
       if (cleanupError) console.error('Could not remove replaced CV:', cleanupError.message);
     }
-    const demoted = previous.auto_apply_mode === 'auto_submit' ? ' Automatic submission is off until you do.' : '';
-    return { success: true, message: `CV uploaded. Review and confirm your details.${demoted}` };
+    return { success: true, message: 'CV uploaded.' };
   },
 
   downloadCv: async ({ locals }) => {
@@ -318,71 +318,18 @@ export const actions: Actions = {
     redirect(303, `${link.signedUrl}&download=${encodeURIComponent(data.resume_filename ?? '')}`);
   },
 
-  confirmCv: async ({ request, locals }) => {
-    const uploadedAt = parseText(await request.formData(), 'resumeUploadedAt');
-    if (!uploadedAt) return fail(400, { error: 'Upload a CV before confirming.' });
-    if (!isLiveUser(locals)) return DEMO_RESULT;
-
-    const { data, error } = await locals.supabase
-      .from('users')
-      .select('resume_storage_path, screening_defaults')
-      .eq('auth_user_id', locals.user!.id)
-      .single();
-    if (error) {
-      console.error('Failed to read profile for confirmation:', error.message);
-      return fail(500, { error: 'Could not load your profile. Nothing was confirmed.' });
-    }
-    const saved = data.screening_defaults ?? {};
-    const missing = [
-      !data.resume_storage_path && 'a CV',
-      String(saved.full_name ?? '').trim().split(/\s+/).length < 2 && 'your first and last name',
-      typeof saved.work_authorization !== 'boolean' && 'work authorization',
-      typeof saved.requires_sponsorship !== 'boolean' && 'visa sponsorship'
-    ].filter(Boolean);
-    if (missing.length) return fail(400, { error: `Save these before confirming: ${missing.join(', ')}.` });
-
-    // Matching the displayed upload time means only the CV the user was looking at can be confirmed.
-    const { data: updated, error: writeError } = await locals.supabase
-      .from('users')
-      .update({ resume_confirmed_at: new Date().toISOString() })
-      .eq('auth_user_id', locals.user!.id)
-      .eq('resume_uploaded_at', uploadedAt)
-      .select('id');
-    if (writeError) return writeFailure(writeError, 'Could not confirm your CV. Please try again.');
-    if (!updated.length) return fail(409, { error: 'Your CV changed since this page loaded. Reload and review it.' });
-    return { success: true, message: 'CV and details confirmed.' };
-  },
-
   saveAutoApply: async ({ request, locals }) => {
-    const formData = await request.formData();
-    const mode = parseText(formData, 'autoApplyMode');
-    const cap = parseInteger(parseText(formData, 'maxDailyApplications'), 5, 25);
-    if (!mode || !AUTO_APPLY_MODES.includes(mode)) return fail(400, { error: 'Choose an auto-apply mode.' });
-    if (!cap) return fail(400, { error: 'The daily limit must be a whole number from 5 to 25.' });
+    const mode = parseText(await request.formData(), 'autoApplyMode');
+    if (!mode || !AUTO_APPLY_MODES.includes(mode)) return fail(400, { error: 'Choose Active or Paused.' });
     if (!isLiveUser(locals)) return DEMO_RESULT;
-
-    if (mode === 'auto_submit') {
-      const { data, error } = await locals.supabase
-        .from('users')
-        .select('resume_storage_path, resume_confirmed_at')
-        .eq('auth_user_id', locals.user!.id)
-        .single();
-      if (error) {
-        console.error('Failed to read CV confirmation:', error.message);
-        return fail(500, { error: 'Could not check your CV confirmation. Nothing was saved.' });
-      }
-      if (!data.resume_storage_path || !data.resume_confirmed_at) {
-        return fail(400, { error: 'Confirm your CV before enabling automatic submission.' });
-      }
-    }
 
     const { error: writeError } = await locals.supabase
       .from('users')
-      .update({ auto_apply_mode: mode, max_daily_applications: cap })
+      .update({ auto_apply_mode: mode })
       .eq('auth_user_id', locals.user!.id)
       .select('id')
       .single();
-    if (writeError) return writeFailure(writeError, 'Could not save auto-apply settings. Please try again.');
-    return { success: true, message: 'Auto-apply settings saved.' };
+    if (writeError) return writeFailure(writeError, 'Could not save. Please try again.');
+    return { success: true, message: mode === 'disabled' ? 'Paused.' : 'Active.' };
   }
 };

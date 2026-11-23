@@ -312,6 +312,7 @@ async def test_run_pipeline_multiuser_flow():
         patch("db.queries.get_active_users", return_value=users),
         patch("db.queries.upsert_jobs") as mock_upsert,
         patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.close_unlisted_applications", return_value=0) as mock_close,
         patch("db.queries.upsert_user_matches") as mock_upsert_matches,
         patch("db.queries.stage_user_applications") as mock_stage_apps,
         patch("jobs.notify.email_configured", return_value=True),
@@ -333,19 +334,18 @@ async def test_run_pipeline_multiuser_flow():
         # Assert upsert user matches called for both users
         assert mock_upsert_matches.call_count == 2
 
-        # Assert staging called
-        # User 1 (approval_required, greenhouse) -> pending_approval
-        # User 2 (auto_submit, workday) -> manual_apply
+        # Nothing can be submitted without the employer's key (#48): every platform is To Apply.
         assert mock_stage_apps.call_count == 2
         user1_stage_call = mock_stage_apps.call_args_list[0]
         assert user1_stage_call[0][0] == 1
-        assert user1_stage_call[0][1][0]["status"] == "pending_approval"
+        assert user1_stage_call[0][1][0]["status"] == "manual_apply"  # Greenhouse
 
         user2_stage_call = mock_stage_apps.call_args_list[1]
         assert user2_stage_call[0][0] == 2
         assert user2_stage_call[0][1][0]["status"] == "manual_apply"
 
         assert mock_mark_notified.call_count == 2
+        mock_close.assert_called_once_with(days=30)
 
 
 def test_digest_without_portal_url_lists_every_match_inline(monkeypatch):
@@ -413,6 +413,7 @@ async def test_run_pipeline_one_bad_user_does_not_stop_the_others():
         patch("db.queries.get_active_users", return_value=[good, broken]),
         patch("db.queries.upsert_jobs", return_value=[]),
         patch("db.queries.delete_stale_jobs", return_value=0),
+        patch("db.queries.close_unlisted_applications", return_value=0),
         patch("db.queries.upsert_user_matches"),
         patch("db.queries.stage_user_applications"),
         patch("jobs.notify.email_configured", return_value=True),
@@ -447,3 +448,69 @@ def test_enrich_jobs_without_profile_does_not_refilter(monkeypatch):
 
     asyncio.run(enrich.enrich_jobs([job], client=None))
     assert job["description"] == "Hello"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("dry_run", [False, True])
+async def test_pipeline_stages_every_platform_as_to_apply_skips_paused_users_and_closes_unlisted(dry_run):
+    args = MagicMock(profile=None, dry_run=dry_run, failures_file=None, platforms=None, skip_platforms=None)
+    args.no_email = True
+    profile = {"titles": ["software engineer"], "levels": ["junior"], "locations": ["remote"]}
+    users = [
+        {"id": 1, "email": "a@example.com", "profile_filters": profile, "auto_apply_mode": "approval_required"},
+        {"id": 2, "email": "p@example.com", "profile_filters": profile, "auto_apply_mode": "disabled"},
+    ]
+    jobs = [
+        {
+            "id": 100 + i,
+            "external_id": f"e{i}",
+            "title": "Junior Software Engineer",
+            "company_id": 10 + i,
+            "company_name": "Co",
+            "location": "Remote",
+            "ats_platform": platform,
+            "description": "Python",
+            "url": f"https://x.test/{i}",
+        }
+        for i, platform in enumerate(("greenhouse", "lever", "workday"))
+    ]
+    order: list[str] = []
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("db.queries.get_all_companies", return_value=[{"id": 1, "name": "Co"}]),
+        patch("jobs.scrape_and_notify.scrape_all", new_callable=AsyncMock, return_value=(jobs, [])),
+        patch("db.queries.get_workday_board_states", return_value={}),
+        patch("db.queries.get_workday_pod_backoff", return_value={}),
+        patch("db.queries.save_workday_board_states"),
+        patch("db.queries.save_workday_pod_backoff"),
+        patch("db.queries.get_active_users", return_value=users),
+        patch("db.queries.upsert_jobs", return_value=[]),
+        patch("db.queries.delete_stale_jobs", side_effect=lambda days: order.append("delete") or 0),
+        patch("db.queries.close_unlisted_applications", side_effect=lambda days: order.append(f"close {days}") or 0),
+        patch("db.queries.upsert_user_matches"),
+        patch("db.queries.stage_user_applications") as mock_stage,
+    ):
+        assert await scrape_and_notify.run_pipeline(args) == 0
+
+    if dry_run:
+        assert order == [] and not mock_stage.called  # dry run writes nothing
+        return
+    assert order == ["delete", "close 30"]  # same 30-day age as posting cleanup, right after it
+    mock_stage.assert_called_once()  # the paused user gets no applications
+    user_id, items = mock_stage.call_args[0]
+    assert user_id == 1
+    assert sorted(i["job_posting_id"] for i in items) == [100, 101, 102]
+    assert {i["status"] for i in items} == {"manual_apply"}
+
+
+def test_digest_never_invents_a_confirmation_id_for_an_application_the_user_marked():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_cur.fetchall.side_effect = [[(7, "Role", "Corp", None, "2026-11-23T10:00:00Z")], [], []]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        act = queries.get_user_recent_application_activity(1)
+
+    assert act["submitted_today"][0]["confirmation"] == "marked as applied by you"  # was "APP-7"

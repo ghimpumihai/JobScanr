@@ -14,31 +14,17 @@ const { actions, load } = await vite.ssrLoadModule('/src/routes/(app)/settings/+
 
 const UID = '11111111-1111-1111-1111-111111111111';
 const OLD_PATH = `${UID}/old.pdf`;
-const CONFIRMED = {
+const WITH_CV = {
   resume_storage_path: OLD_PATH,
   resume_filename: 'My CV.pdf',
   resume_uploaded_at: 'T0',
-  resume_confirmed_at: 'C0',
-  auto_apply_mode: 'auto_submit'
-};
-const UNCONFIRMED = {
-  ...CONFIRMED,
-  resume_confirmed_at: null,
   auto_apply_mode: 'approval_required',
   screening_defaults: { full_name: 'Jane Doe', work_authorization: true, requires_sponsorship: false }
 };
 
+// No platform accepts applications without the employer's key (#48), so the mode is refused outright.
 function applyTrigger(before, next) {
-  if (
-    next.resume_storage_path !== before.resume_storage_path ||
-    next.resume_uploaded_at !== before.resume_uploaded_at
-  ) {
-    next.resume_confirmed_at = null;
-    if (next.auto_apply_mode === 'auto_submit') next.auto_apply_mode = 'approval_required';
-  }
-  if (next.auto_apply_mode === 'auto_submit' && !(next.resume_storage_path && next.resume_confirmed_at)) {
-    return { code: 'P0001', message: 'Confirm your CV before enabling automatic submission' };
-  }
+  if (next.auto_apply_mode === 'auto_submit') return { code: 'P0001', message: 'Automatic submission is not available' };
   return null;
 }
 
@@ -139,27 +125,25 @@ test('first upload stores one file in the user folder', async () => {
   assert.equal(w.row.resume_content_type, 'application/pdf');
 });
 
-test('replacing a CV keeps one file and turns auto-submit off', async () => {
-  const w = world(CONFIRMED);
+test('replacing a CV keeps one file and promises nothing about submission', async () => {
+  const w = world(WITH_CV);
   const result = await run(w, 'uploadCv', { cv: pdf() });
   ok(result);
-  assert.match(result.message, /Automatic submission is off/);
+  assert.equal(result.message, 'CV uploaded.');
   assert.deepEqual([...w.objects], [w.row.resume_storage_path]);
   assert.notEqual(w.row.resume_storage_path, OLD_PATH);
-  assert.equal(w.row.resume_confirmed_at, null);
-  assert.equal(w.row.auto_apply_mode, 'approval_required');
 });
 
 test('invalid uploads write nothing', async () => {
   for (const cv of [new File(['MZ'], 'a.pdf'), new File([], 'a.pdf'), new File(['%PDF-'], 'a.exe'), 'not a file']) {
-    const w = world(CONFIRMED);
+    const w = world(WITH_CV);
     refused(await run(w, 'uploadCv', { cv }), 400);
     assert.deepEqual(w.calls, []);
   }
 });
 
 test('the old CV is removed only after the row points at the new one', async () => {
-  const w = world(CONFIRMED);
+  const w = world(WITH_CV);
   await run(w, 'uploadCv', { cv: pdf() });
   assert.deepEqual(
     w.calls.map(([name]) => name),
@@ -167,31 +151,30 @@ test('the old CV is removed only after the row points at the new one', async () 
   );
 });
 
-test('failures before the row update leave the old CV confirmed', async () => {
+test('failures before the row update leave the old CV in place', async () => {
   for (const fail of [{ read: true }, { upload: true }, { update: { code: '42501', message: 'denied' } }]) {
-    const w = world(CONFIRMED, fail);
+    const w = world(WITH_CV, fail);
     refused(await run(w, 'uploadCv', { cv: pdf() }), 500);
     assert.deepEqual([...w.objects], [OLD_PATH]);
-    assert.equal(w.row.resume_confirmed_at, 'C0');
-    assert.equal(w.row.auto_apply_mode, 'auto_submit');
+    assert.equal(w.row.resume_storage_path, OLD_PATH);
   }
 });
 
 test('a lost connection never leaves the row pointing at a deleted file', async () => {
   for (const updateApplied of [true, false]) {
-    const w = world(CONFIRMED, { update: { code: '', message: 'fetch failed' }, updateApplied });
+    const w = world(WITH_CV, { update: { code: '', message: 'fetch failed' }, updateApplied });
     refused(await run(w, 'uploadCv', { cv: pdf() }), 500, /Reload/);
     assert.ok(w.objects.has(w.row.resume_storage_path));
   }
 });
 
 test('failing to remove the replaced CV is not an error', async () => {
-  ok(await run(world(CONFIRMED, { remove: true }), 'uploadCv', { cv: pdf() }));
+  ok(await run(world(WITH_CV, { remove: true }), 'uploadCv', { cv: pdf() }));
 });
 
 test('download keeps the original filename, encoded once', async () => {
   for (const name of ['My CV.pdf', 'R&D CV #2.pdf', 'C++ 100%.pdf', 'Ștefan.pdf']) {
-    const w = world({ ...CONFIRMED, resume_filename: name });
+    const w = world({ ...WITH_CV, resume_filename: name });
     await assert.rejects(run(w, 'downloadCv'), (thrown) => {
       assert.equal(thrown.status, 303);
       const url = new URL(thrown.location);
@@ -205,52 +188,23 @@ test('download keeps the original filename, encoded once', async () => {
 
 test('download failures', async () => {
   refused(await run(world(), 'downloadCv'), 404);
-  refused(await run(world(CONFIRMED, { sign: true }), 'downloadCv'), 500);
-  refused(await run(world(CONFIRMED, { read: true }), 'downloadCv'), 500);
+  refused(await run(world(WITH_CV, { sign: true }), 'downloadCv'), 500);
+  refused(await run(world(WITH_CV, { read: true }), 'downloadCv'), 500);
 });
 
-test('confirm accepts only the CV that was displayed', async () => {
-  const current = world(UNCONFIRMED);
-  ok(await run(current, 'confirmCv', { resumeUploadedAt: 'T0' }));
-  assert.ok(current.row.resume_confirmed_at);
-  const stale = world(UNCONFIRMED);
-  refused(await run(stale, 'confirmCv', { resumeUploadedAt: 'older' }), 409);
-  assert.equal(stale.row.resume_confirmed_at, null);
-});
-
-test('confirm lists what is missing', async () => {
-  const confirm = (row) => run(world(row), 'confirmCv', { resumeUploadedAt: 'T0' });
-  const withAnswers = (changes) => ({
-    ...UNCONFIRMED,
-    screening_defaults: { ...UNCONFIRMED.screening_defaults, ...changes }
-  });
-  refused(
-    await confirm({ resume_uploaded_at: 'T0' }),
-    400,
-    /a CV, your first and last name, work authorization, visa sponsorship/
-  );
-  refused(await confirm(withAnswers({ full_name: 'Jane' })), 400, /last name/);
-  refused(await confirm(withAnswers({ work_authorization: 'yes' })), 400, /work authorization/);
-  refused(await run(world(UNCONFIRMED), 'confirmCv'), 400);
-});
-
-test('auto-submit needs a confirmed CV', async () => {
-  const fields = { autoApplyMode: 'auto_submit', maxDailyApplications: '25' };
-  const unconfirmed = world(UNCONFIRMED);
-  refused(await run(unconfirmed, 'saveAutoApply', fields), 400, /Confirm/);
-  assert.deepEqual(unconfirmed.calls, []);
-  const confirmed = world({ ...UNCONFIRMED, resume_confirmed_at: 'C' });
-  ok(await run(confirmed, 'saveAutoApply', fields));
-  assert.equal(confirmed.row.max_daily_applications, 25);
-});
-
-test('auto-apply input is validated', async () => {
-  for (const cap of ['4', '26', '', '5.5', '1e1', '-5', '0x10']) {
-    refused(await run(world(), 'saveAutoApply', { autoApplyMode: 'disabled', maxDailyApplications: cap }), 400);
+test('only Active and Paused can be saved, and no daily limit is written', async () => {
+  for (const autoApplyMode of ['auto_submit', 'other', '']) {
+    const w = world();
+    refused(await run(w, 'saveAutoApply', { autoApplyMode }), 400);
+    assert.deepEqual(w.calls, []);
   }
-  refused(await run(world(), 'saveAutoApply', { autoApplyMode: 'other', maxDailyApplications: '5' }), 400);
-  refused(await run(world(), 'saveAutoApply', { maxDailyApplications: '5' }), 400);
-  ok(await run(world(), 'saveAutoApply', { autoApplyMode: 'disabled', maxDailyApplications: '5' }));
+  for (const autoApplyMode of ['approval_required', 'disabled']) {
+    const w = world({ max_daily_applications: 10 });
+    ok(await run(w, 'saveAutoApply', { autoApplyMode, maxDailyApplications: '25' }));
+    assert.deepEqual(w.calls, [['update', { auto_apply_mode: autoApplyMode }]]);
+    assert.equal(w.row.max_daily_applications, 10);
+  }
+  assert.equal(actions.confirmCv, undefined);
 });
 
 const STORED = {
@@ -322,7 +276,7 @@ test('invalid preferences write nothing', async () => {
 });
 
 test('trigger messages reach the user', async () => {
-  refused(await run(world({ auto_apply_mode: 'auto_submit' }), 'savePreferences', { phone: '1' }), 400, /Confirm your CV/);
+  refused(await run(world({ auto_apply_mode: 'auto_submit' }), 'savePreferences', { phone: '1' }), 400, /not available/);
 });
 
 test('demo sessions store nothing', async () => {
@@ -330,10 +284,9 @@ test('demo sessions store nothing', async () => {
     ['savePreferences', {}],
     ['uploadCv', { cv: pdf() }],
     ['downloadCv', {}],
-    ['confirmCv', { resumeUploadedAt: 'T0' }],
-    ['saveAutoApply', { autoApplyMode: 'disabled', maxDailyApplications: '5' }]
+    ['saveAutoApply', { autoApplyMode: 'disabled' }]
   ]) {
-    const w = world(CONFIRMED);
+    const w = world(WITH_CV);
     w.locals.user.id = 'demo-user-id';
     ok(await run(w, action, fields));
     assert.deepEqual(w.calls, []);
@@ -341,7 +294,7 @@ test('demo sessions store nothing', async () => {
 });
 
 test('load returns the saved values, or an error instead of mock data', async () => {
-  const { profile } = await load(world({ ...UNCONFIRMED, resume_data: STORED.resume_data }));
+  const { profile } = await load(world({ ...WITH_CV, resume_data: STORED.resume_data }));
   assert.equal(profile.resume_uploaded_at_raw, 'T0');
   assert.equal(profile.requires_sponsorship, 'no');
   assert.equal(profile.github, 'https://g.example');
