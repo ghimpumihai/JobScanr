@@ -3,23 +3,6 @@
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
-
-  let toastMessage = $state<string | null>(null);
-
-  function showToast(msg: string) {
-    toastMessage = msg;
-    setTimeout(() => {
-      toastMessage = null;
-    }, 3500);
-  }
-
-  function handleReviewQueue(company: string, role: string) {
-    showToast(`Queued ${role} at ${company} for automated application dispatch.`);
-  }
-
-  function handleQueueAll() {
-    showToast(`Queued ${data.matches.length} roles for dispatch.`);
-  }
 </script>
 
 <svelte:head>
@@ -29,19 +12,9 @@
 <!-- Main Matches Card -->
 <div class="card overflow-hidden">
   <div class="border-b border-border-subtle p-6 sm:p-7">
-    <div class="flex items-center justify-between gap-3">
-      <h1 class="text-base font-bold leading-snug text-content-primary sm:text-lg">
-        Today's matches
-      </h1>
-      <button
-        type="button"
-        class="btn-action shrink-0 !py-1.5 sm:!py-2 !text-xs sm:!text-[13px]"
-        onclick={handleQueueAll}
-      >
-        Queue all ({data.matches.length})
-        <Icon name="arrow-right" size={12} />
-      </button>
-    </div>
+    <h1 class="text-base font-bold leading-snug text-content-primary sm:text-lg">
+      Today's matches
+    </h1>
     <p class="mt-1.5 text-xs text-content-muted">
       {data.matches.length} {data.matches.length === 1 ? 'role' : 'roles'} from the latest 06:00 UTC scan, filtered to your locations and seniority.
     </p>
@@ -65,26 +38,17 @@
                 </a>
 
                 <div class="shrink-0">
-                  {#if match.ats_platform === 'workday'}
-                    <a
-                      href={match.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="btn-secondary !text-xs whitespace-nowrap"
-                    >
-                      Apply Direct
-                      <Icon name="external-link" size={12} />
-                    </a>
-                  {:else}
-                    <button
-                      type="button"
-                      class="btn-action !text-xs whitespace-nowrap"
-                      onclick={() => handleReviewQueue(match.company_name, match.title)}
-                    >
-                      Queue
-                      <Icon name="arrow-right" size={12} />
-                    </button>
-                  {/if}
+                  <!-- Employers accept applications only on their own site (#48). -->
+                  <a
+                    href={match.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="btn-secondary !text-xs whitespace-nowrap"
+                    aria-label="Apply for {match.title} at {match.company_name} (opens the employer's site)"
+                  >
+                    Apply
+                    <Icon name="external-link" size={12} />
+                  </a>
                 </div>
               </div>
 
@@ -113,10 +77,3 @@
     </table>
   </div>
 </div>
-
-<!-- Toast Notice -->
-{#if toastMessage}
-  <div class="fixed bottom-6 right-6 z-50 rounded-md bg-content-primary px-5 py-3 text-xs font-medium text-card shadow-lg transition-all">
-    {toastMessage}
-  </div>
-{/if}

@@ -22,40 +22,18 @@
   const AUTO_APPLY_MODES: { value: AutoApplyMode; label: string; help: string }[] = [
     {
       value: 'approval_required',
-      label: 'Approval required',
-      help: 'Matches and digests continue; nothing new is submitted automatically.'
+      label: 'Active',
+      help: 'New matches are added to your Applications list and sent in the daily digest.'
     },
-    {
-      value: 'auto_submit',
-      label: 'Automatic submission',
-      help: 'Eligible Greenhouse and Lever applications are queued for submission. Needs a confirmed CV.'
-    },
-    { value: 'disabled', label: 'Paused', help: 'No matching, no digest, no applications.' }
+    { value: 'disabled', label: 'Paused', help: 'No matching and no digest until you switch back.' }
   ];
 
   const INPUT_CLASS =
     'w-full rounded-md border border-border-strong bg-card px-3 py-2 text-xs text-content-primary outline-none transition-colors focus:border-brand-blue';
 
-  // Saved values: follow every save and upload. The CV, confirmation and auto-apply cards read these.
+  // Saved values: follow every save and upload. The CV and matching cards read these.
   const saved = $derived(data.profile);
-  const confirmed = $derived(Boolean(saved?.resume_filename && saved.resume_confirmed_at));
   let mode = $derived(data.profile?.auto_apply_mode ?? 'approval_required');
-  let dailyCap = $derived(data.profile?.max_daily_applications ?? 10);
-
-  const summary = $derived([
-    ['CV', saved?.resume_filename],
-    ['Name', saved?.full_name],
-    ['Email', saved?.email],
-    ['Phone', saved?.phone],
-    ['Location', saved?.location],
-    ['LinkedIn', saved?.linkedin],
-    ['GitHub', saved?.github],
-    ['Portfolio', saved?.portfolio],
-    ['Authorized to work', { yes: 'Yes', no: 'No' }[saved?.work_authorization ?? '']],
-    ['Needs sponsorship', { yes: 'Yes', no: 'No' }[saved?.requires_sponsorship ?? '']],
-    ['Years of experience', saved?.years_experience?.toString()],
-    ['Notice period (days)', saved?.notice_period_days?.toString()]
-  ]);
 
   // Form fields: seeded once, so saving never overwrites them with demo values and an upload keeps unsaved edits.
   // svelte-ignore state_referenced_locally
@@ -158,7 +136,7 @@
     <div class="border-b border-border-subtle p-6">
       <h1 class="text-lg font-bold leading-snug text-content-primary">CV</h1>
       <p class="mt-1 text-xs text-content-muted">
-        Your original file is sent with applications exactly as you uploaded it.
+        Download it from here or from an application when you apply on the employer's site.
       </p>
     </div>
     <div class="space-y-4 p-6">
@@ -171,15 +149,6 @@
             </div>
             {#if saved?.resume_uploaded_at}
               <div class="text-xs text-content-caption">Uploaded {saved.resume_uploaded_at}</div>
-            {/if}
-            {#if saved?.resume_filename}
-              <div class="mt-1.5">
-                {#if confirmed}
-                  <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">Confirmed</span>
-                {:else}
-                  <span class="status-badge bg-signal-amber-bg text-signal-amber-text">Needs confirmation</span>
-                {/if}
-              </div>
             {/if}
           </div>
         </div>
@@ -214,8 +183,7 @@
           </button>
         </div>
         <p id="cvHelp" class="mt-1 text-[11px] text-content-caption">
-          Choose a file or drop it on the field. A new CV must be confirmed again, and automatic submission stays off until
-          then.
+          Choose a file or drop it on the field. It replaces your current CV.
         </p>
       </form>
     </div>
@@ -443,46 +411,12 @@
   </div>
 </form>
 
-  <!-- Card 4: Review & Confirm -->
+  <!-- Card 4: Matching -->
   <div class="card overflow-hidden">
     <div class="border-b border-border-subtle p-6">
-      <h2 class="text-lg font-bold leading-snug text-content-primary">Review &amp; Confirm</h2>
+      <h2 class="text-lg font-bold leading-snug text-content-primary">Matching</h2>
       <p class="mt-1 text-xs text-content-muted">
-        These are your saved values. Edits above count only after you save them.
-      </p>
-    </div>
-    <div class="space-y-4 p-6">
-      <dl class="grid grid-cols-1 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-        {#each summary as [label, value]}
-          <div class="min-w-0">
-            <dt class="text-content-caption">{label}</dt>
-            <dd class="break-words font-semibold text-content-primary">{value || 'Not set'}</dd>
-          </div>
-        {/each}
-      </dl>
-      <form method="POST" action="?/confirmCv" use:enhance={submit} class="flex flex-wrap items-center justify-end gap-3">
-        <input type="hidden" name="resumeUploadedAt" value={saved?.resume_uploaded_at_raw ?? ''} />
-        {#if confirmed}
-          <span class="status-badge bg-signal-emerald-bg text-signal-emerald-text">Confirmed</span>
-        {/if}
-        <button
-          type="submit"
-          class="btn-action disabled:opacity-60"
-          disabled={!saved?.resume_filename || confirmed || pending}
-        >
-          <Icon name="check" size={12} />
-          Confirm CV and details
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Card 5: Auto-Apply -->
-  <div class="card overflow-hidden">
-    <div class="border-b border-border-subtle p-6">
-      <h2 class="text-lg font-bold leading-snug text-content-primary">Auto-Apply</h2>
-      <p class="mt-1 text-xs text-content-muted">
-        Applications already queued are still sent unless you choose Paused.
+        JobScanr finds roles and lists them for you. You apply on each employer's site.
       </p>
     </div>
     <form method="POST" action="?/saveAutoApply" use:enhance={submit} class="space-y-5 p-6">
@@ -496,45 +430,26 @@
               name="autoApplyMode"
               value={option.value}
               bind:group={mode}
-              disabled={option.value === 'auto_submit' && !confirmed}
               aria-describedby="mode-{option.value}-help"
               class="mt-0.5"
             />
             <div class="text-xs">
               <label for="mode-{option.value}" class="font-semibold text-content-primary">{option.label}</label>
-              <p id="mode-{option.value}-help" class="text-content-muted">
-                {option.help}
-                {#if option.value === 'auto_submit' && !confirmed}Confirm your CV above to enable this.{/if}
-              </p>
+              <p id="mode-{option.value}-help" class="text-content-muted">{option.help}</p>
             </div>
           </div>
         {/each}
       </fieldset>
-      <div>
-        <label for="maxDailyApplications" class="mb-1 block text-xs font-semibold text-content-primary">
-          Daily application limit: <output for="maxDailyApplications">{dailyCap}</output>
-        </label>
-        <input
-          id="maxDailyApplications"
-          name="maxDailyApplications"
-          type="range"
-          min="5"
-          max="25"
-          step="1"
-          bind:value={dailyCap}
-          class="w-full max-w-sm"
-        />
-      </div>
       <div class="flex justify-end">
         <button type="submit" class="btn-action disabled:opacity-60" disabled={!saved || pending}>
-          Save Auto-Apply
+          Save
           <Icon name="arrow-right" size={12} />
         </button>
       </div>
     </form>
   </div>
 
-  <!-- Card 6: Account & Session -->
+  <!-- Card 5: Account & Session -->
   <div class="card overflow-hidden">
     <div class="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
       <div>

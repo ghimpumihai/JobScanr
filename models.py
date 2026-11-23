@@ -87,6 +87,7 @@ class Application(TypedDict):
     resume_snapshot: NotRequired[dict | None]
     submitted_payload: NotRequired[dict | None]
     created_at: NotRequired[str]
+    applied_at: NotRequired[str | None]
 
 
 class ApplicationEvent(TypedDict):

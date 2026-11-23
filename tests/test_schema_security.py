@@ -30,20 +30,19 @@ def test_users_trigger_confines_resume_path_to_owner_folder():
     assert re.search(r"CREATE TRIGGER trg_protect_user_worker_fields\s+BEFORE UPDATE ON users", SCHEMA)
 
 
-def test_users_trigger_gates_auto_submit_on_confirmed_cv():
-    assert "ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_confirmed_at TIMESTAMPTZ" in SCHEMA
+def test_users_trigger_refuses_auto_submit():
     fn = SCHEMA[SCHEMA.index("FUNCTION protect_user_worker_fields") :]
     fn = fn[: fn.index("$$ LANGUAGE plpgsql")]
-    # AC-11: a new CV clears the confirmation and demotes auto_submit...
-    assert (
-        "NEW.resume_storage_path IS DISTINCT FROM OLD.resume_storage_path\n           OR NEW.resume_uploaded_at" in fn
+    # No platform accepts applications without the employer's key (#48), so the mode is refused outright.
+    assert re.search(
+        r"IF NEW\.auto_apply_mode = 'auto_submit' THEN\s+RAISE EXCEPTION 'Automatic submission is not available'", fn
     )
-    reset = fn.index("NEW.resume_confirmed_at := NULL")
-    assert reset < fn.index("NEW.auto_apply_mode := 'approval_required'")
-    # ...before the AC-10 check, so replacing a CV does not raise.
-    assert "NEW.resume_storage_path IS NULL OR NEW.resume_confirmed_at IS NULL" in fn
-    assert reset < fn.index("RAISE EXCEPTION 'Confirm your CV")
+    # The confirmation only enabled auto_submit; its reset and demotion are gone.
+    assert "resume_confirmed_at" not in fn
+    assert "NEW.auto_apply_mode := 'approval_required'" not in fn
     assert "NEW.max_daily_applications IS NULL OR NEW.max_daily_applications NOT BETWEEN 5 AND 25" in fn
+    # The unused worker's claim query still reads the column (D4).
+    assert "ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_confirmed_at TIMESTAMPTZ" in SCHEMA
 
 
 def test_workday_scan_tables_are_backend_only():
@@ -52,3 +51,81 @@ def test_workday_scan_tables_are_backend_only():
         assert not re.search(rf"CREATE POLICY [^\n]+ ON {table}", SCHEMA)
     assert "REVOKE ALL ON workday_board_state, workday_pod_backoff FROM anon" in SCHEMA
     assert "REVOKE ALL ON workday_board_state, workday_pod_backoff FROM authenticated" in SCHEMA
+
+
+def test_applications_status_check_includes_dismissed_for_new_and_existing_databases():
+    table = SCHEMA[SCHEMA.index("CREATE TABLE IF NOT EXISTS applications") :]
+    table = table[: table.index(");")]
+    assert "'dismissed'" in table
+    assert "applied_at          TIMESTAMPTZ" in table
+    assert "ALTER TABLE applications ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ" in SCHEMA
+    # The inline CHECK is named applications_status_check (read on staging, Task 0.3).
+    assert "ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_status_check" in SCHEMA
+    added = re.search(r"ADD CONSTRAINT applications_status_check CHECK \(status IN\s*\(([^)]*)\)\)", SCHEMA)
+    assert added, "replacement constraint missing"
+    assert set(re.findall(r"'(\w+)'", added[1])) == set(re.findall(r"'(\w+)'", table.split("CHECK (status IN", 1)[1]))
+    assert {"dismissed", "queued", "submitting"} <= set(re.findall(r"'(\w+)'", added[1]))  # worker statuses kept (D4)
+
+
+def test_statuses_nothing_can_send_become_manual_apply_with_an_event():
+    converted = re.search(
+        r"WITH moved AS \(\s*UPDATE applications SET status = 'manual_apply'\s*WHERE status IN \(([^)]*)\)"
+        r"\s*RETURNING id\s*\)\s*INSERT INTO application_events \(application_id, from_status, to_status, reason\)"
+        r"\s*SELECT id, NULL, 'manual_apply', 'manual_only' FROM moved;",
+        SCHEMA,
+    )
+    assert converted, "conversion statement missing"
+    assert set(re.findall(r"'(\w+)'", converted[1])) == {
+        "queued",
+        "pending_approval",
+        "needs_review",
+        "failed",
+        "submitting",
+    }
+    assert converted.start() > SCHEMA.index("CREATE TABLE IF NOT EXISTS application_events")
+    assert "UPDATE users SET auto_apply_mode = 'approval_required' WHERE auto_apply_mode = 'auto_submit';" in SCHEMA
+
+
+def _function_body(name: str) -> str:
+    body = SCHEMA[SCHEMA.index(f"FUNCTION {name}()") :]
+    return body[: body.index("\n$$")]  # the closing $$ starts a line; the opening one ends one
+
+
+def test_users_may_change_only_the_status_of_an_application():
+    fn = _function_body("protect_application_queue_fields")
+    assert "current_user = 'authenticated' OR auth.role() = 'authenticated'" in fn
+    # Every column but these two is compared, so columns added later are protected too.
+    assert "(to_jsonb(NEW) - 'status' - 'applied_at') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'applied_at')" in fn
+    pairs = set(re.findall(r"\('(\w+)', '(\w+)'\)", fn))
+    assert pairs == {
+        ("manual_apply", "submitted"),
+        ("stale_closed", "submitted"),
+        ("manual_apply", "dismissed"),
+        ("stale_closed", "dismissed"),
+        ("dismissed", "manual_apply"),
+    }
+    # Undo of Applied only for rows the user marked; the worker never sets applied_at.
+    assert "OLD.status = 'submitted' AND NEW.status = 'manual_apply' AND OLD.applied_at IS NOT NULL" in fn
+    assert fn.index("NEW.applied_at := NOW()") < fn.index("NEW.applied_at := NULL") < fn.index("ELSE")
+    assert "RAISE EXCEPTION 'This status change is not allowed'" in fn.split("ELSE", 1)[1]
+    assert "SECURITY DEFINER" not in fn  # runs as the caller, so current_user identifies a web user
+    assert re.search(r"CREATE TRIGGER trg_protect_application_queue_fields\s+BEFORE UPDATE ON applications", SCHEMA)
+
+
+def test_a_users_status_change_is_logged_by_a_definer_trigger():
+    fn = _function_body("log_user_application_change")
+    head = SCHEMA[SCHEMA.index("FUNCTION log_user_application_change()") :].split("AS $$", 1)[0]
+    assert "SECURITY DEFINER" in head and "SET search_path = ''" in head
+    assert "INSERT INTO public.application_events" in fn
+    assert "'changed_by_user'" in fn
+    trigger = re.search(
+        r"CREATE TRIGGER trg_log_user_application_change\s+AFTER UPDATE ON applications\s+FOR EACH ROW\s+"
+        r"WHEN \(([^;]+)\)\s+EXECUTE FUNCTION log_user_application_change\(\);",
+        SCHEMA,
+    )
+    assert trigger, "event trigger missing"
+    # Checked in WHEN, where current_user is still the caller; inside the definer function it is the owner.
+    assert "OLD.status IS DISTINCT FROM NEW.status" in trigger[1]
+    assert "current_user = 'authenticated' OR auth.role() = 'authenticated'" in trigger[1]
+    assert "REVOKE ALL ON FUNCTION log_user_application_change() FROM PUBLIC" in SCHEMA
+    assert "REVOKE ALL ON FUNCTION log_user_application_change() FROM anon, authenticated" in SCHEMA
