@@ -1,7 +1,8 @@
 # Workday Cloudflare challenges: the issue and the fix
 
-Written 2026-11-22. **Status: the fix is on `main` as a trial and is not proven.** It has not yet been tested against
-wd1, wd3 or wd5 from CI, and a local test did not get past wd1 or wd5.
+Written 2026-11-22, updated 2026-11-23. **Status: the first CI run that probed every pod with the fix had no
+challenges, and scanned all 1,634 Workday boards.** That is one run on one runner IP, so the fix is promising, not
+proven.
 
 Earlier history (digest timeouts, the first measurements, the back-off design) is in
 [workday_cloudflare_incident.md](../workday_cloudflare_incident.md).
@@ -68,24 +69,36 @@ a challenge, and TLS settings for every other platform.
 | Unit tests, ruff, mypy, seed check | All pass (442 tests) | No regression found |
 | Local probe, 8 requests, 22 Nov 19:28 UTC | wd1 and wd5 challenged on the first request with `DEFAULT`; wd3 answered 3/3 with each list | `DEFAULT` alone does not pass on that connection |
 | CI run, 22 Nov 19:40 UTC (with the fix) | 11 list requests, no challenges, 1,608 of 1,634 boards not scraped | **Inconclusive:** eight pods, including wd1, wd3 and wd5, were in back-off |
+| Three scheduled CI runs, 22 Nov 21:37 to 23 Nov 14:12 UTC | 23 list requests in all, no challenges | Same as above: the eight pods were still in back-off |
+| [CI run, 23 Nov 18:19 UTC](https://github.com/ghimpumihai/JobScanr/actions/runs/45237145128) (first probe of every pod) | **No challenges.** 7,445 list and 280 detail requests, 0 boards skipped, 85,633 postings, 28 matches (9 new), 6 failures | **First real pass.** The eight backed-off pods all answered |
 
+Before and after, in CI:
+
+| | 22 Nov 16:39 (before) | 23 Nov 18:19 (with the fix) |
+|---|---|---|
+| Pods that challenged us | 9 | 0 |
+| Boards not scraped | 1,609 of 1,634 | 0 |
+| List requests sent | 96 | 7,445 |
+
+- CI's Python offers 17 cipher suites by default (OpenSSL 3.5.5), so the fix changes the handshake there.
+- The 6 failures were not challenges. They are boards that failed for other reasons and are listed for manual review in
+  [issue #127](https://github.com/ghimpumihai/JobScanr/issues/127).
+- **Not ruled out:** Cloudflare may have relaxed its rule at about the same time. Whether other projects recovered on
+  23 Nov was not checked.
 - The local machine's Python already offered the `DEFAULT` suites, so it could not give a before/after comparison.
 - CI has OpenSSL 3.5.5 and the local machine 3.0.13, so their handshakes may differ beyond the cipher list.
 - The local probe went to wd1, wd3 and wd5 while CI's recorded back-off for them was active. It stopped at each pod's
   first challenge but did not check that record. Check it before any future probe.
 
-## How to judge the trial
+## What to watch next
 
-The challenged pods are in back-off until about **2026-11-23 16:39 UTC**. Read the first `workday` run that starts after
-that; the 22:00 UTC run is the safe choice because scheduled runs often start late. In its log, find:
+Results have varied by runner IP, so check the scheduled `workday` runs for several days. In each log, find:
 
-1. `hosts that challenged this run: ...`
-2. `N of 1634 companies were not scraped`
+1. `hosts that challenged this run: ...`, or `Workday pod ... challenged us`
+2. `N of 1634 companies were not scraped` (the line is absent when nothing was skipped)
+3. `Workday list requests sent: N`. Runs with a fresh cache should send far fewer than the 7,445 of the first full scan.
 
-Then:
-
-- **wd1 and wd5 still challenged:** revert (below).
-- **They answer:** encouraging, not proof. Results vary by runner IP, so watch several days.
+If wd1 and wd5 are challenged again in most runs, the fix is not enough. Revert it and try the options below:
 
 ```bash
 git revert c4b9886
@@ -96,6 +109,8 @@ Do not clear the back-off to test sooner: the constitution requires a day withou
 ## Risks and limits
 
 - **It can stop working at any time.** Cloudflare can change its rules.
+- **Request volume.** A full scan sends thousands of requests in under an hour, even at 1 request per second per pod.
+  Volume may count towards a challenge too.
 - **Slightly wider TLS options.** `DEFAULT` also allows some older TLS 1.2 ciphers for Workday, if the server picks one.
 - **The link-repair step is not covered.** `scripts/scan_and_fix_links.py` uses its own HTTP client, so its Workday
   checks may still be challenged.
@@ -103,7 +118,7 @@ Do not clear the back-off to test sooner: the constitution requires a day withou
   document says "No evasion". One of the two should be updated.
 - **Not used:** browser impersonation, stealth browsers, challenge solvers and proxies. Section 6 excludes them.
 
-## If the trial fails
+## If the fix stops working
 
 None of these is built. The first two keep querying Workday directly:
 
