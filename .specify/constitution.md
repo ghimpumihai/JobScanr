@@ -33,11 +33,9 @@ Every feature, plan, and pull request must strictly comply with the following in
   - Company link pruning is hard-capped at 15% (`--max-remove-pct 0.15`).
 
 ### 1.5 ATS Application Submission & Human-in-the-Loop Safety Gate
-- **Conditional Automated Submissions**: Backend headless HTTP submission is ONLY permitted for **Greenhouse** and **Lever** when:
-  1. 100% of required screening questions are confidently mapped against `user.screening_defaults`.
-  2. No CAPTCHA / bot challenge (reCAPTCHA, hCaptcha) is triggered.
-- **Mandatory Manual Apply Fallback**: All other platforms (**Ashby**, **SmartRecruiters**, **Teamtailor**, **Workday**, **Google**), or any submission where CAPTCHA is encountered, must be cleanly routed to `manual_apply` with candidate prefill helpers.
-- **Open-Ended Screening Questions**: Open-ended or essay questions must never be blindly submitted. LLM drafts must be staged in `applications.custom_answers` and transitioned to `needs_review` for explicit candidate review and approval.
+- **No Automated Submissions**: JobScanr never submits an application on a user's behalf. Greenhouse and Lever accept applications only with the employer's API key (verified 2026-11-23, issue #48), and the other platforms need a key, defeat headless clients with bot challenges, or both. Every application the pipeline stages is `manual_apply`; the user applies on the employer's site.
+- **User-Recorded Outcomes**: Only the user moves an application between To Apply (`manual_apply`), Applied (`submitted`) and Not Interested (`dismissed`), and the database enforces which changes are allowed. The pipeline may only move To Apply rows to `stale_closed` when their posting is gone.
+- **Reviving Submission**: Automated submission may return only with an employer's own authorization (their API key) for that employer, under a new spec that restores explicit user approval before each submission, the CAPTCHA fallback, and human review of open-ended answers.
 
 ---
 
