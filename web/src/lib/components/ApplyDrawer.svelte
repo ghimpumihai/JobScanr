@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import RemoteFill from '$lib/components/RemoteFill.svelte';
   import type { ApplicationRecord } from '$lib/types';
 
   interface Profile {
@@ -20,9 +21,15 @@
     onclose: () => void;
     /** Mark as Applied / Not Interested forms, rendered by the page so they share its submit handling. */
     actions: Snippet<[ApplicationRecord]>;
+    /** The user is in the "Fill it for me" trial (#129). */
+    remoteApply?: boolean;
   }
 
-  let { application, profile, onclose, actions }: Props = $props();
+  let { application, profile, onclose, actions, remoteApply = false }: Props = $props();
+
+  const canFill = $derived(
+    remoteApply && application?.status === 'manual_apply' && ['greenhouse', 'lever', 'ashby'].includes(application.ats_platform)
+  );
 
   // Keyed to the application, so another application never shows a stale message.
   let copied = $state<{ id: number; text: string } | null>(null);
@@ -91,7 +98,7 @@
     <div
       {@attach focusOnOpen}
       onkeydown={handleKeydown}
-      class="flex h-full w-full max-w-[560px] flex-col overflow-y-auto bg-card shadow-2xl"
+      class="flex h-full w-full max-w-[560px] flex-col overflow-y-auto bg-card shadow-2xl has-[iframe]:max-w-[1100px]"
       role="dialog"
       tabindex="-1"
       aria-modal="true"
@@ -113,6 +120,12 @@
       </div>
 
       <div class="flex flex-1 flex-col gap-6 p-6 sm:p-7">
+        {#if canFill}
+          {#key application.id}
+            <!-- The live view shows a desktop-sized page, so the drawer widens while it is open (has-[iframe]). -->
+            <RemoteFill applicationId={application.id} />
+          {/key}
+        {/if}
         <section class="space-y-2">
           <h3 class="text-xs font-semibold text-content-primary">1. Open the posting</h3>
           {#if application.url !== '#'}

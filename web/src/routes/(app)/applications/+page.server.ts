@@ -3,6 +3,7 @@ import type { PageServerLoad, Actions } from './$types';
 import type { ApplicationRecord, ApplicationStatus, ATSPlatform } from '$lib/types';
 import { isSupabaseConfigured } from '$lib/supabase/server';
 import { safeHttpUrl } from '$lib/safeUrl';
+import { checkSession, isAllowlisted, isEnabled, RemoteError, startSession } from '$lib/server/remoteApply/session';
 
 // Employers accept applications only with their own API key (#48), so every application is applied to by hand.
 const TABS = {
@@ -136,7 +137,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       (Object.keys(TABS) as Tab[]).map((t) => [t, DEMO_ROWS.filter((r) => r.status === TABS[t]).length])
     ) as Record<Tab, number>;
     const applications = DEMO_ROWS.filter((r) => r.status === TABS[f.tab]);
-    return { ...shown, applications, counts, profile: DEMO_PROFILE, loadError: false, demo: true };
+    // Shown in demo only while the trial is switched on, so the panel can be reviewed; its actions refuse demo mode.
+    return { ...shown, applications, counts, profile: DEMO_PROFILE, loadError: false, demo: true, remoteApply: isEnabled() };
   }
 
   const status = TABS[f.tab];
@@ -150,7 +152,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   );
   const profileQuery = locals.supabase
     .from('users')
-    .select('email, resume_filename, screening_defaults, resume_data')
+    .select('id, email, resume_filename, screening_defaults, resume_data')
     .eq('auth_user_id', locals.user!.id)
     .single();
 
@@ -159,7 +161,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (failed || !rows.data || !profileResult.data) {
     console.error('Failed to load applications:', failed?.error?.message);
     const counts = { to_apply: 0, applied: 0, not_interested: 0, closed: 0 };
-    return { ...shown, applications: [], counts, profile: null, loadError: true, demo: false };
+    return { ...shown, applications: [], counts, profile: null, loadError: true, demo: false, remoteApply: false };
   }
 
   // Nested join rows are untyped.
@@ -192,7 +194,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     portfolio: text(urls.portfolio),
     resume_filename: text(p.resume_filename)
   };
-  return { ...shown, applications, counts, profile, loadError: false, demo: false };
+  return { ...shown, applications, counts, profile, loadError: false, demo: false, remoteApply: isEnabled() && isAllowlisted(p.id) };
 };
 
 export const actions: Actions = {
@@ -229,5 +231,24 @@ export const actions: Actions = {
     // Undo always returns to To Apply: the database does not allow going back to Closed.
     const undo = to === 'manual_apply' ? null : { id, from: to, to: 'manual_apply' as const };
     return { success: true, message: DONE[to], undo };
-  }
+  },
+
+  // Remote-browser apply spike (#129): fill the employer's form in a live view; the user clicks Submit.
+  remoteStart: ({ request, locals }) =>
+    remote(request, locals, (sb, id) => startSession(sb, locals.user!.id, id)),
+  remotePoll: ({ request, locals }) => remote(request, locals, (sb, id) => checkSession(sb, id)),
+  remoteEnd: ({ request, locals }) => remote(request, locals, (sb, id) => checkSession(sb, id, true))
 };
+
+async function remote<T>(request: Request, locals: App.Locals, run: (sb: App.Locals['supabase'], id: number) => Promise<T>) {
+  const idRaw = (await request.formData()).get('id')?.toString() ?? '';
+  if (!/^\d{1,15}$/.test(idRaw)) return fail(400, { error: 'This change is not possible.' });
+  if (!isLiveUser(locals)) return fail(400, { error: 'Fill it for me is not available in demo mode.' });
+  try {
+    return { remote: await run(locals.supabase, Number(idRaw)) };
+  } catch (e) {
+    if (e instanceof RemoteError) return fail(e.status, { error: e.message });
+    console.error('Remote apply failed:', e instanceof Error ? e.name : 'Error');
+    return fail(500, { error: 'Something went wrong. Use the Apply link instead.' });
+  }
+}

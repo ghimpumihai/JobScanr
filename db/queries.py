@@ -474,6 +474,62 @@ def queue_user_applications(user_id: int, job_ids: list[int], status: str = "que
     return stage_user_applications(user_id, [{"job_id": jid, "status": status} for jid in job_ids])
 
 
+def list_fill_plan_candidates(user_ids: list[int], limit: int = 200) -> list[dict]:
+    """Greenhouse To Apply rows of these users with no fill plan, or one older than a day (#129)."""
+    if not user_ids:
+        return []
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.id, a.user_id, jp.external_id, jp.url, jp.title, c.ats_identifier
+            FROM applications a
+            JOIN job_postings jp ON jp.id = a.job_posting_id
+            JOIN companies c ON c.id = jp.company_id
+            LEFT JOIN application_fill_plans p ON p.application_id = a.id
+            WHERE a.user_id = ANY(%s)
+              AND a.status = 'manual_apply'
+              AND c.ats_platform = 'greenhouse'
+              AND (p.application_id IS NULL OR p.built_at < NOW() - INTERVAL '1 day')
+            ORDER BY a.id
+            LIMIT %s
+            """,
+            (user_ids, limit),
+        )
+        return [
+            {
+                "application_id": r[0],
+                "user_id": r[1],
+                "posting": {
+                    "external_id": r[2],
+                    "url": r[3],
+                    "title": r[4],
+                    "ats_identifier": r[5],
+                    "ats_platform": "greenhouse",
+                },
+            }
+            for r in cur.fetchall()
+        ]
+
+
+def upsert_fill_plan(application_id: int, plan: dict) -> None:
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO application_fill_plans (application_id, plan, built_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (application_id) DO UPDATE SET plan = EXCLUDED.plan, built_at = NOW()
+            """,
+            (application_id, json.dumps(plan)),
+        )
+
+
+def expire_open_remote_sessions() -> int:
+    """Kill switch (#129): every open remote apply session becomes expired."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE remote_apply_sessions SET status = 'expired', ended_at = NOW() WHERE status = 'open'")
+        return cur.rowcount
+
+
 def get_user_unnotified_matches(user_id: int) -> list[dict]:
     """Fetch unnotified matching job postings for a specific user."""
     with get_connection() as conn, conn.cursor() as cur:

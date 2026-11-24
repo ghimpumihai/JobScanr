@@ -227,7 +227,13 @@
   {/if}
 </div>
 
-<ApplyDrawer application={selected} profile={data.profile} onclose={() => (selectedId = null)} actions={drawerActions} />
+<ApplyDrawer
+  application={selected}
+  profile={data.profile}
+  onclose={() => (selectedId = null)}
+  actions={drawerActions}
+  remoteApply={data.remoteApply}
+/>
 
 <!-- The region stays in the page so screen readers announce each new message. -->
 <div aria-live="polite" class="fixed bottom-6 right-6 z-40 max-w-[calc(100vw-3rem)]">

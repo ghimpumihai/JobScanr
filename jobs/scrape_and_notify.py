@@ -380,6 +380,15 @@ async def run_pipeline(args) -> int:
         if app_stage_items:
             queries.stage_user_applications(uid, app_stage_items)
 
+    # Remote-browser apply spike (#129): only for allowlisted users; never stops the digest.
+    from jobs.apply.fill_plan import allowlisted_user_ids, build_fill_plans
+
+    if allowlisted_user_ids():
+        try:
+            logger.info("Built %d fill plan(s).", await build_fill_plans(active_users))
+        except Exception:
+            logger.exception("Fill plans failed; the digest continues.")
+
     if args.no_email:
         logger.info("--no-email: jobs and matches stored; the next digest run sends them.")
         return 0
