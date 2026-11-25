@@ -236,11 +236,33 @@ test('profile values stay out of textareas, custom questions, and long or questi
     <label for="o">Which office location would you prefer</label><input id="o" name="uuid-1">
     <label for="p">Phone?</label><input id="p" name="uuid-2">
     <label for="ph">Phone number</label><input id="ph" name="uuid-3">
+    <input id="al" name="uuid-4" aria-label="Which office location would you prefer?">
+    <input id="pl" name="uuid-5" placeholder="Your city if different from where you would like to work">
     <button type="submit">Submit</button></form>`);
   await fillPage(page, null, PROFILE, null);
-  for (const id of ['#w', '#q', '#c', '#o', '#p']) assert.equal(await page.inputValue(id), '', id);
+  // A question carried only by aria-label or placeholder is judged the same way as one with a <label>.
+  for (const id of ['#w', '#q', '#c', '#o', '#p', '#al', '#pl']) assert.equal(await page.inputValue(id), '', id);
   assert.equal(await page.inputValue('#ph'), '+44 7000 000000'); // short, not a question, UUID-named (Ashby)
   assert.equal(await page.inputValue('#e'), 'jane@example.com');
+  await page.close();
+});
+
+test('a dropdown picks its own option even when a native select earlier on the page has the same text', async () => {
+  const page = await open(`<form>
+    <label for="eeo">Are you a veteran</label><select id="eeo"><option></option><option>Yes</option><option>No</option></select>
+    <label for="q1">Authorized to work</label><input id="q1" name="question_1" role="combobox" aria-controls="m1">
+    <ul id="m1" hidden><li role="option">Yes</li><li role="option">No</li></ul>
+    <button type="submit">Submit</button></form>
+    <script>
+      const q1 = document.getElementById('q1'), m1 = document.getElementById('m1');
+      q1.addEventListener('click', () => (m1.hidden = false));
+      m1.addEventListener('click', (e) => { q1.value = e.target.textContent; m1.hidden = true; });
+    </script>`);
+  const plan = { ...GH_PLAN, fields: [{ name: 'question_1', label: 'Authorized to work', type: 'single_select', value: 1, option_label: 'Yes' }] };
+  const result = await fillPage(page, plan, PROFILE, null);
+  assert.equal(await page.inputValue('#q1'), 'Yes');
+  assert.equal(await page.inputValue('#eeo'), ''); // the native select is not touched
+  assert.ok(!result.unfilled.includes('Authorized to work'));
   await page.close();
 });
 

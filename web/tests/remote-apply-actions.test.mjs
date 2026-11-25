@@ -106,8 +106,8 @@ function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.fr
 }
 
 let world;
-function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1', body = 'Apply for this job', running = true, connectError = null, createError = null, captcha = false, fileInputs = 1 } = {}) {
-  const w = { calls: [], released: [], filled: null, closed: 0, providersAsked: [] };
+function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1', body = 'Apply for this job', running = true, connectError = null, createError = null, captcha = false, fileInputs = 1, lookupError = null, liveViewErrors = [] } = {}) {
+  const w = { calls: [], released: [], filled: null, closed: 0, providersAsked: [], liveViewCalls: 0 };
   const CONNECTION = { url: 'wss://connect.example/', headers: { Authorization: 'Bearer SECRET' } };
   const page = {
     goto: async (url) => (w.calls.push(['goto', url]), { status: () => gotoStatus }),
@@ -122,8 +122,16 @@ function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.
       w.calls.push(['create']);
       return { id: 'bb-1', connection: CONNECTION };
     },
-    connection: async () => (running ? CONNECTION : null),
-    liveViewUrl: async () => ((w.closedAtLiveView = w.closed), 'https://live.example/view?token=LIVE'),
+    connection: async () => {
+      if (lookupError) throw lookupError;
+      return running ? CONNECTION : null;
+    },
+    liveViewUrl: async () => {
+      w.closedAtLiveView = w.closed;
+      const failure = liveViewErrors[w.liveViewCalls++]; // one entry per failing call, in order
+      if (failure) throw failure;
+      return 'https://live.example/view?token=LIVE';
+    },
     release: async (id) => void w.released.push(id),
     listRunning: async () => []
   });
@@ -228,6 +236,21 @@ test('start: if the provider session id cannot be saved, the session is released
   assert.equal(updates(sb).at(-1).values.status, 'error');
 });
 
+test('start: one failed live view request is retried; two 429s end in the quota message', async () => {
+  world = fakeWorld({ liveViewErrors: [new Error('blip')] });
+  const ok = await startSession(fakeSb(), 'uid-1', 55);
+  assert.equal(ok.liveViewUrl, 'https://live.example/view?token=LIVE');
+  assert.equal(world.liveViewCalls, 2);
+  assert.deepEqual(world.released, []);
+
+  const quota = Object.assign(new Error('Cloudflare Browser Run returned 429'), { status: 429 });
+  world = fakeWorld({ liveViewErrors: [quota, quota] });
+  const sb = fakeSb();
+  await assert.rejects(startSession(sb, 'uid-1', 55), (e) => e.status === 503 && /no free time left/.test(e.message));
+  assert.equal(updates(sb).at(-1).values.error, 'quota');
+  assert.deepEqual(world.released, ['bb-1']);
+});
+
 test('formUrl: only the ATS-hosted form page', () => {
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc' }, null), 'https://jobs.lever.co/acme/abc/apply');
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc/apply' }, null), 'https://jobs.lever.co/acme/abc/apply');
@@ -296,6 +319,15 @@ test('check: if marking Applied fails, the user is told to mark it themselves', 
   const sb = fakeSb({ row: OPEN_ROW, markError: { message: 'x' } });
   assert.deepEqual(await checkSession(sb, 900), { state: 'unrecorded' });
   assert.equal(updates(sb).at(-1).values.status, 'submitted'); // the session itself did end with a confirmation
+});
+
+test('check: a failed session lookup (a 429, a blip) keeps the session open; on close it is abandoned', async () => {
+  world = fakeWorld({ lookupError: Object.assign(new Error('Cloudflare Browser Run returned 429'), { status: 429 }) });
+  const sb = fakeSb({ row: OPEN_ROW });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'open' });
+  assert.deepEqual(world.released, []); // the live view keeps running
+  assert.equal(updates(sb).length, 0);
+  assert.deepEqual(await checkSession(fakeSb({ row: OPEN_ROW }), 900, true), { state: 'abandoned' });
 });
 
 test('check: still filling stays open and records a captcha once seen', async () => {

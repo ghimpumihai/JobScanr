@@ -98,7 +98,10 @@ export function cloudflare(): RemoteProvider {
     },
     async liveViewUrl(id) {
       // Cloudflare hands out live views over CDP, so this connects briefly; "tab" mode is the interactive one.
-      const browser = await chromium.connectOverCDP(connectionFor(id).url, { headers });
+      const browser = await chromium.connectOverCDP(connectionFor(id).url, { headers }).catch((e) => {
+        // A refused WebSocket only says 429 in its message; give it the status the quota handling looks for.
+        throw /\b429\b/.test(String(e?.message)) ? Object.assign(new Error('Cloudflare Browser Run returned 429'), { status: 429 }) : e;
+      });
       try {
         const context = browser.contexts()[0];
         const page = context?.pages().at(-1);

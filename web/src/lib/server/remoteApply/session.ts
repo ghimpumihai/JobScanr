@@ -191,7 +191,9 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     // Disconnect first: Cloudflare hands out the live view over a connection of its own.
     await browser.close().catch(() => {});
     browser = undefined;
-    const liveViewUrl = await provider.liveViewUrl(providerId);
+    // One retry before giving up a form that is already filled; a 429 still ends in the quota message below.
+    const id = providerId;
+    const liveViewUrl = await provider.liveViewUrl(id).catch(() => provider.liveViewUrl(id));
     return { sessionId: row.id, liveViewUrl, leftForUser: [...(plan?.for_user ?? []).map((q) => q.label), ...result.unfilled] };
   } catch (e) {
     if (e instanceof RemoteError) throw e;
@@ -234,7 +236,15 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
 
   if (!isEnabled()) return close('expired');
   if (deps.now().getTime() - new Date(row.started_at).getTime() > SESSION_SECONDS * 1000) return close('expired');
-  const connection = row.provider_session_id ? await provider.connection(row.provider_session_id).catch(() => null) : null;
+  let connection: Connection | null = null;
+  if (row.provider_session_id) {
+    try {
+      connection = await provider.connection(row.provider_session_id);
+    } catch {
+      // A failed lookup (a 429, a network blip) is not an ended session; the next poll tries again.
+      return final ? close('abandoned') : { state: 'open' };
+    }
+  }
   if (!connection) return close('expired');
 
   const platform: string = (row.applications as any)?.job_postings?.companies?.ats_platform ?? '';

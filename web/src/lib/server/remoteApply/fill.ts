@@ -52,8 +52,9 @@ interface Control {
   id: string;
   /** Label, placeholder, aria-label, autocomplete, name and id, lower-cased, for matching. */
   text: string;
-  /** The visible label alone (label elements and aria-labelledby), trimmed. */
-  label: string;
+  /** What a person reads as the field's question: its label (label elements and aria-labelledby), aria-label and
+   * placeholder, each trimmed. Checked one by one, so a short label with a short placeholder still counts as short. */
+  prompts: string[];
   visible: boolean;
 }
 
@@ -64,7 +65,7 @@ interface Control {
  */
 function standardField(c: Control): boolean {
   if (c.tag === 'textarea' || /^question_|^cards\[/.test(c.name)) return false;
-  return c.label.length <= 32 && !c.label.includes('?');
+  return c.prompts.every((p) => p.length <= 32 && !p.includes('?'));
 }
 
 const CONTROLS = 'input, textarea, select';
@@ -122,7 +123,8 @@ async function listControls(page: Page): Promise<Control[]> {
       const labelledBy = (e.getAttribute('aria-labelledby') ?? '')
         .split(/\s+/)
         .map((id) => (id ? document.getElementById(id)?.textContent ?? '' : ''));
-      const label = [...labels, ...labelledBy].join(' ').replace(/\s+/g, ' ').replace(/[*✱]/g, '').trim();
+      const clean = (s: string | null) => (s ?? '').replace(/\s+/g, ' ').replace(/[*✱]/g, '').trim();
+      const prompts = [clean([...labels, ...labelledBy].join(' ')), clean(e.getAttribute('aria-label')), clean(e.getAttribute('placeholder'))];
       const text = [
         ...labels,
         ...labelledBy,
@@ -145,7 +147,7 @@ async function listControls(page: Page): Promise<Control[]> {
         name: e.name ?? '',
         id: e.id ?? '',
         text,
-        label,
+        prompts,
         // File inputs are usually hidden behind a styled button; they still accept files.
         visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0)
       };
@@ -172,9 +174,13 @@ async function clickOption(option: Locator): Promise<void> {
 
 /** Opens the dropdown and picks the option whose text is exactly `label`; otherwise closes it and reports false. */
 async function pickOption(page: Page, el: Locator, label: string): Promise<boolean> {
-  const option = page.getByRole('option', { name: label, exact: true }).first();
   try {
     await el.click({ timeout: STEP_MS }); // opens the list; a combobox input never submits
+    // Search only the list this dropdown controls (react-select names it once open), and only ARIA options: native
+    // <option>s of other <select>s also have the option role and would be found first.
+    const listId = (await el.getAttribute('aria-controls', { timeout: STEP_MS })) ?? (await el.getAttribute('aria-owns', { timeout: STEP_MS }));
+    const scope = listId ? page.locator(`[id="${listId.replace(/["\\]/g, '\\$&')}"]`) : page;
+    const option = scope.getByRole('option', { name: label, exact: true }).and(page.locator('[role="option"]')).first();
     // The list renders a moment after the click; only type when it still shows no such option (search-style lists).
     const shown = await option.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false);
     if (!shown) await el.pressSequentially(label, { timeout: STEP_MS });

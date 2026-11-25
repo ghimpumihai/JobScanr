@@ -52,7 +52,7 @@
       ui = { step: 'done', text: 'The employer confirmed your application. It is now in Applied.' };
       await invalidateAll();
     } else if (result.state === 'unrecorded') {
-      ui = { step: 'done', text: 'The employer confirmed your application, but JobScanr could not record it. Mark it as Applied below.' };
+      ui = { step: 'done', text: 'The employer confirmed your application, but JobScanr could not record it. Press I applied below.' };
     } else if (result.state !== 'open') {
       ui = { step: 'done', text: 'The session ended. Nothing was recorded; mark it yourself if you did apply.' };
     }
