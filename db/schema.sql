@@ -152,6 +152,39 @@ SELECT id, NULL, 'manual_apply', 'manual_only' FROM moved;
 
 UPDATE users SET auto_apply_mode = 'approval_required' WHERE auto_apply_mode = 'auto_submit';
 
+-- Remote-browser apply spike (#129). Fill plans are built by the pipeline (backend only) from the public
+-- Greenhouse question schema; a user may read their own. Sessions hold per-session metrics, never the live
+-- view URL, form values or CV content.
+CREATE TABLE IF NOT EXISTS application_fill_plans (
+    application_id  BIGINT PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    plan            JSONB NOT NULL,
+    built_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS remote_apply_sessions (
+    id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    application_id          BIGINT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    user_id                 BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider                TEXT NOT NULL,
+    provider_session_id     TEXT,
+    status                  TEXT NOT NULL DEFAULT 'open'
+                            CHECK (status IN ('open', 'submitted', 'abandoned', 'expired', 'error', 'posting_gone')),
+    fields_planned          INTEGER,
+    fields_filled           INTEGER,
+    fields_unfilled         INTEGER,
+    fields_changed_by_user  INTEGER,
+    captcha_seen            BOOLEAN NOT NULL DEFAULT FALSE,
+    error                   TEXT,
+    started_at              TIMESTAMPTZ DEFAULT NOW(),
+    ended_at                TIMESTAMPTZ
+);
+
+-- One open session per application, so two tabs cannot fill the same form twice.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_remote_apply_sessions_open
+    ON remote_apply_sessions (application_id) WHERE status = 'open';
+-- The daily cap counts a user's sessions since midnight.
+CREATE INDEX IF NOT EXISTS idx_remote_apply_sessions_user_started ON remote_apply_sessions (user_id, started_at);
+
 -- Indices for high-throughput queue polling and lookups
 CREATE INDEX IF NOT EXISTS idx_applications_queued ON applications (status, next_attempt_at) WHERE status = 'queued';
 CREATE INDEX IF NOT EXISTS idx_applications_user_status ON applications (user_id, status);
@@ -162,6 +195,8 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_job_matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE application_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE application_fill_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE remote_apply_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Auth helper functions (stubs for local / non-Supabase test environments)
 DO $$
@@ -216,6 +251,41 @@ CREATE POLICY "application_events_select_own" ON application_events
         JOIN users u ON u.id = a.user_id
         WHERE u.auth_user_id = auth.uid()
     ));
+
+-- Fill plans: read own, never written by web roles (no write policy; writes also revoked below).
+DROP POLICY IF EXISTS "application_fill_plans_select_own" ON application_fill_plans;
+CREATE POLICY "application_fill_plans_select_own" ON application_fill_plans
+    FOR SELECT TO authenticated
+    USING (application_id IN (
+        SELECT a.id FROM applications a
+        JOIN users u ON u.id = a.user_id
+        WHERE u.auth_user_id = auth.uid()
+    ));
+
+-- Remote apply sessions: the web app writes them with the user's own session. A row must belong to the
+-- caller and point at one of the caller's applications. Users can edit their own metrics; accepted for the
+-- spike's <= 5-user pilot (plan 2.1). No delete policy.
+DROP POLICY IF EXISTS "remote_apply_sessions_select_own" ON remote_apply_sessions;
+CREATE POLICY "remote_apply_sessions_select_own" ON remote_apply_sessions
+    FOR SELECT TO authenticated
+    USING (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "remote_apply_sessions_insert_own" ON remote_apply_sessions;
+CREATE POLICY "remote_apply_sessions_insert_own" ON remote_apply_sessions
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid())
+        AND application_id IN (SELECT a.id FROM applications a WHERE a.user_id = remote_apply_sessions.user_id)
+    );
+
+DROP POLICY IF EXISTS "remote_apply_sessions_update_own" ON remote_apply_sessions;
+CREATE POLICY "remote_apply_sessions_update_own" ON remote_apply_sessions
+    FOR UPDATE TO authenticated
+    USING (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()))
+    WITH CHECK (
+        user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid())
+        AND application_id IN (SELECT a.id FROM applications a WHERE a.user_id = remote_apply_sessions.user_id)
+    );
 
 -- applications: a signed-in user (applications_update_own limits them to their own rows) may only move an
 -- application between To Apply, Applied and Not Interested, and back (#48). Every other column, including ones
@@ -302,10 +372,18 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         REVOKE ALL ON companies, job_postings FROM anon;
         REVOKE ALL ON workday_board_state, workday_pod_backoff FROM anon;
+        REVOKE ALL ON application_fill_plans, remote_apply_sessions FROM anon;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
         REVOKE ALL ON workday_board_state, workday_pod_backoff FROM authenticated;
+        REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON application_fill_plans FROM authenticated;
+        -- Column grants: started_at always comes from its default and is never changed, so the daily cap,
+        -- which counts a user's rows by started_at, cannot be dodged with the public anon key.
+        REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated;
+        GRANT INSERT (application_id, user_id, provider) ON remote_apply_sessions TO authenticated;
+        GRANT UPDATE (provider_session_id, status, fields_planned, fields_filled, fields_unfilled,
+                      fields_changed_by_user, captcha_seen, error, ended_at) ON remote_apply_sessions TO authenticated;
     END IF;
 EXCEPTION
     WHEN insufficient_privilege THEN

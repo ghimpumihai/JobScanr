@@ -65,3 +65,7 @@ build/
 .impeccable/
 .playwright-mcp/
 
+
+# Remote apply spike results (#129): screenshots of employer forms, fake persona only
+.spike-results/
+web/.spike-results/

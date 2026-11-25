@@ -58,7 +58,7 @@ jobs:
   web-test:
     if: github.event_name == 'push' || (github.actor != 'github-actions[bot]' && github.event.pull_request.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web
@@ -70,6 +70,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Headless Chromium and its system libraries for the offline fill tests (#129).
+      - run: npx playwright-core install --with-deps chromium-headless-shell
       - name: Run web tests
         run: npm test
 

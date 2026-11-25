@@ -35,6 +35,7 @@ Every feature, plan, and pull request must strictly comply with the following in
 ### 1.5 ATS Application Submission & Human-in-the-Loop Safety Gate
 - **No Automated Submissions**: JobScanr never submits an application on a user's behalf. Greenhouse and Lever accept applications only with the employer's API key (verified 2026-11-23, issue #48), and the other platforms need a key, defeat headless clients with bot challenges, or both. Every application the pipeline stages is `manual_apply`; the user applies on the employer's site.
 - **User-Recorded Outcomes**: Only the user moves an application between To Apply (`manual_apply`), Applied (`submitted`) and Not Interested (`dismissed`), and the database enforces which changes are allowed. The pipeline may only move To Apply rows to `stale_closed` when their posting is gone.
+- **Remote Fill (spike, issue #129)**: JobScanr may fill an employer's form in a browser the user watches and controls; the user always clicks Submit; JobScanr may record Applied only from the employer's confirmation page, through the same user-scoped status change as Mark as Applied. Never: an automated Submit click, captcha solving, stealth or patched browsers, fingerprint spoofing, or proxies.
 - **Reviving Submission**: Automated submission may return only with an employer's own authorization (their API key) for that employer, under a new spec that restores explicit user approval before each submission, the CAPTCHA fallback, and human review of open-ended answers.
 
 ---

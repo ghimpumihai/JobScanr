@@ -129,3 +129,48 @@ def test_a_users_status_change_is_logged_by_a_definer_trigger():
     assert "current_user = 'authenticated' OR auth.role() = 'authenticated'" in trigger[1]
     assert "REVOKE ALL ON FUNCTION log_user_application_change() FROM PUBLIC" in SCHEMA
     assert "REVOKE ALL ON FUNCTION log_user_application_change() FROM anon, authenticated" in SCHEMA
+
+
+def test_fill_plans_are_readable_by_their_owner_and_written_only_by_the_backend():
+    assert "ALTER TABLE application_fill_plans ENABLE ROW LEVEL SECURITY" in SCHEMA
+    policies = re.findall(r'CREATE POLICY "[^"]+" ON application_fill_plans\s+FOR (\w+)', SCHEMA)
+    assert policies == ["SELECT"]
+    assert "REVOKE ALL ON application_fill_plans, remote_apply_sessions FROM anon" in SCHEMA
+    assert "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON application_fill_plans FROM authenticated" in SCHEMA
+
+
+def test_remote_apply_sessions_are_owned_and_one_open_per_application():
+    assert "ALTER TABLE remote_apply_sessions ENABLE ROW LEVEL SECURITY" in SCHEMA
+    policies = dict(re.findall(r'CREATE POLICY "([^"]+)" ON remote_apply_sessions\s+FOR (\w+)', SCHEMA))
+    assert sorted(policies.values()) == ["INSERT", "SELECT", "UPDATE"]  # no delete
+    for name in ("remote_apply_sessions_insert_own", "remote_apply_sessions_update_own"):
+        body = SCHEMA[SCHEMA.index(f'CREATE POLICY "{name}"') :].split(";", 1)[0]
+        # The row must be the caller's and point at one of the caller's own applications.
+        assert "WITH CHECK" in body
+        assert "user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid())" in body
+        assert "a.user_id = remote_apply_sessions.user_id" in body
+    # Column grants: started_at (what the daily cap counts) can neither be set on insert nor changed later.
+    assert "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated" in SCHEMA
+    insert = re.search(r"GRANT INSERT \(([^)]*)\) ON remote_apply_sessions TO authenticated", SCHEMA)
+    update = re.search(r"GRANT UPDATE \(([^)]*)\) ON remote_apply_sessions TO authenticated", SCHEMA)
+    assert insert and update
+    assert {c.strip() for c in insert[1].split(",")} == {"application_id", "user_id", "provider"}
+    updatable = {c.strip() for c in update[1].split(",")}
+    assert not updatable & {"started_at", "user_id", "application_id", "provider", "id"}
+    assert re.search(
+        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_remote_apply_sessions_open\s+"
+        r"ON remote_apply_sessions \(application_id\) WHERE status = 'open'",
+        SCHEMA,
+    )
+    table = SCHEMA[SCHEMA.index("CREATE TABLE IF NOT EXISTS remote_apply_sessions") :].split(");", 1)[0]
+    assert set(re.findall(r"'(\w+)'", table.split("CHECK (status IN", 1)[1])) == {
+        "open",
+        "submitted",
+        "abandoned",
+        "expired",
+        "error",
+        "posting_gone",
+    }
+    # Never store the live view URL, form values or CV content.
+    for column in ("live_view", "url", "values", "resume"):
+        assert column not in table
