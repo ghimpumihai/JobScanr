@@ -490,7 +490,7 @@ def list_fill_plan_candidates(user_ids: list[int], limit: int = 200) -> list[dic
               AND a.status = 'manual_apply'
               AND c.ats_platform = 'greenhouse'
               AND (p.application_id IS NULL OR p.built_at < NOW() - INTERVAL '1 day')
-            ORDER BY a.id
+            ORDER BY p.built_at NULLS FIRST, a.id -- rows with no plan first, then the stalest, so none is starved
             LIMIT %s
             """,
             (user_ids, limit),

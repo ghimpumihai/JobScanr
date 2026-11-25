@@ -118,6 +118,8 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     .eq('user_id', user.id)
     .gte('started_at', midnight.toISOString());
   if (countError) throw new RemoteError(500, 'Could not check your daily limit.');
+  // shortcut: the count and the insert are separate requests, so two starts in the same second can both pass and a
+  // user can reach DAILY_CAP + 1 or so; enforce it with an insert trigger before the pilot grows beyond ~5 users.
   if ((count ?? 0) >= DAILY_CAP) throw new RemoteError(429, `You have used all ${DAILY_CAP} fills for today.`);
 
   if (!user.resume_storage_path) throw new RemoteError(422, 'Upload a CV in Settings first.');
@@ -145,14 +147,18 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
   };
 
   const provider = deps.provider();
-  // A session nobody polled (the drawer closed while it was starting) is past the provider's timeout by now;
-  // expire it so it does not block this application for good.
-  await sb
+  // A session nobody polled (the drawer closed while it was starting) would block this application for good:
+  // expire its row and release its browser, in case the provider has not timed it out yet.
+  const { data: stale } = await sb
     .from('remote_apply_sessions')
     .update({ status: 'expired', ended_at: deps.now().toISOString() })
     .eq('application_id', app.id)
     .eq('status', 'open')
-    .lt('started_at', new Date(deps.now().getTime() - SESSION_SECONDS * 1000).toISOString());
+    .lt('started_at', new Date(deps.now().getTime() - SESSION_SECONDS * 1000).toISOString())
+    .select('provider, provider_session_id');
+  for (const s of stale ?? []) {
+    if (s.provider_session_id) await deps.provider(s.provider).release(s.provider_session_id).catch(() => {});
+  }
   const { data: row, error: insertError } = await sb
     .from('remote_apply_sessions')
     .insert({ application_id: app.id, user_id: user.id, provider: provider.name })
@@ -234,15 +240,16 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
     return { state };
   };
 
-  if (!isEnabled()) return close('expired');
-  if (deps.now().getTime() - new Date(row.started_at).getTime() > SESSION_SECONDS * 1000) return close('expired');
+  // Switched off or over age: still look for a confirmation once, then end it (a last-second submit still counts).
+  const ending = !isEnabled() || deps.now().getTime() - new Date(row.started_at).getTime() > SESSION_SECONDS * 1000;
+  const giveUp = () => close(final ? 'abandoned' : 'expired');
   let connection: Connection | null = null;
   if (row.provider_session_id) {
     try {
       connection = await provider.connection(row.provider_session_id);
     } catch {
       // A failed lookup (a 429, a network blip) is not an ended session; the next poll tries again.
-      return final ? close('abandoned') : { state: 'open' };
+      return final || ending ? giveUp() : { state: 'open' };
     }
   }
   if (!connection) return close('expired');
@@ -267,12 +274,12 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
       await close('submitted', { captcha_seen: captcha });
       return { state: markError ? 'unrecorded' : 'submitted' };
     }
-    if (final) return close('abandoned', { captcha_seen: captcha });
+    if (final || ending) return close(final ? 'abandoned' : 'expired', { captcha_seen: captcha });
     if (captcha && !row.captcha_seen) await sb.from('remote_apply_sessions').update({ captcha_seen: true }).eq('id', row.id);
     return { state: 'open', captcha };
   } catch (e) {
     console.error('Remote session check failed:', errorName(e));
-    return final ? close('abandoned') : { state: 'open' }; // a failed check is retried on the next poll
+    return final || ending ? giveUp() : { state: 'open' }; // a failed check is retried on the next poll
   } finally {
     await browser?.close().catch(() => {});
   }

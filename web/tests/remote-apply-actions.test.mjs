@@ -41,7 +41,7 @@ const PLAN = {
 };
 
 /** Records every query; answers per table and operation. */
-function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null, saveError = null, markError = null } = {}) {
+function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null, saveError = null, markError = null, stale = [] } = {}) {
   const log = [];
   const answer = (q) => {
     if (q.table === 'users') return { data: user, error: user ? null : { message: 'x' } };
@@ -52,6 +52,7 @@ function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.fr
     if (q.table === 'application_fill_plans') return { data: plan ? { plan } : null };
     if (q.table === 'remote_apply_sessions') {
       if (q.op === 'insert') return insertError ? { data: null, error: insertError } : { data: { id: 900 } };
+      if (q.op === 'update' && q.filters.some(([k]) => k === '<started_at')) return { data: stale, error: null };
       if (q.op === 'update') return { data: null, error: saveError && 'provider_session_id' in q.values ? saveError : null };
       if (q.opts?.head) return { count, error: null };
       return { data: row };
@@ -251,6 +252,13 @@ test('start: one failed live view request is retried; two 429s end in the quota 
   assert.deepEqual(world.released, ['bb-1']);
 });
 
+test('start: stale open rows of the application are expired and their browsers released', async () => {
+  const sb = fakeSb({ stale: [{ provider: 'cloudflare', provider_session_id: 'old-1' }, { provider: 'browserbase', provider_session_id: null }] });
+  await startSession(sb, 'uid-1', 55);
+  assert.deepEqual(world.released, ['old-1']); // the one with a provider session; the new session stays up
+  assert.ok(world.providersAsked.includes('cloudflare')); // released through the provider that made it
+});
+
 test('formUrl: only the ATS-hosted form page', () => {
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc' }, null), 'https://jobs.lever.co/acme/abc/apply');
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc/apply' }, null), 'https://jobs.lever.co/acme/abc/apply');
@@ -328,6 +336,20 @@ test('check: a failed session lookup (a 429, a blip) keeps the session open; on 
   assert.deepEqual(world.released, []); // the live view keeps running
   assert.equal(updates(sb).length, 0);
   assert.deepEqual(await checkSession(fakeSb({ row: OPEN_ROW }), 900, true), { state: 'abandoned' });
+});
+
+test('check: a confirmation found as the session expires or the switch goes off is still recorded', async () => {
+  const confirmed = { pageUrl: 'https://job-boards.greenhouse.io/embed/job_app/confirmation', body: 'Thank you for applying.', fileInputs: 0 };
+  world = fakeWorld(confirmed);
+  let sb = fakeSb({ row: { ...OPEN_ROW, started_at: '2026-11-24T09:40:00Z' } }); // 20 minutes old
+  assert.deepEqual(await checkSession(sb, 900), { state: 'submitted' });
+  assert.equal(updates(sb, 'applications').length, 1);
+
+  process.env.REMOTE_APPLY_ENABLED = 'false';
+  world = fakeWorld(confirmed);
+  sb = fakeSb({ row: OPEN_ROW });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'submitted' });
+  process.env.REMOTE_APPLY_ENABLED = 'true';
 });
 
 test('check: still filling stays open and records a captcha once seen', async () => {

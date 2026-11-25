@@ -204,6 +204,8 @@ def test_list_fill_plan_candidates_selects_stale_or_missing_greenhouse_to_apply_
     sql, params = cur.execute.call_args[0]
     assert "a.status = 'manual_apply'" in sql and "c.ats_platform = 'greenhouse'" in sql
     assert "p.built_at < NOW() - INTERVAL '1 day'" in sql
+    # Rows with no plan first, then the stalest: the same 200 oldest rows must not take the limit every day.
+    assert "ORDER BY p.built_at NULLS FIRST, a.id" in sql
     assert params == ([7], 200)
     assert rows == [{"application_id": 55, "user_id": 7, "posting": POSTING}]
 

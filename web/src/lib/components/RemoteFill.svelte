@@ -37,10 +37,15 @@
     throw new Error('The request failed. Use the Apply link instead.');
   }
 
+  // Plain, not $state: only read after an await, to see whether the drawer was closed meanwhile.
+  let mounted = true;
+
   async function start() {
     go({ step: 'starting' });
     try {
       const r = await call('remoteStart', applicationId);
+      // The drawer closed while the form was being filled: end the session nobody will see.
+      if (!mounted) return void call('remoteEnd', r.sessionId).catch(() => {});
       ui = { step: 'open', sessionId: r.sessionId, liveViewUrl: r.liveViewUrl, leftForUser: r.leftForUser, captcha: false };
     } catch (e) {
       ui = { step: 'error', text: (e as Error).message };
@@ -102,6 +107,7 @@
 
   // Closing the drawer mid-session ends it; keepalive lets the request finish as the component goes away.
   $effect(() => () => {
+    mounted = false;
     if (ui.step !== 'open') return;
     const body = new FormData();
     body.set('id', String(ui.sessionId));

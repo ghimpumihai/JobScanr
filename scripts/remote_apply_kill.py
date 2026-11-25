@@ -73,13 +73,23 @@ def main() -> int:
     api_key, project_id = os.environ.get("BROWSERBASE_API_KEY"), os.environ.get("BROWSERBASE_PROJECT_ID")
     cf_account, cf_token = os.environ.get("CLOUDFLARE_ACCOUNT_ID"), os.environ.get("CLOUDFLARE_BROWSER_RUN_TOKEN")
     released = closed = 0
+    failed = False
+    # One provider's outage must not stop the other provider or the database rows from being closed.
     with httpx.Client() as client:
         if api_key and project_id:
-            released = release_running_sessions(api_key, project_id, client)
+            try:
+                released = release_running_sessions(api_key, project_id, client)
+            except httpx.HTTPError as exc:
+                failed = True
+                logger.error("Browserbase sessions not closed: %s", type(exc).__name__)
         else:
             logger.warning("BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID not set; Browserbase skipped.")
         if cf_account and cf_token:
-            closed = close_cloudflare_sessions(cf_account, cf_token, client)
+            try:
+                closed = close_cloudflare_sessions(cf_account, cf_token, client)
+            except httpx.HTTPError as exc:
+                failed = True
+                logger.error("Cloudflare sessions not closed: %s", type(exc).__name__)
         else:
             logger.warning("CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_BROWSER_RUN_TOKEN not set; Cloudflare skipped.")
     expired = queries.expire_open_remote_sessions()
@@ -89,7 +99,7 @@ def main() -> int:
         closed,
         expired,
     )
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

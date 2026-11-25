@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 
 from db import queries
+from scripts import remote_apply_kill
 from scripts.remote_apply_kill import close_cloudflare_sessions, release_running_sessions
 
 
@@ -39,6 +40,27 @@ def test_expire_open_remote_sessions_touches_only_open_rows():
         assert queries.expire_open_remote_sessions() == 3
     sql = cur.execute.call_args[0][0]
     assert "SET status = 'expired', ended_at = NOW() WHERE status = 'open'" in sql
+
+
+def test_one_providers_outage_still_closes_the_other_and_the_rows(monkeypatch):
+    for name in (
+        "BROWSERBASE_API_KEY",
+        "BROWSERBASE_PROJECT_ID",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_BROWSER_RUN_TOKEN",
+    ):
+        monkeypatch.setenv(name, "x")
+    monkeypatch.setattr("sys.argv", ["remote_apply_kill"])
+    outage = httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503))
+    with (
+        patch("config.load_environment"),
+        patch("scripts.remote_apply_kill.release_running_sessions", side_effect=outage),
+        patch("scripts.remote_apply_kill.close_cloudflare_sessions", return_value=2) as cloudflare,
+        patch("db.queries.expire_open_remote_sessions", return_value=4) as expire,
+    ):
+        assert remote_apply_kill.main() == 1  # reports the failure
+    cloudflare.assert_called_once()
+    expire.assert_called_once()
 
 
 def test_closes_every_cloudflare_session_with_the_token():
