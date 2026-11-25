@@ -116,7 +116,13 @@ function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.
     locator: () => ({ first: () => ({ waitFor: async () => {} }), innerText: async () => body, count: async () => fileInputs })
   };
   const browser = { contexts: () => [{ pages: () => [page], newPage: async () => page }], close: async () => void w.closed++ };
-  deps.provider = (name) => (w.providersAsked.push(name), {
+  deps.provider = (name) => {
+    w.providersAsked.push(name);
+    // like getProvider when that provider's settings are missing
+    if (name === 'gone') throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_BROWSER_RUN_TOKEN must be set');
+    return fakeProvider();
+  };
+  const fakeProvider = () => ({
     name: 'fake',
     create: async () => {
       if (createError) throw createError;
@@ -257,6 +263,21 @@ test('start: stale open rows of the application are expired and their browsers r
   await startSession(sb, 'uid-1', 55);
   assert.deepEqual(world.released, ['old-1']); // the one with a provider session; the new session stays up
   assert.ok(world.providersAsked.includes('cloudflare')); // released through the provider that made it
+});
+
+test('start: a stale row from a provider no longer configured does not stop the new start', async () => {
+  const sb = fakeSb({ stale: [{ provider: 'gone', provider_session_id: 'old-1' }] });
+  const result = await startSession(sb, 'uid-1', 55);
+  assert.equal(result.sessionId, 900);
+  assert.ok(world.providersAsked.includes('gone'));
+});
+
+test('check: a session whose provider is no longer configured is closed, not left open', async () => {
+  const sb = fakeSb({ row: { ...OPEN_ROW, provider: 'gone' } });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'expired' });
+  const closed = updates(sb).at(-1);
+  assert.equal(closed.values.status, 'expired');
+  assert.deepEqual(closed.filters, [['id', 900], ['status', 'open']]);
 });
 
 test('formUrl: only the ATS-hosted form page', () => {

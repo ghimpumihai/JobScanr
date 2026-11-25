@@ -3,6 +3,7 @@
   // and clicks Submit there. JobScanr never submits; Applied is recorded only from the employer's confirmation page.
   import { deserialize } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
+  import { startUnlessClosed } from '$lib/remoteFillStart';
 
   let { applicationId, provider }: { applicationId: number; provider: string } = $props();
 
@@ -43,10 +44,13 @@
   async function start() {
     go({ step: 'starting' });
     try {
-      const r = await call('remoteStart', applicationId);
-      // The drawer closed while the form was being filled: end the session nobody will see.
-      if (!mounted) return void call('remoteEnd', r.sessionId).catch(() => {});
-      ui = { step: 'open', sessionId: r.sessionId, liveViewUrl: r.liveViewUrl, leftForUser: r.leftForUser, captcha: false };
+      const r = await startUnlessClosed(
+        () => call('remoteStart', applicationId),
+        (id) => call('remoteEnd', id),
+        () => mounted
+      );
+      if (!r) return; // the drawer closed meanwhile; that session is already ended
+      ui ={ step: 'open', sessionId: r.sessionId, liveViewUrl: r.liveViewUrl, leftForUser: r.leftForUser, captcha: false };
     } catch (e) {
       ui = { step: 'error', text: (e as Error).message };
     }

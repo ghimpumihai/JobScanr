@@ -22,8 +22,10 @@ export interface RemoteProvider {
 
 export const PROVIDERS = ['browserbase', 'cloudflare'] as const;
 export type ProviderName = (typeof PROVIDERS)[number];
-// Both providers allow it; Browserbase's free plan caps sessions at 15 minutes.
+// The app ends sessions at 15 minutes (Browserbase's free plan caps them there).
 export const SESSION_SECONDS = 15 * 60;
+// Providers keep a session 2 minutes longer, so the app's last check at 15 minutes can still read the page.
+const PROVIDER_SECONDS = SESSION_SECONDS + 120;
 
 export function getProvider(name: string = process.env.REMOTE_APPLY_PROVIDER || 'browserbase'): RemoteProvider {
   if (name === 'browserbase') return browserbase();
@@ -45,7 +47,7 @@ export function browserbase(): RemoteProvider {
       const s = await bb.sessions.create({
         projectId,
         keepAlive: true, // survives the disconnect between server actions
-        api_timeout: SESSION_SECONDS,
+        api_timeout: PROVIDER_SECONDS,
         ...(recordingOff ? { browserSettings: { recordSession: false, logSession: false } } : {})
       });
       return { id: s.id, connection: { url: s.connectUrl } };
@@ -90,7 +92,7 @@ export function cloudflare(): RemoteProvider {
     name: 'cloudflare',
     async create() {
       // keep_alive: the session outlives each server action's connection. Recording is off unless asked for.
-      const { sessionId } = await (await api(`/browser?keep_alive=${SESSION_SECONDS * 1000}`, 'POST')).json();
+      const { sessionId } = await (await api(`/browser?keep_alive=${PROVIDER_SECONDS * 1000}`, 'POST')).json();
       return { id: sessionId, connection: connectionFor(sessionId) };
     },
     async connection(id) {

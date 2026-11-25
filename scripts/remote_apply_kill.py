@@ -79,7 +79,7 @@ def main() -> int:
         if api_key and project_id:
             try:
                 released = release_running_sessions(api_key, project_id, client)
-            except httpx.HTTPError as exc:
+            except Exception as exc:  # also a malformed reply (KeyError, TypeError, ValueError), not only HTTP errors
                 failed = True
                 logger.error("Browserbase sessions not closed: %s", type(exc).__name__)
         else:
@@ -87,7 +87,7 @@ def main() -> int:
         if cf_account and cf_token:
             try:
                 closed = close_cloudflare_sessions(cf_account, cf_token, client)
-            except httpx.HTTPError as exc:
+            except Exception as exc:  # as above
                 failed = True
                 logger.error("Cloudflare sessions not closed: %s", type(exc).__name__)
         else:

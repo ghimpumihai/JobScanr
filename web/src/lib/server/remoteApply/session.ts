@@ -157,7 +157,12 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     .lt('started_at', new Date(deps.now().getTime() - SESSION_SECONDS * 1000).toISOString())
     .select('provider, provider_session_id');
   for (const s of stale ?? []) {
-    if (s.provider_session_id) await deps.provider(s.provider).release(s.provider_session_id).catch(() => {});
+    // try, not .catch: getProvider throws at once when that provider is no longer configured.
+    try {
+      if (s.provider_session_id) await deps.provider(s.provider).release(s.provider_session_id);
+    } catch {
+      // best effort: the provider's own timeout ends it anyway
+    }
   }
   const { data: row, error: insertError } = await sb
     .from('remote_apply_sessions')
@@ -227,8 +232,15 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
   if (!row) throw new RemoteError(404, 'Session not found.');
   if (row.status !== 'open') return { state: row.status };
 
-  // The provider that made this session, even if REMOTE_APPLY_PROVIDER has changed since.
-  const provider = deps.provider(row.provider);
+  // The provider that made this session, even if REMOTE_APPLY_PROVIDER has changed since. If it is no longer
+  // configured, nothing can reach the session: close the row so it does not stay open, and let the provider time out.
+  let provider: RemoteProvider;
+  try {
+    provider = deps.provider(row.provider);
+  } catch {
+    await sb.from('remote_apply_sessions').update({ status: 'expired', ended_at: deps.now().toISOString() }).eq('id', row.id).eq('status', 'open');
+    return { state: 'expired' };
+  }
   const close = async (state: SessionState, extra: Record<string, unknown> = {}) => {
     if (row.provider_session_id) await provider.release(row.provider_session_id).catch(() => {});
     // Only an open row changes, so two tabs closing at once record one outcome.

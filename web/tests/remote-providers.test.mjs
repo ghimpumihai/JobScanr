@@ -46,7 +46,8 @@ test('cloudflare create: one POST with keep_alive and the token; reconnect needs
   replies.push([200, { sessionId: 's-1', webSocketDebuggerUrl: 'ignored' }]);
   const { id, connection } = await cloudflare().create();
   assert.equal(id, 's-1');
-  assert.deepEqual(calls, [{ url: `${BASE}/browser?keep_alive=${SESSION_SECONDS * 1000}`, method: 'POST', auth: 'Bearer tok' }]);
+  // Two minutes past the app's own limit, so the last check at 15 minutes can still reach the page.
+  assert.deepEqual(calls, [{ url: `${BASE}/browser?keep_alive=${(SESSION_SECONDS + 120) * 1000}`, method: 'POST', auth: 'Bearer tok' }]);
   assert.equal(connection.url, 'wss://api.cloudflare.com/client/v4/accounts/acct/browser-run/devtools/browser/s-1');
   assert.deepEqual(connection.headers, { Authorization: 'Bearer tok' });
 });

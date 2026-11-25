@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from db import queries
 from scripts import remote_apply_kill
@@ -42,7 +43,14 @@ def test_expire_open_remote_sessions_touches_only_open_rows():
     assert "SET status = 'expired', ended_at = NOW() WHERE status = 'open'" in sql
 
 
-def test_one_providers_outage_still_closes_the_other_and_the_rows(monkeypatch):
+@pytest.mark.parametrize(
+    "outage",
+    [
+        httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503)),
+        TypeError("string indices must be integers"),  # a malformed reply, not an HTTP error
+    ],
+)
+def test_one_providers_outage_still_closes_the_other_and_the_rows(monkeypatch, outage):
     for name in (
         "BROWSERBASE_API_KEY",
         "BROWSERBASE_PROJECT_ID",
@@ -51,7 +59,6 @@ def test_one_providers_outage_still_closes_the_other_and_the_rows(monkeypatch):
     ):
         monkeypatch.setenv(name, "x")
     monkeypatch.setattr("sys.argv", ["remote_apply_kill"])
-    outage = httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503))
     with (
         patch("config.load_environment"),
         patch("scripts.remote_apply_kill.release_running_sessions", side_effect=outage),
