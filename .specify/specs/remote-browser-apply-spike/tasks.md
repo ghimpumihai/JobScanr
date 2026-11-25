@@ -78,8 +78,9 @@ offline.
 - Session logic lives in `web/src/lib/server/remoteApply/session.ts`; the three actions in
   `applications/+page.server.ts` are thin wrappers. Config is read from `process.env`, like the rest of the web app.
 - The remote browser only ever opens `job-boards.greenhouse.io`, `jobs.lever.co` or `jobs.ashbyhq.com` over https.
-- Idle close is a 15-minute maximum session age (the provider timeout too), not 10 minutes idle; simpler and the
-  same cost bound.
+- Idle close is a maximum session age, not 10 minutes idle; simpler and the same cost bound. The app ends sessions
+  at 13 minutes and the providers keep them 15 (Browserbase's free-plan cap), so the app's last check can still
+  read the confirmation page (changed 2026-11-26 after review).
 - `fields_changed_by_user` is not measured: it needs the filled values kept between polls, which the spec forbids
   storing. Stage 2 measures fill accuracy with the fake persona instead.
 - Error messages from a CDP connection can contain the connect key, so only the error's name is logged or stored.

@@ -43,6 +43,20 @@ def test_expire_open_remote_sessions_touches_only_open_rows():
     assert "SET status = 'expired', ended_at = NOW() WHERE status = 'open'" in sql
 
 
+def test_a_cloudflare_entry_without_an_id_is_skipped_not_deleted_as_none():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url.path}")
+        if request.method == "GET":
+            return httpx.Response(200, json=[{"sessionId": "a"}, {"session_id": "b"}])
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert close_cloudflare_sessions("acct", "tok", client) == 1
+    assert not any(path.endswith("/browser/None") for path in seen)
+
+
 def test_a_bad_session_entry_is_skipped_and_the_count_stays_right():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "GET":

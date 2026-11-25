@@ -62,6 +62,9 @@ def close_cloudflare_sessions(account_id: str, token: str, client: httpx.Client)
         # As above: skip one bad session, keep the count right for the rest.
         try:
             sid = s if isinstance(s, str) else s.get("sessionId") or s.get("id")
+            if not sid:
+                logger.warning("Skipped a Cloudflare session list entry with no session id")
+                continue
             r = client.delete(f"{base}/browser/{sid}", headers=headers, timeout=30)
         except Exception as exc:
             logger.warning("Could not close a Cloudflare session: %s", type(exc).__name__)
