@@ -146,6 +146,61 @@ test('real-form labels: one field for first and last name, ethnicity is not a ci
   await page.close();
 });
 
+// Live trial 2026-11-25: Greenhouse dropdowns insert inputs while filling, which moved positional lookups onto the
+// wrong fields (Phone got the city), and each unmatched dropdown waited Playwright's 30 s default.
+test('inputs inserted mid-fill never shift values into the wrong fields', async () => {
+  const page = await open(`<form>
+    <label for="q1">Are you authorized to work?</label><input id="q1" name="question_1" role="combobox" aria-controls="m1">
+    <ul id="m1" hidden><li role="option">Yes</li><li role="option">No</li></ul>
+    <label for="first">First Name</label><input id="first">
+    <label for="phone">Phone</label><input id="phone" type="tel">
+    <label for="loc">Location (City)</label><input id="loc" role="combobox">
+    <button type="submit">Submit</button></form>
+    <script>
+      const q1 = document.getElementById('q1'), m1 = document.getElementById('m1');
+      q1.addEventListener('click', () => {
+        m1.hidden = false;
+        // like react-select: a new input appears before the remaining fields
+        q1.insertAdjacentHTML('afterend', '<input aria-hidden="true" style="width:1px">');
+      });
+      m1.addEventListener('click', (e) => { q1.value = e.target.textContent; m1.hidden = true; });
+    </script>`);
+  const plan = { ...GH_PLAN, fields: [{ name: 'question_1', label: 'Are you authorized to work?', type: 'single_select', value: 1, option_label: 'Yes' }] };
+  const started = Date.now();
+  const result = await fillPage(page, plan, PROFILE, null);
+
+  assert.equal(await page.inputValue('#q1'), 'Yes'); // opened with a click, exact option picked
+  assert.equal(await page.inputValue('#first'), 'Jane');
+  assert.equal(await page.inputValue('#phone'), '+44 7000 000000'); // not the city
+  assert.equal(await page.inputValue('#loc'), ''); // no exact option: cleared and left for the user
+  assert.ok(result.unfilled.includes('location'));
+  assert.ok(Date.now() - started < 15_000, `took ${Date.now() - started} ms`); // bounded waits, not 30 s each
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+// Live trial 2026-11-25: Lever read the uploaded CV and emptied "Full name" after it had been typed.
+test('a page that clears fields after the CV upload, or a moment later, still ends up filled', async () => {
+  const page = await open(`<form>
+    <label for="r">Resume/CV</label><input id="r" type="file" name="resume">
+    <label for="n">Full name</label><input id="n" name="name">
+    <label for="e">Email</label><input id="e" type="email" name="email">
+    <button type="submit">Submit</button></form>
+    <script>
+      const n = document.getElementById('n');
+      document.getElementById('r').addEventListener('change', () => setTimeout(() => (n.value = ''), 200));
+      let cleared = false; // and once more, shortly after the name was first typed
+      n.addEventListener('input', () => { if (!cleared && n.value) { cleared = true; setTimeout(() => (n.value = ''), 300); } });
+    </script>`);
+  const result = await fillPage(page, null, PROFILE, CV);
+  assert.equal(await page.inputValue('#n'), 'Jane Q Doe');
+  assert.equal(await page.inputValue('#e'), 'jane@example.com');
+  assert.equal(result.cvAttached, true);
+  assert.deepEqual(result.unfilled, []);
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
 test('a page with no recognisable fields fills nothing and reports the CV as unfilled', async () => {
   const page = await open('<form><input name="q1"><button type="submit">Go</button></form>');
   const result = await fillPage(page, null, PROFILE, CV);

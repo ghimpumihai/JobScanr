@@ -4,7 +4,7 @@
   import { deserialize } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
 
-  let { applicationId }: { applicationId: number } = $props();
+  let { applicationId, provider }: { applicationId: number; provider: string } = $props();
 
   type State =
     | { step: 'idle' }
@@ -115,7 +115,7 @@
   {:else if ui.step === 'consent'}
     <div class="space-y-2 text-xs text-content-muted">
       <p>
-        Your name, contact details, links and CV are loaded into a browser run by Browserbase, a third-party service, for
+        Your name, contact details, links and CV are loaded into a browser run by {provider}, a third-party service, for
         this one application. The session ends when you close it or after 15 minutes.
       </p>
       <p>JobScanr never clicks Submit. Check every answer before you submit it.</p>

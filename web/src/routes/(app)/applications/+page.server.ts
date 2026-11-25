@@ -78,6 +78,11 @@ function demoRow(
   };
 }
 
+/** Named in the consent notice, so users know which company runs the browser. */
+function remoteProviderLabel(): string {
+  return process.env.REMOTE_APPLY_PROVIDER === 'cloudflare' ? 'Cloudflare' : 'Browserbase';
+}
+
 function isLiveUser(locals: App.Locals): boolean {
   return Boolean(locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id');
 }
@@ -138,7 +143,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     ) as Record<Tab, number>;
     const applications = DEMO_ROWS.filter((r) => r.status === TABS[f.tab]);
     // Shown in demo only while the trial is switched on, so the panel can be reviewed; its actions refuse demo mode.
-    return { ...shown, applications, counts, profile: DEMO_PROFILE, loadError: false, demo: true, remoteApply: isEnabled() };
+    return { ...shown, applications, counts, profile: DEMO_PROFILE, loadError: false, demo: true, remoteApply: isEnabled(), remoteProvider: remoteProviderLabel() };
   }
 
   const status = TABS[f.tab];
@@ -161,7 +166,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (failed || !rows.data || !profileResult.data) {
     console.error('Failed to load applications:', failed?.error?.message);
     const counts = { to_apply: 0, applied: 0, not_interested: 0, closed: 0 };
-    return { ...shown, applications: [], counts, profile: null, loadError: true, demo: false, remoteApply: false };
+    return { ...shown, applications: [], counts, profile: null, loadError: true, demo: false, remoteApply: false, remoteProvider: '' };
   }
 
   // Nested join rows are untyped.
@@ -194,7 +199,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     portfolio: text(urls.portfolio),
     resume_filename: text(p.resume_filename)
   };
-  return { ...shown, applications, counts, profile, loadError: false, demo: false, remoteApply: isEnabled() && isAllowlisted(p.id) };
+  return { ...shown, applications, counts, profile, loadError: false, demo: false, remoteApply: isEnabled() && isAllowlisted(p.id), remoteProvider: remoteProviderLabel() };
 };
 
 export const actions: Actions = {

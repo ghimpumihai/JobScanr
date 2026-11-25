@@ -96,10 +96,16 @@ function standardValues(profile: FillProfile): Record<StandardKey, string | unde
   };
 }
 
+// Each control is tagged once and found again by its tag: dropdowns insert inputs while the form is being filled,
+// which shifted positional (nth) lookups onto the wrong fields on a real Greenhouse form (Phone got the city).
+const TAG = 'data-jobscanr-control';
+const byTag = (page: Page, index: number) => page.locator(`[${TAG}="${index}"]`);
+
 async function listControls(page: Page): Promise<Control[]> {
-  return page.locator(CONTROLS).evaluateAll((els) =>
+  return page.locator(CONTROLS).evaluateAll((els, tag) =>
     els.map((el, index) => {
       const e = el as HTMLInputElement;
+      e.setAttribute(tag, String(index));
       const labels = Array.from(e.labels ?? []).map((l) => l.textContent ?? '');
       const labelledBy = (e.getAttribute('aria-labelledby') ?? '')
         .split(/\s+/)
@@ -129,39 +135,64 @@ async function listControls(page: Page): Promise<Control[]> {
         // File inputs are usually hidden behind a styled button; they still accept files.
         visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0)
       };
-    })
+    }), TAG
   );
 }
 
+const STEP_MS = 2000; // every wait is bounded: Playwright's own default is 30 s, which made each dropdown take 33 s
+
 /** Refuses to click anything that could submit the form. */
 async function clickOption(option: Locator): Promise<void> {
-  const unsafe = await option.evaluate((el) => {
-    const tag = el.tagName.toLowerCase();
-    const type = (el.getAttribute('type') ?? '').toLowerCase();
-    return tag === 'button' || type === 'submit' || type === 'image' || el.getAttribute('role') !== 'option';
-  });
+  const unsafe = await option.evaluate(
+    (el) => {
+      const tag = el.tagName.toLowerCase();
+      const type = (el.getAttribute('type') ?? '').toLowerCase();
+      return tag === 'button' || type === 'submit' || type === 'image' || el.getAttribute('role') !== 'option';
+    },
+    undefined,
+    { timeout: STEP_MS }
+  );
   if (unsafe) throw new Error('refusing to click a control that is not a dropdown option');
-  await option.click({ timeout: 2000 });
+  await option.click({ timeout: STEP_MS });
+}
+
+/** Opens the dropdown and picks the option whose text is exactly `label`; otherwise closes it and reports false. */
+async function pickOption(page: Page, el: Locator, label: string): Promise<boolean> {
+  const option = page.getByRole('option', { name: label, exact: true }).first();
+  try {
+    await el.click({ timeout: STEP_MS }); // opens the list; a combobox input never submits
+    // The list renders a moment after the click; only type when it still shows no such option (search-style lists).
+    const shown = await option.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false);
+    if (!shown) await el.pressSequentially(label, { timeout: STEP_MS });
+    await option.waitFor({ state: 'visible', timeout: STEP_MS });
+    await clickOption(option);
+    return true;
+  } catch {
+    // No exact option (for example a city search with longer names): close the list, leave it for the user.
+    await el.press('Escape', { timeout: STEP_MS }).catch(() => {});
+    await el.fill('', { timeout: STEP_MS }).catch(() => {});
+    return false;
+  }
 }
 
 async function setValue(page: Page, control: Control, field: { value: string | number | boolean; option_label?: string }): Promise<boolean> {
-  const el = page.locator(CONTROLS).nth(control.index);
+  const el = byTag(page, control.index);
   const label = field.option_label ?? String(field.value);
   try {
     if (control.tag === 'select') {
       // Try the visible label first, then the API value.
-      const picked = await el.selectOption({ label }, { timeout: 2000 }).catch(() => el.selectOption(String(field.value), { timeout: 2000 }));
+      const picked = await el
+        .selectOption({ label }, { timeout: STEP_MS })
+        .catch(() => el.selectOption(String(field.value), { timeout: STEP_MS }));
       return picked.length > 0;
     }
     if (control.type === 'checkbox') {
-      await el.setChecked(field.value === true || field.value === 'true', { timeout: 2000 });
+      await el.setChecked(field.value === true || field.value === 'true', { timeout: STEP_MS });
       return true;
     }
     if (control.type === 'radio') return false; // radio groups: left for the user in the spike
-    await el.fill(label, { timeout: 2000 });
-    if (control.role === 'combobox') {
-      await clickOption(page.getByRole('option', { name: label, exact: true }).first());
-    }
+    if (control.role === 'combobox') return await pickOption(page, el, label);
+    await el.fill(label, { timeout: STEP_MS });
     return true;
   } catch {
     return false;
@@ -172,6 +203,27 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
   const controls = (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
   const used = new Set<number>();
   const result: FillResult = { planned: 0, filled: 0, unfilled: [], cvAttached: false };
+  const typed: { control: Control; value: string; label: string }[] = [];
+
+  // CV first: Lever and Greenhouse read an uploaded CV and reset fields from it, which cleared a name typed before
+  // the upload (live trial, Lever in Browserbase). Let that finish before typing.
+  if (cv) {
+    const files = controls.filter((c) => c.type === 'file');
+    const target = files.find((c) => /resume|\bcv\b|curriculum/.test(c.text)) ?? (files.length === 1 ? files[0] : undefined);
+    result.planned += 1;
+    if (target) {
+      try {
+        await byTag(page, target.index).setInputFiles(cv, { timeout: 5000 });
+        result.cvAttached = true;
+        result.filled += 1;
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      } catch {
+        result.unfilled.push('resume');
+      }
+    } else {
+      result.unfilled.push('resume');
+    }
+  }
 
   // Planned answers (Greenhouse) by field name or id, before the standard matcher can claim the control.
   for (const field of plan?.fields ?? []) {
@@ -195,24 +247,22 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     result.planned += 1;
     used.add(control.index);
     done.add(key);
-    if (await setValue(page, control, { value })) result.filled += 1;
-    else result.unfilled.push(key);
+    if (await setValue(page, control, { value })) {
+      result.filled += 1;
+      if (control.role !== 'combobox' && control.tag !== 'select') typed.push({ control, value, label: key });
+    } else {
+      result.unfilled.push(key);
+    }
   }
 
-  if (cv) {
-    const files = controls.filter((c) => c.type === 'file');
-    const target = files.find((c) => /resume|\bcv\b|curriculum/.test(c.text)) ?? (files.length === 1 ? files[0] : undefined);
-    result.planned += 1;
-    if (target) {
-      try {
-        await page.locator(CONTROLS).nth(target.index).setInputFiles(cv, { timeout: 5000 });
-        result.cvAttached = true;
-        result.filled += 1;
-      } catch {
-        result.unfilled.push('resume');
-      }
-    } else {
-      result.unfilled.push('resume');
+  // A late CV read can still clear typed fields; check once and type them again.
+  await page.waitForTimeout(1000);
+  for (const t of typed) {
+    const el = byTag(page, t.control.index);
+    if ((await el.inputValue({ timeout: STEP_MS }).catch(() => t.value)) !== '') continue;
+    if (!(await setValue(page, t.control, { value: t.value }))) {
+      result.filled -= 1;
+      result.unfilled.push(t.label);
     }
   }
   return result;

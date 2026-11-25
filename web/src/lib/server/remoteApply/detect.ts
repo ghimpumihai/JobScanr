@@ -8,8 +8,12 @@ const CHALLENGE_FRAMES = [/google\.com\/recaptcha\/.*\/bframe/, /recaptcha\.net\
 export async function captchaVisible(page: Page): Promise<boolean> {
   for (const frame of page.frames()) {
     if (!CHALLENGE_FRAMES.some((re) => re.test(frame.url()))) continue;
-    const box = await (await frame.frameElement().catch(() => null))?.boundingBox().catch(() => null);
-    if (box && box.width > 0 && box.height > 0) return true;
+    // Challenge frames are often in the page all along, hidden until needed; only a shown one counts.
+    const el = await frame.frameElement().catch(() => null);
+    if (el && (await el.isVisible().catch(() => false))) {
+      const box = await el.boundingBox().catch(() => null);
+      if (box && box.width > 30 && box.height > 30) return true;
+    }
   }
   return false;
 }

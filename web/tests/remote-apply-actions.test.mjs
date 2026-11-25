@@ -103,28 +103,29 @@ function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.fr
 
 let world;
 function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1', body = 'Apply for this job', running = true, connectError = null, createError = null, captcha = false } = {}) {
-  const w = { calls: [], released: [], filled: null, closed: 0 };
+  const w = { calls: [], released: [], filled: null, closed: 0, providersAsked: [] };
+  const CONNECTION = { url: 'wss://connect.example/', headers: { Authorization: 'Bearer SECRET' } };
   const page = {
     goto: async (url) => (w.calls.push(['goto', url]), { status: () => gotoStatus }),
     url: () => pageUrl,
     locator: () => ({ first: () => ({ waitFor: async () => {} }), innerText: async () => body })
   };
   const browser = { contexts: () => [{ pages: () => [page], newPage: async () => page }], close: async () => void w.closed++ };
-  deps.provider = () => ({
+  deps.provider = (name) => (w.providersAsked.push(name), {
     name: 'fake',
     create: async () => {
       if (createError) throw createError;
       w.calls.push(['create']);
-      return { id: 'bb-1', connectUrl: 'wss://connect.example/?apiKey=SECRET' };
+      return { id: 'bb-1', connection: CONNECTION };
     },
-    connectUrl: async () => (running ? 'wss://connect.example/?apiKey=SECRET' : null),
+    connection: async () => (running ? CONNECTION : null),
     liveViewUrl: async () => 'https://live.example/view?token=LIVE',
     release: async (id) => void w.released.push(id),
     listRunning: async () => []
   });
-  deps.connect = async (url) => {
+  deps.connect = async (connection) => {
     if (connectError) throw connectError;
-    w.calls.push(['connect', url]);
+    w.calls.push(['connect', connection]);
     return browser;
   };
   deps.fill = async (_page, plan, profile, cv) => {
@@ -206,7 +207,7 @@ test('start: a closed posting marks the session posting_gone and releases it', a
 });
 
 test('start: a browser failure releases the session, records the error name only, and never logs the key', async () => {
-  world = fakeWorld({ connectError: new TypeError('connect wss://connect.example/?apiKey=SECRET failed') });
+  world = fakeWorld({ connectError: new TypeError('connect wss://connect.example/ with Bearer SECRET failed') });
   const sb = fakeSb();
   await assert.rejects(startSession(sb, 'uid-1', 55), (e) => e.status === 502);
   assert.deepEqual(world.released, ['bb-1']);
@@ -230,6 +231,7 @@ test('formUrl: only the ATS-hosted form page', () => {
 const OPEN_ROW = {
   id: 900,
   status: 'open',
+  provider: 'cloudflare',
   provider_session_id: 'bb-1',
   captcha_seen: false,
   started_at: '2026-11-24T09:55:00Z',
@@ -248,6 +250,21 @@ test('check: the confirmation page records Applied with the Mark as Applied upda
   assert.equal(closed.values.status, 'submitted');
   assert.deepEqual(closed.filters, [['id', 900], ['status', 'open']]);
   assert.deepEqual(world.released, ['bb-1']);
+});
+
+test('check: uses the provider that made the session, not the one configured now', async () => {
+  process.env.REMOTE_APPLY_PROVIDER = 'browserbase';
+  await checkSession(fakeSb({ row: OPEN_ROW }), 900);
+  assert.deepEqual(world.providersAsked, ['cloudflare']);
+  delete process.env.REMOTE_APPLY_PROVIDER;
+});
+
+test('start: a provider out of free minutes (429) says so, records quota, and opens nothing', async () => {
+  world = fakeWorld({ createError: Object.assign(new Error('Cloudflare Browser Run returned 429'), { status: 429 }) });
+  const sb = fakeSb();
+  await assert.rejects(startSession(sb, 'uid-1', 55), (e) => e.status === 503 && /no free time left/.test(e.message));
+  assert.equal(updates(sb).at(-1).values.error, 'quota');
+  assert.equal(world.calls.length, 0);
 });
 
 test('check: still filling stays open and records a captcha once seen', async () => {

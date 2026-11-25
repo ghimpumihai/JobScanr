@@ -23,9 +23,11 @@
     actions: Snippet<[ApplicationRecord]>;
     /** The user is in the "Fill it for me" trial (#129). */
     remoteApply?: boolean;
+    /** Company running the remote browser, named in the consent notice. */
+    remoteProvider?: string;
   }
 
-  let { application, profile, onclose, actions, remoteApply = false }: Props = $props();
+  let { application, profile, onclose, actions, remoteApply = false, remoteProvider = 'Browserbase' }: Props = $props();
 
   const canFill = $derived(
     remoteApply && application?.status === 'manual_apply' && ['greenhouse', 'lever', 'ashby'].includes(application.ats_platform)
@@ -123,7 +125,7 @@
         {#if canFill}
           {#key application.id}
             <!-- The live view shows a desktop-sized page, so the drawer widens while it is open (has-[iframe]). -->
-            <RemoteFill applicationId={application.id} />
+            <RemoteFill applicationId={application.id} provider={remoteProvider} />
           {/key}
         {/if}
         <section class="space-y-2">

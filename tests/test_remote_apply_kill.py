@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 
 from db import queries
-from scripts.remote_apply_kill import release_running_sessions
+from scripts.remote_apply_kill import close_cloudflare_sessions, release_running_sessions
 
 
 def test_releases_every_running_session_and_skips_failures():
@@ -39,3 +39,19 @@ def test_expire_open_remote_sessions_touches_only_open_rows():
         assert queries.expire_open_remote_sessions() == 3
     sql = cur.execute.call_args[0][0]
     assert "SET status = 'expired', ended_at = NOW() WHERE status = 'open'" in sql
+
+
+def test_closes_every_cloudflare_session_with_the_token():
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer tok"
+        seen.append((request.method, str(request.url)))
+        if request.method == "GET":
+            return httpx.Response(200, json=[{"sessionId": "a"}, {"id": "b"}])
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert close_cloudflare_sessions("acct", "tok", client) == 2
+    base = "https://api.cloudflare.com/client/v4/accounts/acct/browser-run/devtools"
+    assert seen == [("GET", f"{base}/session"), ("DELETE", f"{base}/browser/a"), ("DELETE", f"{base}/browser/b")]

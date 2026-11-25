@@ -8,7 +8,7 @@ import { MAX_CV_SIZE } from '$lib/cvFile';
 import { safeHttpUrl } from '$lib/safeUrl';
 import { captchaVisible, isConfirmation } from './detect';
 import { fillPage, type FillPlan, type FillProfile } from './fill';
-import { browserbase, SESSION_SECONDS, type RemoteProvider } from './provider';
+import { getProvider, SESSION_SECONDS, type Connection, type RemoteProvider } from './provider';
 
 export const DAILY_CAP = 5;
 // Only the ATS-hosted form pages, so the remote browser is never sent anywhere else.
@@ -20,8 +20,9 @@ const FORM_HOSTS: Record<string, string> = {
 
 /** Swapped in tests; nothing else changes them. */
 export const deps = {
-  provider: (): RemoteProvider => browserbase(),
-  connect: (url: string): Promise<Browser> => chromium.connectOverCDP(url),
+  /** No name: the one REMOTE_APPLY_PROVIDER picks, for new sessions. With a name: the one that made a session. */
+  provider: (name?: string): RemoteProvider => getProvider(name),
+  connect: (c: Connection): Promise<Browser> => chromium.connectOverCDP(c.url, { headers: c.headers }),
   fill: fillPage,
   captchaVisible,
   now: () => new Date()
@@ -167,7 +168,7 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     const created = await provider.create();
     providerId = created.id;
     await sb.from('remote_apply_sessions').update({ provider_session_id: providerId }).eq('id', row.id);
-    browser = await deps.connect(created.connectUrl);
+    browser = await deps.connect(created.connection);
     const page = await firstPage(browser);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     if (response && (response.status() === 404 || response.status() === 410)) {
@@ -186,9 +187,11 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     return { sessionId: row.id, liveViewUrl, leftForUser: [...(plan?.for_user ?? []).map((q) => q.label), ...result.unfilled] };
   } catch (e) {
     if (e instanceof RemoteError) throw e;
-    console.error('Remote fill failed:', errorName(e));
+    const quota = (e as { status?: number })?.status === 429; // a free plan's daily or monthly minutes are used up
+    console.error('Remote fill failed:', quota ? 'quota' : errorName(e));
     if (providerId) await provider.release(providerId).catch(() => {});
-    await finish('error', { error: errorName(e) });
+    await finish('error', { error: quota ? 'quota' : errorName(e) });
+    if (quota) throw new RemoteError(503, 'The remote browser service has no free time left today. Use the Apply link instead.');
     throw new RemoteError(502, 'The remote browser could not open this form. Use the Apply link instead.');
   } finally {
     await browser?.close().catch(() => {}); // disconnects; the provider keeps the session for the live view
@@ -202,13 +205,14 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
 export async function checkSession(sb: SupabaseClient, sessionId: number, final = false): Promise<{ state: SessionState; captcha?: boolean }> {
   const { data: row } = await sb
     .from('remote_apply_sessions')
-    .select('id, status, provider_session_id, captcha_seen, started_at, application_id, applications!inner(job_postings!inner(companies!inner(ats_platform)))')
+    .select('id, status, provider, provider_session_id, captcha_seen, started_at, application_id, applications!inner(job_postings!inner(companies!inner(ats_platform)))')
     .eq('id', sessionId)
     .single();
   if (!row) throw new RemoteError(404, 'Session not found.');
   if (row.status !== 'open') return { state: row.status };
 
-  const provider = deps.provider();
+  // The provider that made this session, even if REMOTE_APPLY_PROVIDER has changed since.
+  const provider = deps.provider(row.provider);
   const close = async (state: SessionState, extra: Record<string, unknown> = {}) => {
     if (row.provider_session_id) await provider.release(row.provider_session_id).catch(() => {});
     // Only an open row changes, so two tabs closing at once record one outcome.
@@ -222,13 +226,13 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
 
   if (!isEnabled()) return close('expired');
   if (deps.now().getTime() - new Date(row.started_at).getTime() > SESSION_SECONDS * 1000) return close('expired');
-  const connectUrl = row.provider_session_id ? await provider.connectUrl(row.provider_session_id).catch(() => null) : null;
-  if (!connectUrl) return close('expired');
+  const connection = row.provider_session_id ? await provider.connection(row.provider_session_id).catch(() => null) : null;
+  if (!connection) return close('expired');
 
   const platform: string = (row.applications as any)?.job_postings?.companies?.ats_platform ?? '';
   let browser: Browser | undefined;
   try {
-    browser = await deps.connect(connectUrl);
+    browser = await deps.connect(connection);
     const page = await firstPage(browser);
     const body = (await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')).slice(0, 20_000);
     const captcha = row.captcha_seen || (await deps.captchaVisible(page));

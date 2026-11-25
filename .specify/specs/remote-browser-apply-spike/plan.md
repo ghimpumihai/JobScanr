@@ -37,7 +37,7 @@ answers requests. The spike fits that shape and does not add a server.
 | Long-running Node or Python driver service | New always-on server to host, secure and pay for; not needed when the provider keeps the session alive. |
 | Port `map_screening_question` to TypeScript, build plans on demand | Two copies of the mapping rules that drift apart. Batch plans are at most a day old, which is fine for a spike. |
 | Add a `fill_plan` column on `applications` | PR #126's trigger refuses user changes to any column except `status`/`applied_at`; a separate table avoids touching it. |
-| Cloudflare Browser Run first | Its structured handoff is newer (2026-07-28) and is used through Workers; Browserbase's REST + CDP + iframe live view fits SvelteKit directly. A second provider is optional in stage 2 behind the same three calls. |
+| Cloudflare Browser Run only | Its structured handoff is newer (2026-07-28) and is used through Workers; Browserbase's REST + CDP + iframe live view fits SvelteKit directly. Added as a second provider on 2026-11-24 (see tasks.md, Phase 6 notes). |
 | Global kill switch as a DB flag read on every poll | An env flag plus a kill script that releases every running session through the provider API is enough, and needs no table or policy. |
 
 ### 1.3 Minimising new code

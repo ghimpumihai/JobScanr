@@ -1,5 +1,5 @@
-"""Kill switch for the remote-browser apply spike (#129): release every running Browserbase session in the project
-and mark every open session row expired. Set REMOTE_APPLY_ENABLED=false as well, so no new sessions start.
+"""Kill switch for the remote-browser apply spike (#129): close every running Browserbase and Cloudflare Browser Run
+session and mark every open session row expired. Set REMOTE_APPLY_ENABLED=false as well, so no new sessions start.
 
 Usage:
   python -m scripts.remote_apply_kill            # production (.env)
@@ -21,6 +21,7 @@ from db import queries
 
 logger = logging.getLogger(__name__)
 API = "https://api.browserbase.com/v1"
+CLOUDFLARE = "https://api.cloudflare.com/client/v4/accounts/{account}/browser-run/devtools"
 
 
 def release_running_sessions(api_key: str, project_id: str, client: httpx.Client) -> int:
@@ -43,6 +44,25 @@ def release_running_sessions(api_key: str, project_id: str, client: httpx.Client
     return released
 
 
+def close_cloudflare_sessions(account_id: str, token: str, client: httpx.Client) -> int:
+    """Close every active Browser Run session; returns how many were closed. A failed close is logged and skipped."""
+    base = CLOUDFLARE.format(account=account_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = client.get(f"{base}/session", headers=headers, timeout=30)
+    resp.raise_for_status()
+    body = resp.json()
+    sessions = body if isinstance(body, list) else body.get("sessions") or body.get("result") or []
+    closed = 0
+    for s in sessions:
+        sid = s if isinstance(s, str) else s.get("sessionId") or s.get("id")
+        r = client.delete(f"{base}/browser/{sid}", headers=headers, timeout=30)
+        if r.is_success:
+            closed += 1
+        else:
+            logger.warning("Could not close Cloudflare session %s: HTTP %s", sid, r.status_code)
+    return closed
+
+
 def main() -> int:
     config.setup_logging()
     parser = argparse.ArgumentParser(description="Stop every remote apply session (#129).")
@@ -51,14 +71,24 @@ def main() -> int:
     config.load_environment(staging=args.staging)
 
     api_key, project_id = os.environ.get("BROWSERBASE_API_KEY"), os.environ.get("BROWSERBASE_PROJECT_ID")
-    released = 0
-    if api_key and project_id:
-        with httpx.Client() as client:
+    cf_account, cf_token = os.environ.get("CLOUDFLARE_ACCOUNT_ID"), os.environ.get("CLOUDFLARE_BROWSER_RUN_TOKEN")
+    released = closed = 0
+    with httpx.Client() as client:
+        if api_key and project_id:
             released = release_running_sessions(api_key, project_id, client)
-    else:
-        logger.warning("BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID not set; only the database rows are closed.")
+        else:
+            logger.warning("BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID not set; Browserbase skipped.")
+        if cf_account and cf_token:
+            closed = close_cloudflare_sessions(cf_account, cf_token, client)
+        else:
+            logger.warning("CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_BROWSER_RUN_TOKEN not set; Cloudflare skipped.")
     expired = queries.expire_open_remote_sessions()
-    logger.info("Released %d Browserbase session(s); marked %d open row(s) expired.", released, expired)
+    logger.info(
+        "Released %d Browserbase and %d Cloudflare session(s); marked %d open row(s) expired.",
+        released,
+        closed,
+        expired,
+    )
     return 0
 
 

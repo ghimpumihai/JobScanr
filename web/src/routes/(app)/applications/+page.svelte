@@ -233,6 +233,7 @@
   onclose={() => (selectedId = null)}
   actions={drawerActions}
   remoteApply={data.remoteApply}
+  remoteProvider={data.remoteProvider}
 />
 
 <!-- The region stays in the page so screen readers announce each new message. -->

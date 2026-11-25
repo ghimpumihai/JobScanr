@@ -11,7 +11,7 @@ offline.
 ## Phase 0: Preconditions (no code)
 - [x] Task 0.1: PR #126 merged to `main`; rebase this branch on it.
 - [x] Task 0.2: Add the approved §1.5 amendment to `.specify/constitution.md` (spec §4 wording).
-- [ ] Task 0.3: Create a Browserbase account and project; note whether `recordSession`/`logSession: false` is allowed
+- [x] Task 0.3 (2026-11-24: account on the default free plan; creating a session with `keepAlive` and recording/logging off was accepted, checked with three empty sessions, all released): Create a Browserbase account and project; note whether `recordSession`/`logSession: false` is allowed
       on the plan tier (plan §5). Put `BROWSERBASE_API_KEY`/`BROWSERBASE_PROJECT_ID` in `web/.env` and `.env.stage` only.
 - [x] Task 0.4: Read the Browserbase SDK docs for releasing a session and for `timeout`; read how the web app reads the
       user's CV from Supabase Storage today (#123). Record both in plan §2.3 if they differ from it.
@@ -103,7 +103,7 @@ offline.
   (drawer closed while starting) cannot block that application.
 
 ## Phase 6: Stage 2, Live Fill-Only Measurement
-- [ ] Task 6.1: `web/scripts/fill-spike.mjs` (plan §3.4): fake persona and dummy CV, Browserbase then local headed
+- [x] Task 6.1 (2026-11-24; postings and Greenhouse plans for the fake person come from `scripts/spike_postings.py`; the local baseline is a visible Chromium window): `web/scripts/fill-spike.mjs` (plan §3.4): fake persona and dummy CV, Browserbase then local headed
       Chromium per posting, one at a time, Ashby paced ≥ 0.5 s, never submits, refuses without `--confirm-live`, writes
       results JSON and screenshots to an uncommitted folder. Unit-test the argument guard and that no submit is called.
 - [ ] Task 6.2 [LIVE]: Run on 30 Greenhouse, 15 Lever and 15 Ashby postings. Record fill accuracy, visible-captcha
@@ -112,6 +112,46 @@ offline.
       employer-consented submissions (stage 3); never by submitting to a real employer.
 - [ ] Task 6.4: **Gate check** against spec §5.2 (fill accuracy, captcha rate and its gap to the baseline). Fail →
       write the report (Task 8.1) and stop.
+
+**Two providers (2026-11-24, at the user's request):** Cloudflare Browser Run was added next to Browserbase.
+`REMOTE_APPLY_PROVIDER` picks the provider for new sessions; each session is always checked and closed through the
+provider recorded on its row. Cloudflare is reached from outside Workers over CDP with a bearer token
+(`Browser Rendering - Edit`): `POST /devtools/browser?keep_alive=` creates a session, `wss://…/devtools/browser/{id}`
+reconnects, `Cloudflare.getLiveView` (mode `tab`) gives the live view, `DELETE` closes it, `GET /devtools/session`
+lists them; recording is off by default. Its free plan allows 10 minutes a day and one new browser every 20 s, so
+the runner spaces Cloudflare sessions and stops using it on a 429; the web app reports a 429 as no free time left.
+Stage 2 now runs the same postings in Browserbase, Cloudflare and the local window. Checked live on 2026-11-25 with
+one empty session through the app's provider code: create, connect, the session survives a disconnect, the session
+list finds it, reconnect, a live view URL on `live.browser.run`, close. Not yet checked: embedding that live view in
+the drawer's iframe.
+
+**First live trial (2026-11-25, 3 postings × Browserbase, Cloudflare, local window; nothing submitted):**
+- Postings file: 54 postings (30 Greenhouse, 9 Lever, 15 Ashby; only 3 Lever companies had recent postings);
+  Greenhouse fill plans for 28 of 30 (2 postings had closed).
+- Standard fields and the CV filled in every browser on Lever and Ashby. On the Stripe Greenhouse form, 5–6 fields
+  filled, but the screening dropdowns did not.
+- Bugs found and fixed: (1) positional lookups moved values into the wrong fields once Greenhouse's dropdowns
+  inserted inputs (local run: Phone got the city); controls are now tagged once and found by tag. (2) each dropdown
+  with no exact option waited Playwright's 30 s default (Greenhouse fill took ~100 s); every wait is now 2 s, and
+  dropdowns are opened by a click and closed with Escape when nothing matches. (3) screenshots were not saved (wrong
+  path type). (4) hidden captcha frames could count as shown; only a visible frame over 30 px counts now.
+  Regression test added; it fails with the old lookup.
+- Captcha flags (before fix 4): Lever and Ashby showed one in both cloud browsers and none locally. To be re-checked
+  with screenshots.
+- Fill time per form (before the fixes): Lever 3–8 s remote vs 0.2 s local; Ashby 2–4 s remote vs 0.05 s local.
+- "Required filled" counts every required control, including employer-specific questions the profile cannot answer
+  (Stripe: 33), so the 95% gate needs a narrower definition: required fields JobScanr is meant to fill.
+
+**Trial re-runs (2026-11-25, same 3 postings, after the fixes above):**
+- Second run: no captcha in any browser, so the first run's flags were hidden challenge frames. Greenhouse
+  dropdowns filled in both cloud browsers (fill 13–22 s, down from ~100 s) but not locally, and Lever cleared
+  "Full name" in Browserbase after reading the CV.
+- Fixes: attach the CV first and wait for the page to settle, check typed fields once at the end and refill any
+  that were cleared, and wait up to 1 s for a dropdown list to open before typing into it. Test added.
+- Third run, identical in all three browsers: Greenhouse 8 of 9 (both screening dropdowns, checked in the
+  screenshot: eligible "Yes", sponsorship "No"; the city search left for the user), Lever 8 of 8 including the
+  name, Ashby 4 of 4. Fill time: Greenhouse 30 s Browserbase / 18 s Cloudflare / 7 s local; Lever 19 / 6 / 6 s;
+  Ashby 6 / 5 / 3 s (includes the wait for the CV read). No captcha anywhere. No sessions left running.
 
 ## Phase 7: Stages 3 and 4
 - [ ] Task 7.1: Arrange consenting targets (a Greenhouse or Lever sandbox, or a cooperating employer); write down who
