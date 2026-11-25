@@ -22,10 +22,10 @@ export interface RemoteProvider {
 
 export const PROVIDERS = ['browserbase', 'cloudflare'] as const;
 export type ProviderName = (typeof PROVIDERS)[number];
-// The app ends sessions at 15 minutes (Browserbase's free plan caps them there).
-export const SESSION_SECONDS = 15 * 60;
-// Providers keep a session 2 minutes longer, so the app's last check at 15 minutes can still read the page.
-const PROVIDER_SECONDS = SESSION_SECONDS + 120;
+// Providers keep a session for 15 minutes: Browserbase's free plan allows no more.
+export const PROVIDER_SECONDS = 15 * 60;
+// The app ends sessions 2 minutes earlier, so its last check can still reach the page before the provider ends it.
+export const SESSION_SECONDS = PROVIDER_SECONDS - 120;
 
 export function getProvider(name: string = process.env.REMOTE_APPLY_PROVIDER || 'browserbase'): RemoteProvider {
   if (name === 'browserbase') return browserbase();
@@ -33,11 +33,14 @@ export function getProvider(name: string = process.env.REMOTE_APPLY_PROVIDER || 
   throw new Error(`Unknown remote apply provider: ${name}`);
 }
 
-export function browserbase(): RemoteProvider {
+type BrowserbaseFetch = NonNullable<ConstructorParameters<typeof Browserbase>[0]>['fetch'];
+
+/** `fetchImpl` is for tests: the SDK otherwise uses its own HTTP client. */
+export function browserbase(fetchImpl?: BrowserbaseFetch): RemoteProvider {
   const apiKey = process.env.BROWSERBASE_API_KEY;
   const projectId = process.env.BROWSERBASE_PROJECT_ID;
   if (!apiKey || !projectId) throw new Error('BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID must be set');
-  const bb = new Browserbase({ apiKey });
+  const bb = new Browserbase({ apiKey, fetch: fetchImpl });
   // Recording and logging off was accepted on the free plan (Task 0.3); REMOTE_APPLY_ALLOW_RECORDING=true turns it
   // back on if that ever changes, and pilot users must then be told.
   const recordingOff = process.env.REMOTE_APPLY_ALLOW_RECORDING !== 'true';

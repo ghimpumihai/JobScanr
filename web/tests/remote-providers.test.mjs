@@ -5,7 +5,9 @@ import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true, ws: false }, logLevel: 'error' });
 after(() => vite.close());
-const { getProvider, cloudflare, SESSION_SECONDS } = await vite.ssrLoadModule('/src/lib/server/remoteApply/provider.ts');
+const { getProvider, cloudflare, browserbase, SESSION_SECONDS, PROVIDER_SECONDS } = await vite.ssrLoadModule(
+  '/src/lib/server/remoteApply/provider.ts'
+);
 
 const BASE = 'https://api.cloudflare.com/client/v4/accounts/acct/browser-run/devtools';
 let calls;
@@ -46,10 +48,35 @@ test('cloudflare create: one POST with keep_alive and the token; reconnect needs
   replies.push([200, { sessionId: 's-1', webSocketDebuggerUrl: 'ignored' }]);
   const { id, connection } = await cloudflare().create();
   assert.equal(id, 's-1');
-  // Two minutes past the app's own limit, so the last check at 15 minutes can still reach the page.
-  assert.deepEqual(calls, [{ url: `${BASE}/browser?keep_alive=${(SESSION_SECONDS + 120) * 1000}`, method: 'POST', auth: 'Bearer tok' }]);
+  // The provider keeps it 2 minutes past the app's own limit, so the app's last check can still reach the page.
+  assert.deepEqual(calls, [{ url: `${BASE}/browser?keep_alive=${PROVIDER_SECONDS * 1000}`, method: 'POST', auth: 'Bearer tok' }]);
+  assert.equal(PROVIDER_SECONDS - SESSION_SECONDS, 120);
   assert.equal(connection.url, 'wss://api.cloudflare.com/client/v4/accounts/acct/browser-run/devtools/browser/s-1');
   assert.deepEqual(connection.headers, { Authorization: 'Bearer tok' });
+});
+
+test('browserbase create: kept alive, within the free plan cap, recording and logging off', async () => {
+  process.env.BROWSERBASE_API_KEY = 'k';
+  process.env.BROWSERBASE_PROJECT_ID = 'p';
+  delete process.env.REMOTE_APPLY_ALLOW_RECORDING;
+  const sent = [];
+  const stub = async (url, init) => {
+    sent.push({ url: String(url), method: init?.method, body: JSON.parse(init?.body ?? '{}') });
+    return new Response(JSON.stringify({ id: 'bb-1', connectUrl: 'wss://connect.example/' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+  const { id, connection } = await browserbase(stub).create();
+  assert.equal(id, 'bb-1');
+  assert.equal(connection.url, 'wss://connect.example/');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].url, /\/v1\/sessions$/);
+  assert.equal(sent[0].body.keepAlive, true);
+  // The SDK sends api_timeout as `timeout`; the free plan allows at most 900 s.
+  assert.equal(sent[0].body.timeout, PROVIDER_SECONDS);
+  assert.ok(sent[0].body.timeout <= 900, `timeout ${sent[0].body.timeout} is over the free plan's 900 s`);
+  assert.deepEqual(sent[0].body.browserSettings, { recordSession: false, logSession: false });
 });
 
 test('cloudflare connection: only while the session is listed as running', async () => {

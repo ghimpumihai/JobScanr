@@ -181,7 +181,7 @@ test('start: fills the bare Greenhouse form in a new session and returns the liv
   const [stale, ...rest] = updates(sb);
   // Open rows of this application past the 15-minute limit are expired first, so they cannot block it.
   assert.deepEqual(stale.values, { status: 'expired', ended_at: NOW.toISOString() });
-  assert.deepEqual(stale.filters, [['application_id', 55], ['status', 'open'], ['<started_at', '2026-11-24T09:45:00.000Z']]);
+  assert.deepEqual(stale.filters, [['application_id', 55], ['status', 'open'], ['<started_at', '2026-11-24T09:47:00.000Z']]); // 13 minutes
   assert.ok(sb.log.indexOf(stale) < sb.log.findIndex((q) => q.op === 'insert'));
   assert.deepEqual(rest.map((q) => q.values), [
     { provider_session_id: 'bb-1' },

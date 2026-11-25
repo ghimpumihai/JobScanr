@@ -43,6 +43,16 @@ def test_expire_open_remote_sessions_touches_only_open_rows():
     assert "SET status = 'expired', ended_at = NOW() WHERE status = 'open'" in sql
 
 
+def test_a_bad_session_entry_is_skipped_and_the_count_stays_right():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=[{"id": "a"}, {"no-id": True}, {"id": "c"}])
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert release_running_sessions("k", "p", client) == 2
+
+
 @pytest.mark.parametrize(
     "outage",
     [

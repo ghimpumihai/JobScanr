@@ -31,12 +31,17 @@ def release_running_sessions(api_key: str, project_id: str, client: httpx.Client
     resp.raise_for_status()
     released = 0
     for s in resp.json():
-        r = client.post(
-            f"{API}/sessions/{s['id']}",
-            json={"status": "REQUEST_RELEASE", "projectId": project_id},
-            headers=headers,
-            timeout=30,
-        )
+        # One bad session (a malformed entry, a network error) is skipped, so the count stays right for the rest.
+        try:
+            r = client.post(
+                f"{API}/sessions/{s['id']}",
+                json={"status": "REQUEST_RELEASE", "projectId": project_id},
+                headers=headers,
+                timeout=30,
+            )
+        except Exception as exc:
+            logger.warning("Could not release a Browserbase session: %s", type(exc).__name__)
+            continue
         if r.is_success:
             released += 1
         else:
@@ -54,8 +59,13 @@ def close_cloudflare_sessions(account_id: str, token: str, client: httpx.Client)
     sessions = body if isinstance(body, list) else body.get("sessions") or body.get("result") or []
     closed = 0
     for s in sessions:
-        sid = s if isinstance(s, str) else s.get("sessionId") or s.get("id")
-        r = client.delete(f"{base}/browser/{sid}", headers=headers, timeout=30)
+        # As above: skip one bad session, keep the count right for the rest.
+        try:
+            sid = s if isinstance(s, str) else s.get("sessionId") or s.get("id")
+            r = client.delete(f"{base}/browser/{sid}", headers=headers, timeout=30)
+        except Exception as exc:
+            logger.warning("Could not close a Cloudflare session: %s", type(exc).__name__)
+            continue
         if r.is_success:
             closed += 1
         else:

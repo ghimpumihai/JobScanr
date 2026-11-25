@@ -90,7 +90,7 @@
         if (ui.step === 'open' && r.state === 'open') ui.captcha = Boolean(r.captcha);
         else await finish(r);
       } catch {
-        // A failed poll is retried; the server closes the session after 15 minutes regardless.
+        // A failed poll is retried; the server closes the session after 13 minutes regardless.
       } finally {
         busy = false;
       }
@@ -129,7 +129,7 @@
     <div class="space-y-2 text-xs text-content-muted">
       <p>
         Your name, contact details, links and CV are loaded into a browser run by {provider}, a third-party service, for
-        this one application. The session ends when you close it or after 15 minutes.
+        this one application. The session ends when you close it or after 13 minutes.
       </p>
       <p>JobScanr never clicks Submit. Check every answer before you submit it.</p>
     </div>
