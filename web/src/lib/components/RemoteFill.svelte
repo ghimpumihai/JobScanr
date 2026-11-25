@@ -29,7 +29,8 @@
   async function call(action: string, id: number): Promise<any> {
     const body = new FormData();
     body.set('id', String(id));
-    const res = await fetch(`?/${action}`, { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
+    // Absolute: the panel can outlive a navigation away from /applications.
+    const res = await fetch(`/applications?/${action}`, { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
     const result = deserialize(await res.text());
     if (result.type === 'success') return (result.data as { remote: unknown }).remote;
     if (result.type === 'failure') throw new Error(String(result.data?.error ?? 'Something went wrong.'));
@@ -50,6 +51,8 @@
     if (result.state === 'submitted') {
       ui = { step: 'done', text: 'The employer confirmed your application. It is now in Applied.' };
       await invalidateAll();
+    } else if (result.state === 'unrecorded') {
+      ui = { step: 'done', text: 'The employer confirmed your application, but JobScanr could not record it. Mark it as Applied below.' };
     } else if (result.state !== 'open') {
       ui = { step: 'done', text: 'The session ended. Nothing was recorded; mark it yourself if you did apply.' };
     }
@@ -102,7 +105,7 @@
     if (ui.step !== 'open') return;
     const body = new FormData();
     body.set('id', String(ui.sessionId));
-    void fetch('?/remoteEnd', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' }, keepalive: true }).catch(() => {});
+    void fetch('/applications?/remoteEnd', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' }, keepalive: true }).catch(() => {});
   });
 </script>
 

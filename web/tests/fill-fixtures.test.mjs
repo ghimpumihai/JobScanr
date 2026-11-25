@@ -216,11 +216,48 @@ test('captchaVisible is false on a page without challenge frames', async () => {
   await page.close();
 });
 
-test('isConfirmation matches only the platform rule', () => {
-  assert.equal(isConfirmation('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/1/confirmation', ''), true);
-  assert.equal(isConfirmation('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/1', 'Apply for this job'), false);
-  assert.equal(isConfirmation('lever', 'https://jobs.lever.co/acme/abc/thanks', ''), true);
-  assert.equal(isConfirmation('workday', 'https://x/thanks', 'thanks for applying'), false); // unsupported platform
+test('isConfirmation: a confirmation URL counts; confirmation text only once the form is gone', () => {
+  assert.equal(isConfirmation('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/1/confirmation', '', true), true);
+  assert.equal(isConfirmation('greenhouse', 'https://job-boards.greenhouse.io/acme/jobs/1', 'Apply for this job', true), false);
+  assert.equal(isConfirmation('lever', 'https://jobs.lever.co/acme/abc/thanks', '', true), true);
+  // A form or posting page can say "thanks for applying" itself.
+  assert.equal(isConfirmation('ashby', 'https://jobs.ashbyhq.com/a/1/application', 'Thanks for applying', true), false);
+  assert.equal(isConfirmation('ashby', 'https://jobs.ashbyhq.com/a/1/application', 'Thanks for applying', false), true);
+  assert.equal(isConfirmation('workday', 'https://x/thanks', 'thanks for applying', false), false); // unsupported platform
+});
+
+// Review of PR #130: profile values must never go into an employer's own questions.
+test('profile values stay out of textareas, custom questions, and long or question labels', async () => {
+  const page = await open(`<form>
+    <label for="e">Email</label><input id="e" type="email" name="email">
+    <label for="w">Tell us about your website</label><textarea id="w" name="why"></textarea>
+    <label for="q">Office location</label><input id="q" name="question_9">
+    <label for="c">Phone</label><input id="c" name="cards[abc][field0]">
+    <label for="o">Which office location would you prefer</label><input id="o" name="uuid-1">
+    <label for="p">Phone?</label><input id="p" name="uuid-2">
+    <label for="ph">Phone number</label><input id="ph" name="uuid-3">
+    <button type="submit">Submit</button></form>`);
+  await fillPage(page, null, PROFILE, null);
+  for (const id of ['#w', '#q', '#c', '#o', '#p']) assert.equal(await page.inputValue(id), '', id);
+  assert.equal(await page.inputValue('#ph'), '+44 7000 000000'); // short, not a question, UUID-named (Ashby)
+  assert.equal(await page.inputValue('#e'), 'jane@example.com');
+  await page.close();
+});
+
+test('fields re-rendered after the CV upload are found again and filled', async () => {
+  const page = await open(`<form>
+    <label for="r">Resume</label><input id="r" type="file" name="resume">
+    <div id="box"><label for="n">Full name</label><input id="n" name="name"></div>
+    <button type="submit">Submit</button></form>
+    <script>
+      document.getElementById('r').addEventListener('change', () => {
+        document.getElementById('box').innerHTML = '<label for="n">Full name</label><input id="n" name="name">';
+      });
+    </script>`);
+  const result = await fillPage(page, null, PROFILE, CV);
+  assert.equal(await page.inputValue('#n'), 'Jane Q Doe');
+  assert.deepEqual(result.unfilled, []);
+  await page.close();
 });
 
 // Saved real apply pages (Task 3.4): every one must expose the standard fields and take the CV.

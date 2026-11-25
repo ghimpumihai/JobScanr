@@ -18,7 +18,8 @@ const NOW = new Date('2026-11-24T10:00:00Z');
 const USER = {
   id: 7,
   email: 'jane@example.com',
-  resume_storage_path: 'uid-1/jane.pdf',
+  resume_storage_path: 'uid-1/8f3a2c.pdf',
+  resume_filename: 'Jane Doe CV.pdf',
   screening_defaults: { full_name: 'Jane Doe' },
   resume_data: { phone: '+44 1', location: 'London', urls: { linkedin: 'https://linkedin.com/in/j' } }
 };
@@ -40,15 +41,18 @@ const PLAN = {
 };
 
 /** Records every query; answers per table and operation. */
-function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null } = {}) {
+function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null, saveError = null, markError = null } = {}) {
   const log = [];
   const answer = (q) => {
     if (q.table === 'users') return { data: user, error: user ? null : { message: 'x' } };
-    if (q.table === 'applications') return q.op === 'update' ? { data: [{ id: app?.id }] } : { data: app };
+    if (q.table === 'applications') {
+      if (q.op !== 'update') return { data: app };
+      return markError ? { data: null, error: markError } : { data: [{ id: app?.id }] };
+    }
     if (q.table === 'application_fill_plans') return { data: plan ? { plan } : null };
     if (q.table === 'remote_apply_sessions') {
       if (q.op === 'insert') return insertError ? { data: null, error: insertError } : { data: { id: 900 } };
-      if (q.op === 'update') return { data: null, error: null };
+      if (q.op === 'update') return { data: null, error: saveError && 'provider_session_id' in q.values ? saveError : null };
       if (q.opts?.head) return { count, error: null };
       return { data: row };
     }
@@ -102,13 +106,13 @@ function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.fr
 }
 
 let world;
-function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1', body = 'Apply for this job', running = true, connectError = null, createError = null, captcha = false } = {}) {
+function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1', body = 'Apply for this job', running = true, connectError = null, createError = null, captcha = false, fileInputs = 1 } = {}) {
   const w = { calls: [], released: [], filled: null, closed: 0, providersAsked: [] };
   const CONNECTION = { url: 'wss://connect.example/', headers: { Authorization: 'Bearer SECRET' } };
   const page = {
     goto: async (url) => (w.calls.push(['goto', url]), { status: () => gotoStatus }),
     url: () => pageUrl,
-    locator: () => ({ first: () => ({ waitFor: async () => {} }), innerText: async () => body })
+    locator: () => ({ first: () => ({ waitFor: async () => {} }), innerText: async () => body, count: async () => fileInputs })
   };
   const browser = { contexts: () => [{ pages: () => [page], newPage: async () => page }], close: async () => void w.closed++ };
   deps.provider = (name) => (w.providersAsked.push(name), {
@@ -119,7 +123,7 @@ function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.
       return { id: 'bb-1', connection: CONNECTION };
     },
     connection: async () => (running ? CONNECTION : null),
-    liveViewUrl: async () => 'https://live.example/view?token=LIVE',
+    liveViewUrl: async () => ((w.closedAtLiveView = w.closed), 'https://live.example/view?token=LIVE'),
     release: async (id) => void w.released.push(id),
     listRunning: async () => []
   });
@@ -156,7 +160,8 @@ test('start: fills the bare Greenhouse form in a new session and returns the liv
   assert.deepEqual(world.calls.find((c) => c[0] === 'goto'), ['goto', PLAN.posting_url]);
   assert.equal(world.filled.profile.full_name, 'Jane Doe');
   assert.equal(world.filled.profile.linkedin, 'https://linkedin.com/in/j');
-  assert.equal(world.filled.cv.name, 'jane.pdf');
+  assert.equal(world.filled.cv.name, 'Jane Doe CV.pdf'); // the uploaded name, not the storage object's
+  assert.equal(world.closedAtLiveView, 1); // disconnected before the live view: Cloudflare opens its own
   assert.equal(world.filled.cv.buffer.toString(), '%PDF');
   const [stale, ...rest] = updates(sb);
   // Open rows of this application past the 15-minute limit are expired first, so they cannot block it.
@@ -215,6 +220,14 @@ test('start: a browser failure releases the session, records the error name only
   assert.ok(!logged.join('\n').includes('SECRET'));
 });
 
+test('start: if the provider session id cannot be saved, the session is released, not orphaned', async () => {
+  const sb = fakeSb({ saveError: { message: 'x' } });
+  await assert.rejects(startSession(sb, 'uid-1', 55), (e) => e.status === 502);
+  assert.deepEqual(world.released, ['bb-1']);
+  assert.equal(world.calls.filter((c) => c[0] === 'connect').length, 0); // stopped before filling anything
+  assert.equal(updates(sb).at(-1).values.status, 'error');
+});
+
 test('formUrl: only the ATS-hosted form page', () => {
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc' }, null), 'https://jobs.lever.co/acme/abc/apply');
   assert.equal(formUrl('lever', { url: 'https://jobs.lever.co/acme/abc/apply' }, null), 'https://jobs.lever.co/acme/abc/apply');
@@ -265,6 +278,24 @@ test('start: a provider out of free minutes (429) says so, records quota, and op
   await assert.rejects(startSession(sb, 'uid-1', 55), (e) => e.status === 503 && /no free time left/.test(e.message));
   assert.equal(updates(sb).at(-1).values.error, 'quota');
   assert.equal(world.calls.length, 0);
+});
+
+test('check: confirmation text counts only once the form (its CV upload) is gone', async () => {
+  const ashbyRow = { ...OPEN_ROW, applications: { job_postings: { companies: { ats_platform: 'ashby' } } } };
+  world = fakeWorld({ pageUrl: 'https://jobs.ashbyhq.com/acme/1/application', body: 'Thanks for applying! Questions?', fileInputs: 1 });
+  let sb = fakeSb({ row: ashbyRow });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'open', captcha: false });
+  assert.equal(updates(sb, 'applications').length, 0);
+  world = fakeWorld({ pageUrl: 'https://jobs.ashbyhq.com/acme/1/application', body: 'Thanks for applying!', fileInputs: 0 });
+  sb = fakeSb({ row: ashbyRow });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'submitted' });
+});
+
+test('check: if marking Applied fails, the user is told to mark it themselves', async () => {
+  world = fakeWorld({ pageUrl: 'https://job-boards.greenhouse.io/embed/job_app/confirmation', body: 'Thank you for applying.', fileInputs: 0 });
+  const sb = fakeSb({ row: OPEN_ROW, markError: { message: 'x' } });
+  assert.deepEqual(await checkSession(sb, 900), { state: 'unrecorded' });
+  assert.equal(updates(sb).at(-1).values.status, 'submitted'); // the session itself did end with a confirmation
 });
 
 test('check: still filling stays open and records a captcha once seen', async () => {

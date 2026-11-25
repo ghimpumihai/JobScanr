@@ -45,6 +45,8 @@ export interface StartResult {
 }
 
 export type SessionState = 'open' | 'submitted' | 'abandoned' | 'expired' | 'error' | 'posting_gone';
+/** What a check reports; `unrecorded`: the employer confirmed it, but marking it Applied failed. */
+export type CheckState = SessionState | 'unrecorded';
 
 export function isEnabled(): boolean {
   return process.env.REMOTE_APPLY_ENABLED === 'true';
@@ -91,7 +93,7 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
 
   const { data: user, error: userError } = await sb
     .from('users')
-    .select('id, email, resume_storage_path, screening_defaults, resume_data')
+    .select('id, email, resume_storage_path, resume_filename, screening_defaults, resume_data')
     .eq('auth_user_id', authUserId)
     .single();
   if (userError || !user) throw new RemoteError(500, 'Could not load your profile.');
@@ -123,7 +125,8 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
   if (cvError || !blob) throw new RemoteError(502, 'Could not read your CV.');
   const buffer = Buffer.from(await blob.arrayBuffer()); // memory only (constitution 1.2)
   if (buffer.length > MAX_CV_SIZE) throw new RemoteError(422, 'Your CV is larger than 2 MB.');
-  const cv = { name: user.resume_storage_path.split('/').pop() ?? 'cv.pdf', mimeType: blob.type || 'application/pdf', buffer };
+  // The name the user uploaded, not the storage object's: employers see it.
+  const cv = { name: text(user.resume_filename) ?? 'cv.pdf', mimeType: blob.type || 'application/pdf', buffer };
 
   const { data: planRow } = await sb.from('application_fill_plans').select('plan').eq('application_id', app.id).maybeSingle();
   const plan: FillPlan | null = planRow?.plan ?? null;
@@ -167,7 +170,9 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
   try {
     const created = await provider.create();
     providerId = created.id;
-    await sb.from('remote_apply_sessions').update({ provider_session_id: providerId }).eq('id', row.id);
+    const { error: saveError } = await sb.from('remote_apply_sessions').update({ provider_session_id: providerId }).eq('id', row.id);
+    // Without the ID no later check could find or release this session, so stop here.
+    if (saveError) throw new Error('could not save the provider session id');
     browser = await deps.connect(created.connection);
     const page = await firstPage(browser);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -183,6 +188,9 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
       .from('remote_apply_sessions')
       .update({ fields_planned: result.planned, fields_filled: result.filled, fields_unfilled: result.unfilled.length, captcha_seen: captcha })
       .eq('id', row.id);
+    // Disconnect first: Cloudflare hands out the live view over a connection of its own.
+    await browser.close().catch(() => {});
+    browser = undefined;
     const liveViewUrl = await provider.liveViewUrl(providerId);
     return { sessionId: row.id, liveViewUrl, leftForUser: [...(plan?.for_user ?? []).map((q) => q.label), ...result.unfilled] };
   } catch (e) {
@@ -202,7 +210,7 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
  * Checks an open session: records Applied on the employer's confirmation page, closes it when the switch is off or
  * it is too old. With `final` (the user closed the view), an unconfirmed session is closed as abandoned.
  */
-export async function checkSession(sb: SupabaseClient, sessionId: number, final = false): Promise<{ state: SessionState; captcha?: boolean }> {
+export async function checkSession(sb: SupabaseClient, sessionId: number, final = false): Promise<{ state: CheckState; captcha?: boolean }> {
   const { data: row } = await sb
     .from('remote_apply_sessions')
     .select('id, status, provider, provider_session_id, captcha_seen, started_at, application_id, applications!inner(job_postings!inner(companies!inner(ats_platform)))')
@@ -236,10 +244,18 @@ export async function checkSession(sb: SupabaseClient, sessionId: number, final 
     const page = await firstPage(browser);
     const body = (await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')).slice(0, 20_000);
     const captcha = row.captcha_seen || (await deps.captchaVisible(page));
-    if (isConfirmation(platform, page.url(), body)) {
+    // Every application form has a CV upload; once it is gone, the form was sent.
+    const formPresent = (await page.locator('input[type=file]').count().catch(() => 1)) > 0;
+    if (isConfirmation(platform, page.url(), body, formPresent)) {
       // The same compare-and-set as Mark as Applied; if the user already marked it, nothing changes.
-      await sb.from('applications').update({ status: 'submitted' }).eq('id', row.application_id).eq('status', 'manual_apply').select('id');
-      return close('submitted', { captcha_seen: captcha });
+      const { error: markError } = await sb
+        .from('applications')
+        .update({ status: 'submitted' })
+        .eq('id', row.application_id)
+        .eq('status', 'manual_apply')
+        .select('id');
+      await close('submitted', { captcha_seen: captcha });
+      return { state: markError ? 'unrecorded' : 'submitted' };
     }
     if (final) return close('abandoned', { captcha_seen: captcha });
     if (captcha && !row.captcha_seen) await sb.from('remote_apply_sessions').update({ captcha_seen: true }).eq('id', row.id);

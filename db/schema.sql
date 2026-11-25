@@ -378,7 +378,12 @@ BEGIN
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
         REVOKE ALL ON workday_board_state, workday_pod_backoff FROM authenticated;
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON application_fill_plans FROM authenticated;
-        REVOKE DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated;
+        -- Column grants: started_at always comes from its default and is never changed, so the daily cap,
+        -- which counts a user's rows by started_at, cannot be dodged with the public anon key.
+        REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated;
+        GRANT INSERT (application_id, user_id, provider) ON remote_apply_sessions TO authenticated;
+        GRANT UPDATE (provider_session_id, status, fields_planned, fields_filled, fields_unfilled,
+                      fields_changed_by_user, captcha_seen, error, ended_at) ON remote_apply_sessions TO authenticated;
     END IF;
 EXCEPTION
     WHEN insufficient_privilege THEN

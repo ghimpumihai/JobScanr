@@ -149,7 +149,14 @@ def test_remote_apply_sessions_are_owned_and_one_open_per_application():
         assert "WITH CHECK" in body
         assert "user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid())" in body
         assert "a.user_id = remote_apply_sessions.user_id" in body
-    assert "REVOKE DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated" in SCHEMA
+    # Column grants: started_at (what the daily cap counts) can neither be set on insert nor changed later.
+    assert "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON remote_apply_sessions FROM authenticated" in SCHEMA
+    insert = re.search(r"GRANT INSERT \(([^)]*)\) ON remote_apply_sessions TO authenticated", SCHEMA)
+    update = re.search(r"GRANT UPDATE \(([^)]*)\) ON remote_apply_sessions TO authenticated", SCHEMA)
+    assert insert and update
+    assert {c.strip() for c in insert[1].split(",")} == {"application_id", "user_id", "provider"}
+    updatable = {c.strip() for c in update[1].split(",")}
+    assert not updatable & {"started_at", "user_id", "application_id", "provider", "id"}
     assert re.search(
         r"CREATE UNIQUE INDEX IF NOT EXISTS uq_remote_apply_sessions_open\s+"
         r"ON remote_apply_sessions \(application_id\) WHERE status = 'open'",

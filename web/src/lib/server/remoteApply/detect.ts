@@ -26,9 +26,12 @@ const CONFIRMATION: Record<string, { url?: RegExp; text?: RegExp }> = {
   ashby: { text: /application (was )?submitted|thanks for applying|we have received your application/i }
 };
 
-/** True only when the URL or visible text matches the platform's confirmation page. */
-export function isConfirmation(platform: string, url: string, text: string): boolean {
+/**
+ * True when the URL matches the platform's confirmation page, or its text matches and the application form is gone
+ * (`formPresent` false): a form or posting page can itself contain words like "thanks for applying".
+ */
+export function isConfirmation(platform: string, url: string, text: string, formPresent: boolean): boolean {
   const rule = CONFIRMATION[platform];
   if (!rule) return false;
-  return Boolean((rule.url && rule.url.test(url)) || (rule.text && rule.text.test(text)));
+  return Boolean((rule.url && rule.url.test(url)) || (!formPresent && rule.text && rule.text.test(text)));
 }

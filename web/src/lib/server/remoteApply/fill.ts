@@ -52,7 +52,19 @@ interface Control {
   id: string;
   /** Label, placeholder, aria-label, autocomplete, name and id, lower-cased, for matching. */
   text: string;
+  /** The visible label alone (label elements and aria-labelledby), trimmed. */
+  label: string;
   visible: boolean;
+}
+
+/**
+ * Profile values only go into standard contact fields, never into an employer's own questions: not textareas, not
+ * Greenhouse question_* or Lever cards[...] fields, and elsewhere only short labels that are not questions
+ * (Ashby names its own fields with UUIDs, its Phone and LinkedIn fields included).
+ */
+function standardField(c: Control): boolean {
+  if (c.tag === 'textarea' || /^question_|^cards\[/.test(c.name)) return false;
+  return c.label.length <= 32 && !c.label.includes('?');
 }
 
 const CONTROLS = 'input, textarea, select';
@@ -110,6 +122,7 @@ async function listControls(page: Page): Promise<Control[]> {
       const labelledBy = (e.getAttribute('aria-labelledby') ?? '')
         .split(/\s+/)
         .map((id) => (id ? document.getElementById(id)?.textContent ?? '' : ''));
+      const label = [...labels, ...labelledBy].join(' ').replace(/\s+/g, ' ').replace(/[*✱]/g, '').trim();
       const text = [
         ...labels,
         ...labelledBy,
@@ -132,6 +145,7 @@ async function listControls(page: Page): Promise<Control[]> {
         name: e.name ?? '',
         id: e.id ?? '',
         text,
+        label,
         // File inputs are usually hidden behind a styled button; they still accept files.
         visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0)
       };
@@ -200,7 +214,8 @@ async function setValue(page: Page, control: Control, field: { value: string | n
 }
 
 export async function fillPage(page: Page, plan: FillPlan | null, profile: FillProfile, cv: Cv | null): Promise<FillResult> {
-  const controls = (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
+  const shown = async () => (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
+  let controls = await shown();
   const used = new Set<number>();
   const result: FillResult = { planned: 0, filled: 0, unfilled: [], cvAttached: false };
   const typed: { control: Control; value: string; label: string }[] = [];
@@ -223,6 +238,8 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     } else {
       result.unfilled.push('resume');
     }
+    // Reading the CV can re-render the form with new elements; tag and list them again.
+    controls = await shown();
   }
 
   // Planned answers (Greenhouse) by field name or id, before the standard matcher can claim the control.
@@ -242,7 +259,7 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
   for (const [key, matches] of STANDARD) {
     const value = values[key];
     if (!value || done.has(key)) continue;
-    const control = controls.find((c) => !used.has(c.index) && c.type !== 'file' && matches(c));
+    const control = controls.find((c) => !used.has(c.index) && c.type !== 'file' && standardField(c) && matches(c));
     if (!control) continue;
     result.planned += 1;
     used.add(control.index);
