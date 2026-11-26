@@ -23,8 +23,8 @@ export async function captchaVisible(page: Page): Promise<boolean> {
 //   Greenhouse's support article says the confirmation text is editable per board, so the URL is the signal and
 //   the text is only a fallback.
 // - Lever, Ashby: their docs say only that employers can customise the success page or message; no default URL or
-//   wording is documented. shortcut: these stay unverified guesses until consented submissions (Task 7.2); a miss
-//   only means the user marks the application Applied themselves.
+//   wording is documented. shortcut: these stay unverified guesses until the pilot's real applications (Task 7.4)
+//   show them; a miss only means the user marks the application Applied themselves.
 const CONFIRMATION: Record<string, { url?: RegExp; text?: RegExp }> = {
   greenhouse: { url: /\/confirmation\b/, text: /thank you for applying|application (has been )?(received|submitted)/i },
   lever: { url: /\/thanks\b/, text: /application submitted|thanks for applying/i },

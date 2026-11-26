@@ -132,6 +132,13 @@ Live stages send real requests to employers' sites, so each run needs explicit o
 
 Never submit to boards the tester does not own or have permission for (for example `jobs.lever.co/leverdemo`).
 
+**Amended 2026-11-26 (user decision after stage 2):** stage 3 is dropped. No Greenhouse, Lever or Ashby sandbox is
+available without a partner agreement, and JobScanr never submits: the user checks every value in the live view and
+clicks Submit, so a separate test stage adds little over that review. Stage 4 starts with one user, the owner, on
+genuine applications they want to make, which also covers stage 3's checks (each application recorded once, on the
+right row, with the values the user saw). The "zero wrong submissions" gate is read over those applications. Opening
+the pilot to other users needs a fresh decision on a consented check first.
+
 ### 5.2 Go / no-go gates (thresholds proposed; confirm before stage 2)
 - **Zero wrong submissions**: no submission to the wrong posting, no duplicate, no value the user did not see.
 - **Fill accuracy** ≥ 95% of required fields filled correctly on Greenhouse in stage 2, with Lever and Ashby reported.
