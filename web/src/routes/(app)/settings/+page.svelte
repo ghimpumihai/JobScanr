@@ -34,6 +34,7 @@
   // Saved values: follow every save and upload. The CV and matching cards read these.
   const saved = $derived(data.profile);
   let mode = $derived(data.profile?.auto_apply_mode ?? 'approval_required');
+  let drafts = $derived(data.profile?.llm_drafts_enabled ?? false);
 
   // Form fields: seeded once, so saving never overwrites them with demo values and an upload keeps unsaved edits.
   // svelte-ignore state_referenced_locally
@@ -448,6 +449,94 @@
       </div>
     </form>
   </div>
+
+  {#if data.remoteApply}
+    <!-- Card 4c: answer memory -->
+    <div class="card overflow-hidden">
+      <div class="border-b border-border-subtle p-6">
+        <h2 class="text-lg font-bold leading-snug text-content-primary">Saved answers</h2>
+        <p class="mt-1 text-xs text-content-muted">
+          Questions only you can answer, such as salary or start date, collected from your Greenhouse forms. Answer each
+          once: Fill it for me types it into every form that asks the same or a similar question, and you check it
+          before submitting. Answers stay in JobScanr. With drafted answers on, only the question texts (never your
+          answers) go to Groq to spot similar questions. Clearing a question removes it and its answer; it comes back if
+          a form asks it again.
+        </p>
+      </div>
+      {#if data.answers.length === 0}
+        <p class="p-6 text-xs text-content-muted">No questions yet. They appear here after forms that ask them are prepared.</p>
+      {:else}
+        <ul class="divide-y divide-border-subtle">
+          {#each data.answers as item (item.id)}
+            <li class="p-6">
+              <form method="POST" action="?/saveAnswer" use:enhance={submit} class="space-y-3">
+                <input type="hidden" name="id" value={item.id} />
+                <label for="answer-{item.id}" class="block text-xs font-semibold text-content-primary">
+                  {item.question}
+                  {#if item.answer === null}<span class="ml-2 text-content-muted">(needs an answer)</span>{/if}
+                </label>
+                <textarea
+                  id="answer-{item.id}"
+                  name="answer"
+                  rows="2"
+                  maxlength="1000"
+                  required
+                  class="w-full rounded-md border border-border-strong bg-card px-3 py-1.5 text-xs text-content-primary outline-none focus:border-brand-blue"
+                  value={item.answer ?? ''}
+                ></textarea>
+                <div class="flex justify-end gap-2">
+                  <button type="submit" formaction="?/deleteAnswer" formnovalidate class="btn-secondary !text-xs" disabled={pending}>
+                    Clear
+                  </button>
+                  <button type="submit" class="btn-action disabled:opacity-60" disabled={pending}>Save</button>
+                </div>
+              </form>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    <!-- Card 4b: LLM drafts for Fill it for me (#59) -->
+    <div class="card overflow-hidden">
+      <div class="border-b border-border-subtle p-6">
+        <h2 class="text-lg font-bold leading-snug text-content-primary">Drafted answers</h2>
+        <p class="mt-1 text-xs text-content-muted">
+          For Fill it for me on Greenhouse forms. You read, edit and submit every answer yourself.
+        </p>
+      </div>
+      <form method="POST" action="?/saveDrafts" use:enhance={submit} class="space-y-5 p-6">
+        <div class="flex items-start gap-2">
+          <input
+            id="llm-drafts"
+            type="checkbox"
+            name="llmDrafts"
+            value="true"
+            bind:checked={drafts}
+            aria-describedby="llm-drafts-help"
+            class="mt-0.5"
+          />
+          <div class="text-xs">
+            <label for="llm-drafts" class="font-semibold text-content-primary">
+              Draft answers to open-ended questions from my CV
+            </label>
+            <p id="llm-drafts-help" class="text-content-muted">
+              Questions such as "Why do you want to join?" get a short draft typed into the form for you to review.
+              To write it, the text of your CV and the job description are sent to Groq, an AI provider. Drafts can
+              be wrong, so check every one. Changes apply from the next daily refresh; turning this off stops drafts
+              being typed at once.
+            </p>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="btn-action disabled:opacity-60" disabled={!saved || pending}>
+            Save
+            <Icon name="arrow-right" size={12} />
+          </button>
+        </div>
+      </form>
+    </div>
+  {/if}
 
   <!-- Card 5: Account & Session -->
   <div class="card overflow-hidden">

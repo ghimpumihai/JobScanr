@@ -94,6 +94,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_filename TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_content_type TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_uploaded_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_confirmed_at TIMESTAMPTZ;
+-- Opt-in to Groq drafts of open-ended answers in remote fill (#59): CV text goes to a third party, so off by default.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_drafts_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS user_job_matches (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -185,6 +187,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_remote_apply_sessions_open
 -- The daily cap counts a user's sessions since midnight.
 CREATE INDEX IF NOT EXISTS idx_remote_apply_sessions_user_started ON remote_apply_sessions (user_id, started_at);
 
+-- Answer memory: personal-fact questions (salary, start date, adjustments...) a user answers once and remote fill
+-- reuses. The pipeline adds them pending (answer NULL); only the owner reads, answers or deletes them.
+CREATE TABLE IF NOT EXISTS user_answers (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id        BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question       TEXT NOT NULL CHECK (char_length(question) <= 500),
+    question_key   TEXT NOT NULL,
+    answer         TEXT CHECK (answer IS NULL OR char_length(answer) <= 1000),
+    first_seen_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, question_key)
+);
+
 -- Indices for high-throughput queue polling and lookups
 CREATE INDEX IF NOT EXISTS idx_applications_queued ON applications (status, next_attempt_at) WHERE status = 'queued';
 CREATE INDEX IF NOT EXISTS idx_applications_user_status ON applications (user_id, status);
@@ -197,6 +212,7 @@ ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE application_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE application_fill_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE remote_apply_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_answers ENABLE ROW LEVEL SECURITY;
 
 -- Auth helper functions (stubs for local / non-Supabase test environments)
 DO $$
@@ -287,6 +303,24 @@ CREATE POLICY "remote_apply_sessions_update_own" ON remote_apply_sessions
         AND application_id IN (SELECT a.id FROM applications a WHERE a.user_id = remote_apply_sessions.user_id)
     );
 
+-- Answer memory: own rows only. No insert policy (the pipeline adds questions); the column grant below limits
+-- updates to the answer, so a user cannot rename a question or move it to another user.
+DROP POLICY IF EXISTS "user_answers_select_own" ON user_answers;
+CREATE POLICY "user_answers_select_own" ON user_answers
+    FOR SELECT TO authenticated
+    USING (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "user_answers_update_own" ON user_answers;
+CREATE POLICY "user_answers_update_own" ON user_answers
+    FOR UPDATE TO authenticated
+    USING (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()))
+    WITH CHECK (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "user_answers_delete_own" ON user_answers;
+CREATE POLICY "user_answers_delete_own" ON user_answers
+    FOR DELETE TO authenticated
+    USING (user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid()));
+
 -- applications: a signed-in user (applications_update_own limits them to their own rows) may only move an
 -- application between To Apply, Applied and Not Interested, and back (#48). Every other column, including ones
 -- added later, is compared and must stay unchanged. applied_at is set here, never by the user. Backend writes
@@ -373,6 +407,7 @@ BEGIN
         REVOKE ALL ON companies, job_postings FROM anon;
         REVOKE ALL ON workday_board_state, workday_pod_backoff FROM anon;
         REVOKE ALL ON application_fill_plans, remote_apply_sessions FROM anon;
+        REVOKE ALL ON user_answers FROM anon;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON companies, job_postings FROM authenticated;
@@ -384,6 +419,8 @@ BEGIN
         GRANT INSERT (application_id, user_id, provider) ON remote_apply_sessions TO authenticated;
         GRANT UPDATE (provider_session_id, status, fields_planned, fields_filled, fields_unfilled,
                       fields_changed_by_user, captcha_seen, error, ended_at) ON remote_apply_sessions TO authenticated;
+        REVOKE INSERT, UPDATE, TRUNCATE ON user_answers FROM authenticated;
+        GRANT UPDATE (answer, updated_at) ON user_answers TO authenticated;
     END IF;
 EXCEPTION
     WHEN insufficient_privilege THEN

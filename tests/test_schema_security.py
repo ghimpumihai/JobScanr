@@ -131,6 +131,10 @@ def test_a_users_status_change_is_logged_by_a_definer_trigger():
     assert "REVOKE ALL ON FUNCTION log_user_application_change() FROM anon, authenticated" in SCHEMA
 
 
+def test_llm_drafts_are_opt_in_for_new_and_existing_users():
+    assert "ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_drafts_enabled BOOLEAN NOT NULL DEFAULT FALSE" in SCHEMA
+
+
 def test_fill_plans_are_readable_by_their_owner_and_written_only_by_the_backend():
     assert "ALTER TABLE application_fill_plans ENABLE ROW LEVEL SECURITY" in SCHEMA
     policies = re.findall(r'CREATE POLICY "[^"]+" ON application_fill_plans\s+FOR (\w+)', SCHEMA)
@@ -174,3 +178,14 @@ def test_remote_apply_sessions_are_owned_and_one_open_per_application():
     # Never store the live view URL, form values or CV content.
     for column in ("live_view", "url", "values", "resume"):
         assert column not in table
+
+
+def test_user_answers_are_owned_and_only_their_answer_can_change():
+    assert "UNIQUE (user_id, question_key)" in SCHEMA
+    assert "answer         TEXT CHECK (answer IS NULL OR char_length(answer) <= 1000)" in SCHEMA
+    assert "ALTER TABLE user_answers ENABLE ROW LEVEL SECURITY" in SCHEMA
+    policies = re.findall(r'CREATE POLICY "[^"]+" ON user_answers\s+FOR (\w+)', SCHEMA)
+    assert sorted(policies) == ["DELETE", "SELECT", "UPDATE"]  # no INSERT: the pipeline adds questions
+    assert "REVOKE ALL ON user_answers FROM anon" in SCHEMA
+    assert "REVOKE INSERT, UPDATE, TRUNCATE ON user_answers FROM authenticated" in SCHEMA
+    assert "GRANT UPDATE (answer, updated_at) ON user_answers TO authenticated" in SCHEMA

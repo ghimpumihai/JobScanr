@@ -1,0 +1,57 @@
+{
+ "note": "normalize_question (Python) and normalizeQuestion (web) must map each input to its key (answer-memory).",
+ "cases": [
+  [
+   "What are your salary expectations?",
+   "what are your salary expectations"
+  ],
+  [
+   "  Salary   expectations (EUR)*  ",
+   "salary expectations eur"
+  ],
+  [
+   "Are you willing to relocate?\n",
+   "are you willing to relocate"
+  ],
+  [
+   "Ești disponibil să începi în ianuarie?",
+   "ești disponibil să începi în ianuarie"
+  ],
+  [
+   "Ești disponibil?",
+   "ești disponibil"
+  ],
+  [
+   "Notice period (in weeks) — required*",
+   "notice period in weeks required"
+  ],
+  [
+   "How did you hear about us?✱",
+   "how did you hear about us"
+  ],
+  [
+   "LinkedIn_URL",
+   "linkedin url"
+  ],
+  [
+   "Salary: 50,000–60,000 €",
+   "salary 50 000 60 000"
+  ],
+  [
+   "Do you need visa sponsorship (UK)?",
+   "do you need visa sponsorship uk"
+  ],
+  [
+   "",
+   ""
+  ],
+  [
+   "?!*",
+   ""
+  ],
+  [
+   "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a ",
+   "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a"
+  ]
+ ]
+}

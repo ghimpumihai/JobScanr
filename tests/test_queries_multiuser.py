@@ -62,12 +62,29 @@ def test_get_active_users_returns_users():
         assert users[0]["email"] == "user1@example.com"
         assert users[0]["resume_data"] == {"skills": ["python"]}
         assert users[0]["auto_apply_mode"] == "approval_required"
+        assert users[0]["llm_drafts_enabled"] is False  # short row: column missing means not opted in
 
         assert users[1]["id"] == 2
         assert users[1]["email"] == "user2@example.com"
         assert users[1]["resume_data"] == {"skills": ["go"]}
         assert users[1]["profile_filters"] == {"titles": ["backend dev"]}
         assert users[1]["auto_apply_mode"] == "auto_submit"
+
+
+def test_get_active_users_reads_the_llm_drafts_opt_in():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    row = (1, "00000000-0000-0000-0000-000000000001", "u@example.com", {}, {}, {}, "approval_required", 10, 2)
+    row += ("2026-10-11T00:00:00Z", "2026-10-11T00:00:00Z", "uid/cv.pdf", "cv.pdf", "application/pdf", None)
+    mock_cur.fetchall.return_value = [row + (True,), row + (False,)]
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    with patch("db.queries.get_connection") as mock_get_conn:
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        users = queries.get_active_users()
+    assert "llm_drafts_enabled" in mock_cur.execute.call_args[0][0]
+    assert [u["llm_drafts_enabled"] for u in users] == [True, False]
+    assert users[0]["resume_storage_path"] == "uid/cv.pdf"
 
 
 def test_get_active_users_handles_null_json():
@@ -402,3 +419,45 @@ def test_migrate_profile_to_user_db_execution():
         assert "INSERT INTO users" in upsert
         # Re-running the script must not erase contact details saved in the web app.
         assert "resume_data" not in upsert.split("DO UPDATE", 1)[1]
+
+
+def _mock_answer_conn(rows=None):
+    conn, cur = MagicMock(), MagicMock()
+    cur.fetchall.return_value = rows or []
+    conn.cursor.return_value.__enter__.return_value = cur
+    return conn, cur
+
+
+# --- Answer memory queries -----------------------------------------------------------------------------------------
+
+
+def test_get_user_answers_groups_questions_by_user_without_reading_answers():
+    conn, cur = _mock_answer_conn([(1, 7, "Salary?", "salary"), (2, 7, "Start date?", "start date")])
+    with patch("db.queries.get_connection") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        assert queries.get_user_answers([]) == {}
+        saved = queries.get_user_answers([7, 8])
+    sql, params = cur.execute.call_args[0]
+    assert "answer" not in sql.replace("user_answers", "") and params == ([7, 8],)
+    assert saved == {
+        7: [
+            {"id": 1, "question": "Salary?", "question_key": "salary"},
+            {"id": 2, "question": "Start date?", "question_key": "start date"},
+        ],
+        8: [],
+    }
+
+
+def test_add_pending_questions_skips_existing_keys_and_caps_the_text():
+    conn, cur = _mock_answer_conn()
+    cur.fetchone.side_effect = [(5, "Salary?", "salary"), None]  # the second key already exists
+    with patch("db.queries.get_connection") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        assert queries.add_pending_questions(7, []) == []
+        added = queries.add_pending_questions(
+            7, [{"question": "Salary?", "question_key": "salary"}, {"question": "x" * 600, "question_key": "x"}]
+        )
+    assert added == [{"id": 5, "question": "Salary?", "question_key": "salary"}]
+    sql, params = cur.execute.call_args[0]
+    assert "ON CONFLICT (user_id, question_key) DO NOTHING" in sql
+    assert params == (7, "x" * 500, "x")

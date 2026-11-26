@@ -44,6 +44,16 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           DIGEST_EMAIL: ${{ secrets.DIGEST_EMAIL }}
 
+      # Remote fill plans (#129), drafted answers (#59) and the answer memory, in a step of their own: only this step
+      # gets the service-role key (CV downloads) and the Groq key, not the step that parses thousands of career pages.
+      - name: Build remote fill plans
+        run: python -m jobs.apply.fill_plan
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REMOTE_APPLY_USER_IDS: ${{ vars.REMOTE_APPLY_USER_IDS }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Scan logs, verify replacement links, and open pull request
         if: always()
         timeout-minutes: 15

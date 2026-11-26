@@ -49,6 +49,14 @@ export interface ApplicationRecord {
   last_seen_at: string | null;
 }
 
+/** A personal-fact question the user answers once and remote fill reuses (answer memory). Pending while answer is null. */
+export interface SavedAnswer {
+  id: number;
+  question: string;
+  answer: string | null;
+  first_seen_at: string;
+}
+
 export interface UserProfile {
   id: number;
   email: string;
@@ -77,6 +85,8 @@ export interface UserProfile {
   auto_apply_mode: AutoApplyMode;
   max_daily_applications: number;
   max_apps_per_company: number;
+  /** Opt-in to Groq drafts of open-ended answers in remote fill (#59). */
+  llm_drafts_enabled: boolean;
 }
 
 export interface TelemetrySummary {

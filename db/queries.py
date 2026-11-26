@@ -362,7 +362,8 @@ def get_active_users() -> list[dict]:
             """
             SELECT id, auth_user_id, email, resume_data, profile_filters, screening_defaults,
                    auto_apply_mode, max_daily_applications, max_apps_per_company, gdpr_consent_at, created_at,
-                   resume_storage_path, resume_filename, resume_content_type, resume_uploaded_at
+                   resume_storage_path, resume_filename, resume_content_type, resume_uploaded_at,
+                   llm_drafts_enabled
             FROM users
             WHERE auto_apply_mode != 'disabled'
             ORDER BY id
@@ -390,6 +391,7 @@ def get_active_users() -> list[dict]:
                     "resume_filename": r[12] if len(r) > 12 else None,
                     "resume_content_type": r[13] if len(r) > 13 else None,
                     "resume_uploaded_at": r[14] if len(r) > 14 else None,
+                    "llm_drafts_enabled": bool(r[15]) if len(r) > 15 else False,
                 }
             )
         return users
@@ -477,13 +479,16 @@ def queue_user_applications(user_id: int, job_ids: list[int], status: str = "que
 
 
 def list_fill_plan_candidates(user_ids: list[int], limit: int = 200) -> list[dict]:
-    """Greenhouse To Apply rows of these users with no fill plan, or one older than a day (#129)."""
+    """Greenhouse To Apply rows of these users with no fill plan, or one older than a day (#129).
+
+    `previous_plan` is the stored plan (or None), so a refresh can keep drafts already written (#59).
+    """
     if not user_ids:
         return []
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT a.id, a.user_id, jp.external_id, jp.url, jp.title, c.ats_identifier
+            SELECT a.id, a.user_id, jp.external_id, jp.url, jp.title, c.ats_identifier, p.plan
             FROM applications a
             JOIN job_postings jp ON jp.id = a.job_posting_id
             JOIN companies c ON c.id = jp.company_id
@@ -508,6 +513,7 @@ def list_fill_plan_candidates(user_ids: list[int], limit: int = 200) -> list[dic
                     "ats_identifier": r[5],
                     "ats_platform": "greenhouse",
                 },
+                "previous_plan": r[6] if isinstance(r[6], dict) or r[6] is None else json.loads(r[6]),
             }
             for r in cur.fetchall()
         ]
@@ -523,6 +529,42 @@ def upsert_fill_plan(application_id: int, plan: dict) -> None:
             """,
             (application_id, json.dumps(plan)),
         )
+
+
+def get_user_answers(user_ids: list[int]) -> dict[int, list[dict]]:
+    """Saved questions of these users (answer memory), oldest first. Answers are never read here."""
+    if not user_ids:
+        return {}
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, user_id, question, question_key FROM user_answers WHERE user_id = ANY(%s) ORDER BY id",
+            (user_ids,),
+        )
+        saved: dict[int, list[dict]] = {uid: [] for uid in user_ids}
+        for r in cur.fetchall():
+            saved.setdefault(r[1], []).append({"id": r[0], "question": r[2], "question_key": r[3]})
+        return saved
+
+
+def add_pending_questions(user_id: int, questions: list[dict]) -> list[dict]:
+    """Add {question, question_key} rows with no answer; existing keys are skipped. Returns the rows added."""
+    added: list[dict] = []
+    if not questions:
+        return added
+    with get_connection() as conn, conn.cursor() as cur:
+        for q in questions:
+            cur.execute(
+                """
+                INSERT INTO user_answers (user_id, question, question_key) VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, question_key) DO NOTHING
+                RETURNING id, question, question_key
+                """,
+                (user_id, q["question"][:500], q["question_key"]),
+            )
+            row = cur.fetchone()
+            if row:
+                added.append({"id": row[0], "question": row[1], "question_key": row[2]})
+    return added
 
 
 def expire_open_remote_sessions() -> int:

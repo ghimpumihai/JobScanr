@@ -1,9 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { UserProfile } from '$lib/types';
+import type { SavedAnswer, UserProfile } from '$lib/types';
 import { isSupabaseConfigured } from '$lib/supabase/server';
 import { checkCvFile } from '$lib/cvFile';
 import { safeHttpUrl } from '$lib/safeUrl';
+import { isAllowlisted, isEnabled } from '$lib/server/remoteApply/session';
 
 const MOCK_PROFILE: UserProfile = {
   id: 1,
@@ -27,7 +28,8 @@ const MOCK_PROFILE: UserProfile = {
   notice_period_days: 30,
   auto_apply_mode: 'approval_required',
   max_daily_applications: 10,
-  max_apps_per_company: 2
+  max_apps_per_company: 2,
+  llm_drafts_enabled: false
 };
 
 // UI labels -> title words the Python matcher (jobs/match.py `levels`) looks for in a job title.
@@ -52,6 +54,13 @@ const URL_FIELDS = ['linkedin', 'github', 'portfolio'] as const;
 // Active and Paused. auto_submit is refused by the database: nothing can be sent without an employer key (#48).
 const AUTO_APPLY_MODES = ['approval_required', 'disabled'];
 const DEMO_RESULT = { success: true, message: 'Demo mode: nothing is stored.' };
+const MAX_ANSWER_LENGTH = 1000; // user_answers.answer CHECK in db/schema.sql
+
+/** A row id from a form, or null. */
+function parseId(formData: FormData): number | null {
+  const id = Number(parseText(formData, 'id'));
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
 
 function isLiveUser(locals: App.Locals): boolean {
   return Boolean(locals.user && locals.supabase && isSupabaseConfigured() && locals.user.id !== 'demo-user-id');
@@ -147,12 +156,21 @@ export const load: PageServerLoad = async ({ locals }) => {
       notice_period_days: data.screening_defaults?.notice_period_days,
       auto_apply_mode: data.auto_apply_mode || 'approval_required',
       max_daily_applications: data.max_daily_applications ?? 10,
-      max_apps_per_company: data.max_apps_per_company ?? 2
+      max_apps_per_company: data.max_apps_per_company ?? 2,
+      llm_drafts_enabled: data.llm_drafts_enabled ?? false
     };
-    return { profile: liveProfile, loadError: false };
+    // Answer memory: pending questions first. A failed read only hides the card's rows; the page still loads.
+    const { data: rows, error: answersError } = await locals.supabase
+      .from('user_answers')
+      .select('id, question, answer, first_seen_at')
+      .eq('user_id', data.id)
+      .order('first_seen_at');
+    if (answersError) console.error('Failed to load saved answers:', answersError.message);
+    const answers: SavedAnswer[] = (rows ?? []).sort((a, b) => Number(a.answer !== null) - Number(b.answer !== null));
+    return { profile: liveProfile, loadError: false, remoteApply: isEnabled() && isAllowlisted(data.id), answers };
   }
 
-  return { profile: MOCK_PROFILE, loadError: false };
+  return { profile: MOCK_PROFILE, loadError: false, remoteApply: isEnabled(), answers: [] as SavedAnswer[] };
 };
 
 export const actions: Actions = {
@@ -331,5 +349,51 @@ export const actions: Actions = {
       .single();
     if (writeError) return writeFailure(writeError, 'Could not save. Please try again.');
     return { success: true, message: mode === 'disabled' ? 'Paused.' : 'Active.' };
+  },
+
+  saveDrafts: async ({ request, locals }) => {
+    const enabled = (await request.formData()).get('llmDrafts') === 'true';
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    const { error: writeError } = await locals.supabase
+      .from('users')
+      .update({ llm_drafts_enabled: enabled })
+      .eq('auth_user_id', locals.user!.id)
+      .select('id')
+      .single();
+    if (writeError) return writeFailure(writeError, 'Could not save. Please try again.');
+    return { success: true, message: enabled ? 'Drafts on.' : 'Drafts off.' };
+  },
+
+  saveAnswer: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const id = parseId(formData);
+    const answer = parseText(formData, 'answer') ?? '';
+    if (!id) return fail(400, { error: 'Unknown question.' });
+    if (!answer || answer.length > MAX_ANSWER_LENGTH) {
+      return fail(400, { error: `Write an answer of 1 to ${MAX_ANSWER_LENGTH} characters.` });
+    }
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    // Row-level security limits this to the user's own questions; another id updates nothing.
+    const { data: rows, error: writeError } = await locals.supabase
+      .from('user_answers')
+      .update({ answer, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id');
+    if (writeError) return writeFailure(writeError, 'Could not save the answer. Please try again.');
+    if (!rows?.length) return fail(404, { error: 'That question no longer exists.' });
+    return { success: true, message: 'Answer saved.' };
+  },
+
+  deleteAnswer: async ({ request, locals }) => {
+    const id = parseId(await request.formData());
+    if (!id) return fail(400, { error: 'Unknown question.' });
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+
+    const { data: rows, error: writeError } = await locals.supabase.from('user_answers').delete().eq('id', id).select('id');
+    if (writeError) return writeFailure(writeError, 'Could not delete the question. Please try again.');
+    if (!rows?.length) return fail(404, { error: 'That question no longer exists.' });
+    return { success: true, message: 'Cleared. It comes back if a form asks it again.' };
   }
 };

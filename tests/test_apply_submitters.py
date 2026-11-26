@@ -359,6 +359,30 @@ def test_greenhouse_fetch_questions(sample_greenhouse_posting: JobPosting):
     assert len(q_auth.options) == 2
 
 
+def test_greenhouse_fetch_job_keeps_the_description_for_drafting(sample_greenhouse_posting: JobPosting):
+    job = {**SAMPLE_GH_JOB_QUESTIONS, "content": "&lt;p&gt;Build payments.&lt;/p&gt;"}
+
+    async def run():
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json=job))
+        async with httpx.AsyncClient(transport=transport) as http:
+            return await GreenhouseSubmitter(client=http).fetch_job(sample_greenhouse_posting)
+
+    data = asyncio.run(run())
+    assert data["content"] == "&lt;p&gt;Build payments.&lt;/p&gt;"
+    assert len(GreenhouseSubmitter.parse_questions(data)) == 5
+
+
+@pytest.mark.parametrize("body", [b"[]", b"null", b'"text"'])
+def test_greenhouse_fetch_job_refuses_json_that_is_not_an_object(sample_greenhouse_posting: JobPosting, body):
+    async def run():
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, content=body))
+        async with httpx.AsyncClient(transport=transport) as http:
+            return await GreenhouseSubmitter(client=http).fetch_job(sample_greenhouse_posting)
+
+    with pytest.raises(ValueError, match="not an object"):  # build_fill_plans skips that posting on ValueError
+        asyncio.run(run())
+
+
 def test_greenhouse_map_payload_success(sample_user: User, sample_greenhouse_posting: JobPosting):
     submitter = GreenhouseSubmitter()
     questions = [
