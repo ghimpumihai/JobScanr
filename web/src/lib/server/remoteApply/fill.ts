@@ -11,12 +11,28 @@ export interface PlanField {
   option_label?: string;
 }
 
+/** A question left for the user; open-ended ones may carry an LLM draft (#59). */
+export interface ForUserField {
+  name: string;
+  label: string;
+  reason: string;
+  type?: string;
+  draft?: string;
+  draft_status?: 'generated' | 'unanswered';
+  draft_reason?: string;
+  /** Answer memory: the saved question this one is linked to by the pipeline, and how. */
+  memory_id?: number;
+  memory_match?: 'exact' | 'similar';
+  /** The saved answer, set by session.ts at fill time; never stored in the plan. */
+  memory_answer?: string;
+}
+
 export interface FillPlan {
   version: number;
   platform: string;
   posting_url: string | null;
   fields: PlanField[];
-  for_user: { name: string; label: string; reason: string }[];
+  for_user: ForUserField[];
 }
 
 export interface FillProfile {
@@ -40,6 +56,10 @@ export interface FillResult {
   filled: number;
   /** Labels of fields we meant to fill but could not. */
   unfilled: string[];
+  /** Labels of questions that got an LLM draft for the user to review (#59). */
+  drafted: string[];
+  /** Questions filled from the answer memory; similar ones are shown for checking. */
+  remembered: { label: string; similar: boolean }[];
   cvAttached: boolean;
 }
 
@@ -69,6 +89,16 @@ function standardField(c: Control): boolean {
 }
 
 const CONTROLS = 'input, textarea, select';
+
+/** Key for matching saved questions; must match normalize_question in jobs/apply/llm_answers.py. */
+export function normalizeQuestion(text: string): string {
+  const cleaned = text.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, ' ');
+  return Array.from(cleaned.split(/\s+/).filter(Boolean).join(' ')).slice(0, 500).join('').trimEnd();
+}
+
+function freeText(c: Control): boolean {
+  return c.tag === 'textarea' || (c.tag === 'input' && c.role !== 'combobox' && !['checkbox', 'radio', 'file'].includes(c.type));
+}
 
 type StandardKey = 'first_name' | 'last_name' | 'full_name' | 'email' | 'phone' | 'location' | 'linkedin' | 'github' | 'portfolio';
 
@@ -180,7 +210,9 @@ async function pickOption(page: Page, el: Locator, label: string): Promise<boole
     // <option>s of other <select>s also have the option role and would be found first.
     const listId = (await el.getAttribute('aria-controls', { timeout: STEP_MS })) ?? (await el.getAttribute('aria-owns', { timeout: STEP_MS }));
     const scope = listId ? page.locator(`[id="${listId.replace(/["\\]/g, '\\$&')}"]`) : page;
-    const option = scope.getByRole('option', { name: label, exact: true }).and(page.locator('[role="option"]')).first();
+    const wanted = label.trim().replace(/\s+/g, ' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const name = new RegExp(`^${wanted}$`, 'i'); // the whole text, any case, spaces trimmed as exact: true did
+    const option = scope.getByRole('option', { name }).and(page.locator('[role="option"]')).first();
     // The list renders a moment after the click; only type when it still shows no such option (search-style lists).
     const shown = await option.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false);
     if (!shown) await el.pressSequentially(label, { timeout: STEP_MS });
@@ -195,15 +227,22 @@ async function pickOption(page: Page, el: Locator, label: string): Promise<boole
   }
 }
 
-async function setValue(page: Page, control: Control, field: { value: string | number | boolean; option_label?: string }): Promise<boolean> {
+async function setValue(
+  page: Page,
+  control: Control,
+  field: { value: string | number | boolean; option_label?: string; labelOnly?: boolean }
+): Promise<boolean> {
   const el = byTag(page, control.index);
   const label = field.option_label ?? String(field.value);
   try {
     if (control.tag === 'select') {
-      // Try the visible label first, then the API value.
+      // Try the visible label first (ignoring case), then the API value; saved answers match labels only.
+      const labels = await el.evaluate((s) => Array.from((s as HTMLSelectElement).options).map((o) => o.label), undefined, { timeout: STEP_MS });
+      const norm = (t: string) => t.trim().replace(/\s+/g, ' ').toLowerCase();
+      const shown = labels.find((l) => norm(l) === norm(label)) ?? label;
       const picked = await el
-        .selectOption({ label }, { timeout: STEP_MS })
-        .catch(() => el.selectOption(String(field.value), { timeout: STEP_MS }));
+        .selectOption({ label: shown }, { timeout: STEP_MS })
+        .catch(() => (field.labelOnly ? [] : el.selectOption(String(field.value), { timeout: STEP_MS })));
       return picked.length > 0;
     }
     if (control.type === 'checkbox') {
@@ -223,7 +262,7 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
   const shown = async () => (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
   let controls = await shown();
   const used = new Set<number>();
-  const result: FillResult = { planned: 0, filled: 0, unfilled: [], cvAttached: false };
+  const result: FillResult = { planned: 0, filled: 0, unfilled: [], drafted: [], remembered: [], cvAttached: false };
   const typed: { control: Control; value: string; label: string }[] = [];
 
   // CV first: Lever and Greenhouse read an uploaded CV and reset fields from it, which cleared a name typed before
@@ -257,6 +296,38 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
       result.filled += 1;
     } else {
       result.unfilled.push(field.label);
+    }
+  }
+
+  // LLM drafts (#59) go only into their own question's free-text field, never a select or checkbox; the user
+  // reviews and edits them before clicking Submit.
+  for (const q of plan?.for_user ?? []) {
+    if (q.draft_status !== 'generated' || !q.draft) continue;
+    result.planned += 1;
+    const control = controls.find((c) => !used.has(c.index) && (c.name === q.name || c.id === q.name) && freeText(c));
+    if (control && (await setValue(page, control, { value: q.draft }))) {
+      used.add(control.index);
+      result.filled += 1;
+      result.drafted.push(q.label);
+    } else {
+      result.unfilled.push(q.label);
+    }
+  }
+
+  // Saved answers (answer memory) go only into their own question's field: text, or a dropdown when the answer is
+  // one of its options. Never a checkbox, radio or file. The user reviews them before clicking Submit.
+  for (const q of plan?.for_user ?? []) {
+    if (!q.memory_answer) continue;
+    result.planned += 1;
+    const control = controls.find(
+      (c) => !used.has(c.index) && (c.name === q.name || c.id === q.name) && (freeText(c) || c.tag === 'select' || c.role === 'combobox')
+    );
+    if (control && (await setValue(page, control, { value: q.memory_answer, option_label: q.memory_answer, labelOnly: true }))) {
+      used.add(control.index);
+      result.filled += 1;
+      result.remembered.push({ label: q.label, similar: q.memory_match === 'similar' });
+    } else {
+      result.unfilled.push(q.label);
     }
   }
 

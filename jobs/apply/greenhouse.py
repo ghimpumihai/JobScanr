@@ -67,6 +67,10 @@ class GreenhouseSubmitter(BaseSubmitter):
 
     async def fetch_questions(self, posting: JobPosting) -> list[ScreeningQuestion]:
         """Fetch and parse live screening questions for Greenhouse job opening."""
+        return self.parse_questions(await self.fetch_job(posting))
+
+    async def fetch_job(self, posting: JobPosting) -> dict[str, Any]:
+        """The public job JSON with its questions; `content` is the escaped-HTML description (#59)."""
         board_token, job_id = extract_greenhouse_identifiers(posting)
         if not board_token or not job_id:
             raise ValueError(f"Missing Greenhouse board_token or job_id in posting: {posting.get('title')}")
@@ -85,6 +89,13 @@ class GreenhouseSubmitter(BaseSubmitter):
 
         resp.raise_for_status()
         data = resp.json()
+        if not isinstance(data, dict):  # a list or null would break parse_questions with AttributeError
+            raise ValueError(f"Greenhouse job JSON is {type(data).__name__}, not an object")
+        return data
+
+    @staticmethod
+    def parse_questions(data: dict[str, Any]) -> list[ScreeningQuestion]:
+        """Parse the `questions` of a job JSON from `fetch_job`."""
         raw_questions = data.get("questions") or []
 
         parsed_questions: list[ScreeningQuestion] = []

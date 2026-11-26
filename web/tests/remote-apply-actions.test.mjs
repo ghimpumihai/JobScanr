@@ -41,7 +41,7 @@ const PLAN = {
 };
 
 /** Records every query; answers per table and operation. */
-function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null, saveError = null, markError = null, stale = [] } = {}) {
+function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.from('%PDF'), insertError = null, row = null, saveError = null, markError = null, stale = [], memory = [] } = {}) {
   const log = [];
   const answer = (q) => {
     if (q.table === 'users') return { data: user, error: user ? null : { message: 'x' } };
@@ -50,6 +50,7 @@ function fakeSb({ user = USER, app = APP, count = 0, plan = PLAN, cv = Buffer.fr
       return markError ? { data: null, error: markError } : { data: [{ id: app?.id }] };
     }
     if (q.table === 'application_fill_plans') return { data: plan ? { plan } : null };
+    if (q.table === 'user_answers') return { data: memory, error: null };
     if (q.table === 'remote_apply_sessions') {
       if (q.op === 'insert') return insertError ? { data: null, error: insertError } : { data: { id: 900 } };
       if (q.op === 'update' && q.filters.some(([k]) => k === '<started_at')) return { data: stale, error: null };
@@ -149,7 +150,9 @@ function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.
   };
   deps.fill = async (_page, plan, profile, cv) => {
     w.filled = { plan, profile, cv };
-    return { planned: 6, filled: 5, unfilled: ['location'], cvAttached: true };
+    const drafted = (plan?.for_user ?? []).filter((q) => q.draft_status === 'generated' && q.draft).map((q) => q.label);
+    const remembered = (plan?.for_user ?? []).filter((q) => q.memory_answer).map((q) => ({ label: q.label, similar: q.memory_match === 'similar' }));
+    return { planned: 6, filled: 5, unfilled: ['location'], drafted, remembered, cvAttached: true };
   };
   deps.captchaVisible = async () => captcha;
   deps.now = () => new Date(NOW);
@@ -191,6 +194,78 @@ test('start: fills the bare Greenhouse form in a new session and returns the liv
   assert.deepEqual(world.released, []);
   // The live view URL and the connect key are never written to the database.
   assert.ok(!JSON.stringify(sb.log).includes('LIVE') && !JSON.stringify(sb.log).includes('SECRET'));
+});
+
+// LLM drafts (#59): a fresh plan per test, because the session edits the plan it reads.
+const draftPlan = () => ({
+  ...PLAN,
+  for_user: [
+    { name: 'question_4', label: 'Why Acme?', reason: 'open_ended', type: 'long_text', draft: 'I build payments.', draft_status: 'generated' },
+    { name: 'question_5', label: 'Salary?', reason: 'no_confident_answer' }
+  ]
+});
+
+test('start: an opted-in user gets the drafts typed, and the drawer marks them for review', async () => {
+  const sb = fakeSb({ user: { ...USER, llm_drafts_enabled: true }, plan: draftPlan() });
+  const result = await startSession(sb, 'uid-1', 55);
+  assert.equal(world.filled.plan.for_user[0].draft, 'I build payments.');
+  assert.deepEqual(result.leftForUser, ['Why Acme? (draft typed in, please review)', 'Salary?', 'location']);
+});
+
+test('start: after opting out, stored drafts are not typed', async () => {
+  for (const user of [USER, { ...USER, llm_drafts_enabled: false }]) {
+    world = fakeWorld();
+    const result = await startSession(fakeSb({ user, plan: draftPlan() }), 'uid-1', 55);
+    assert.equal(world.filled.plan.for_user[0].draft, undefined);
+    assert.deepEqual(result.leftForUser, ['Why Acme?', 'Salary?', 'location']);
+  }
+});
+
+test('start: a question both left for the user and unfilled is listed once', async () => {
+  deps.fill = async () => ({ planned: 1, filled: 0, unfilled: ['Why Acme?'], drafted: [], remembered: [], cvAttached: true });
+  const result = await startSession(fakeSb({ user: { ...USER, llm_drafts_enabled: true }, plan: draftPlan() }), 'uid-1', 55);
+  assert.deepEqual(result.leftForUser, ['Why Acme?', 'Salary?']);
+});
+
+// Answer memory: a fresh plan per test, because the session edits the plan it reads.
+const memoryPlan = () => ({
+  ...PLAN,
+  for_user: [
+    { name: 'question_7', label: 'Expected salary (EUR)?', reason: 'no_confident_answer', memory_id: 1, memory_match: 'similar' },
+    { name: 'question_8', label: 'When can you start?', reason: 'no_confident_answer' }, // plan built before the memory
+    { name: 'question_9', label: 'Notice period?', reason: 'no_confident_answer', memory_id: 3, memory_match: 'exact' },
+    { name: 'question_4', label: 'Why Acme?', reason: 'open_ended' }
+  ]
+});
+const MEMORY = [
+  { id: 1, question_key: 'what are your salary expectations', answer: '65,000 EUR (edited today)' },
+  { id: 2, question_key: 'when can you start', answer: 'From March' },
+  { id: 3, question_key: 'notice period', answer: null } // still pending
+];
+
+test('start: saved answers are read now, by link or by the same question text, and marked when similar', async () => {
+  const sb = fakeSb({ plan: memoryPlan(), memory: MEMORY });
+  const result = await startSession(sb, 'uid-1', 55);
+  const [salary, start, notice, why] = world.filled.plan.for_user;
+  assert.equal(salary.memory_answer, '65,000 EUR (edited today)');
+  assert.deepEqual([start.memory_answer, start.memory_match], ['From March', 'exact']);
+  assert.equal(notice.memory_answer, undefined); // pending: left for the user
+  assert.equal(why.memory_answer, undefined); // not a personal-fact question
+  assert.deepEqual(result.leftForUser, [
+    'Expected salary (EUR)? (saved answer to a similar question, please check)',
+    'Notice period?',
+    'Why Acme?',
+    'location'
+  ]);
+  const read = sb.log.find((q) => q.table === 'user_answers');
+  assert.deepEqual(read.filters, [['user_id', 7]]);
+  assert.ok(!JSON.stringify(sb.log.filter((q) => q.op !== 'select')).includes('65,000')); // answers are never written back
+});
+
+test('start: a deleted saved answer is left for the user', async () => {
+  const result = await startSession(fakeSb({ plan: memoryPlan(), memory: [] }), 'uid-1', 55);
+  assert.ok(world.filled.plan.for_user.every((q) => q.memory_answer === undefined));
+  assert.deepEqual(result.leftForUser, ['Expected salary (EUR)?', 'When can you start?', 'Notice period?', 'Why Acme?', 'location']);
 });
 
 const refusals = [

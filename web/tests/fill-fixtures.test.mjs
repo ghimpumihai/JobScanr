@@ -90,6 +90,76 @@ test('Greenhouse-shaped form: planned answers by name, standard fields by label,
   await page.close();
 });
 
+test('LLM drafts go only into their own free-text field and are never submitted (#59)', async () => {
+  const page = await open(`<form>
+    <label for="question_4">Why Acme?</label><textarea id="question_4" name="question_4"></textarea>
+    <label for="question_5">Tell us about a project</label><input id="question_5" name="question_5">
+    <label for="question_6">Pick one</label><select id="question_6" name="question_6"><option value="">--</option><option>I build payments.</option></select>
+    <label for="question_7">Notes</label><textarea id="question_7" name="question_7"></textarea>
+    <label for="cover">Anything else?</label><textarea id="cover" name="cover"></textarea>
+    <button type="submit">Submit</button>
+  </form>`);
+  const draft = (name, label, extra = {}) => ({ name, label, reason: 'open_ended', type: 'long_text', draft: `Draft for ${label}.`, draft_status: 'generated', ...extra });
+  const plan = {
+    ...GH_PLAN,
+    fields: [],
+    for_user: [
+      draft('question_4', 'Why Acme?'),
+      draft('question_5', 'Tell us about a project'),
+      draft('question_6', 'Pick one'), // not free text: never typed
+      draft('question_7', 'Notes', { draft: undefined, draft_status: 'unanswered', draft_reason: 'rate_limit_exceeded' }),
+      draft('question_99', 'Removed from the form')
+    ]
+  };
+  const result = await fillPage(page, plan, {}, null);
+  assert.equal(await page.inputValue('#question_4'), 'Draft for Why Acme?.');
+  assert.equal(await page.inputValue('#question_5'), 'Draft for Tell us about a project.');
+  assert.equal(await page.inputValue('#question_6'), '');
+  assert.equal(await page.inputValue('#question_7'), '');
+  assert.equal(await page.inputValue('#cover'), '');
+  assert.deepEqual(result.drafted, ['Why Acme?', 'Tell us about a project']);
+  assert.deepEqual(result.unfilled, ['Pick one', 'Removed from the form']);
+  assert.equal(result.planned, 4);
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('saved answers go only into their own field; dropdowns only on an option match, any case (answer memory)', async () => {
+  const page = await open(`<form>
+    <label for="question_7">Salary expectations</label><input id="question_7" name="question_7">
+    <label for="question_8">Willing to relocate?</label><select id="question_8" name="question_8"><option value="">--</option><option value="1">Yes</option><option value="0">No</option></select>
+    <label for="question_9">Work arrangement</label><select id="question_9" name="question_9"><option value="">--</option><option>Remote</option><option>Hybrid</option></select>
+    <label for="question_10">I consent</label><input id="question_10" name="question_10" type="checkbox">
+    <label for="question_11">Years of experience</label><select id="question_11" name="question_11"><option value="">--</option><option value="1">0-1</option><option value="2">1-3</option><option value="3">3-5</option></select>
+    <label for="other">Anything else?</label><textarea id="other" name="other"></textarea>
+    <button type="submit">Submit</button>
+  </form>`);
+  const saved = (name, label, memory_answer, memory_match = 'exact') => ({ name, label, reason: 'no_confident_answer', memory_answer, memory_match });
+  const plan = {
+    ...GH_PLAN,
+    fields: [],
+    for_user: [
+      saved('question_7', 'Salary expectations', '60,000 EUR', 'similar'),
+      saved('question_8', 'Willing to relocate?', 'yes'),
+      saved('question_9', 'Work arrangement', 'On site'), // not an option: left
+      saved('question_10', 'I consent', 'yes'), // checkbox: never
+      saved('question_11', 'Years of experience', '3'), // equals an option's value, not its label: left
+      { name: 'other', label: 'Anything else?', reason: 'no_confident_answer' } // nothing saved
+    ]
+  };
+  const result = await fillPage(page, plan, {}, null);
+  assert.equal(await page.inputValue('#question_7'), '60,000 EUR');
+  assert.equal(await page.inputValue('#question_8'), '1');
+  assert.equal(await page.inputValue('#question_9'), '');
+  assert.equal(await page.isChecked('#question_10'), false);
+  assert.equal(await page.inputValue('#question_11'), '');
+  assert.equal(await page.inputValue('#other'), '');
+  assert.deepEqual(result.remembered, [{ label: 'Salary expectations', similar: true }, { label: 'Willing to relocate?', similar: false }]);
+  assert.deepEqual(result.unfilled, ['Work arrangement', 'I consent', 'Years of experience']);
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
 test('Lever-shaped form: single name field and URL fields, no plan', async () => {
   const page = await open(`<form>
     <label>Full name<input name="name"></label>

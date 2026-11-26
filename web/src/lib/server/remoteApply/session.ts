@@ -7,7 +7,7 @@ import { chromium, type Browser, type Page } from 'playwright-core';
 import { MAX_CV_SIZE } from '$lib/cvFile';
 import { safeHttpUrl } from '$lib/safeUrl';
 import { captchaVisible, isConfirmation } from './detect';
-import { fillPage, type FillPlan, type FillProfile } from './fill';
+import { fillPage, normalizeQuestion, type FillPlan, type FillProfile } from './fill';
 import { getProvider, SESSION_SECONDS, type Connection, type RemoteProvider } from './provider';
 
 export const DAILY_CAP = 5;
@@ -93,7 +93,7 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
 
   const { data: user, error: userError } = await sb
     .from('users')
-    .select('id, email, resume_storage_path, resume_filename, screening_defaults, resume_data')
+    .select('id, email, resume_storage_path, resume_filename, screening_defaults, resume_data, llm_drafts_enabled')
     .eq('auth_user_id', authUserId)
     .single();
   if (userError || !user) throw new RemoteError(500, 'Could not load your profile.');
@@ -132,6 +132,19 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
 
   const { data: planRow } = await sb.from('application_fill_plans').select('plan').eq('application_id', app.id).maybeSingle();
   const plan: FillPlan | null = planRow?.plan ?? null;
+  // Opting out takes effect now, not at the next plan refresh (#59).
+  if (!user.llm_drafts_enabled) for (const q of plan?.for_user ?? []) delete q.draft;
+  // Answer memory: current answers, by the pipeline's link or else by the same question text (also old plans).
+  const { data: memory } = await sb.from('user_answers').select('id, question_key, answer').eq('user_id', user.id);
+  const byId = new Map((memory ?? []).map((m) => [m.id, m]));
+  const byKey = new Map((memory ?? []).map((m) => [m.question_key, m]));
+  for (const q of plan?.for_user ?? []) {
+    if (q.reason !== 'no_confident_answer') continue;
+    const linked = q.memory_id != null ? byId.get(q.memory_id) : undefined;
+    const saved = linked ?? byKey.get(normalizeQuestion(q.label));
+    if (!linked) q.memory_match = 'exact';
+    if (typeof saved?.answer === 'string' && saved.answer.trim()) q.memory_answer = saved.answer;
+  }
   const url = formUrl(platform, { url: posting.url, external_id: posting.external_id, ats_identifier: posting.companies?.ats_identifier }, plan);
   if (!url) throw new RemoteError(422, 'This posting has no form page JobScanr can open.');
 
@@ -205,7 +218,14 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     // One retry before giving up a form that is already filled; a 429 still ends in the quota message below.
     const id = providerId;
     const liveViewUrl = await provider.liveViewUrl(id).catch(() => provider.liveViewUrl(id));
-    return { sessionId: row.id, liveViewUrl, leftForUser: [...(plan?.for_user ?? []).map((q) => q.label), ...result.unfilled] };
+    const remembered = new Map(result.remembered.map((r) => [r.label, r.similar]));
+    const forUser = (plan?.for_user ?? []).flatMap((q) => {
+      if (result.drafted.includes(q.label)) return [`${q.label} (draft typed in, please review)`];
+      const similar = remembered.get(q.label);
+      if (similar === undefined) return [q.label];
+      return similar ? [`${q.label} (saved answer to a similar question, please check)`] : []; // exact: answered
+    });
+    return { sessionId: row.id, liveViewUrl, leftForUser: [...new Set([...forUser, ...result.unfilled])] };
   } catch (e) {
     if (e instanceof RemoteError) throw e;
     const quota = (e as { status?: number })?.status === 429; // a free plan's daily or monthly minutes are used up

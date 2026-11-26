@@ -60,6 +60,8 @@ class User(TypedDict):
     max_apps_per_company: NotRequired[int]
     gdpr_consent_at: NotRequired[str]
     created_at: NotRequired[str]
+    resume_storage_path: NotRequired[str | None]
+    llm_drafts_enabled: NotRequired[bool]
 
 
 class UserJobMatch(TypedDict):

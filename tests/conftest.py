@@ -13,6 +13,8 @@ def _refuse(*args, **kwargs):
 @pytest.fixture(autouse=True)
 def _no_real_database(request, monkeypatch):
     """config.py loads the production DATABASE_URL from .env; block any connection outside integration tests."""
+    # .env's remote-fill allowlist would make the pipeline tests' users build real fill plans; tests that need it set it.
+    monkeypatch.delenv("REMOTE_APPLY_USER_IDS", raising=False)
     if request.node.get_closest_marker("integration"):
         return
     monkeypatch.setattr(psycopg_pool.ConnectionPool, "__init__", _refuse)
