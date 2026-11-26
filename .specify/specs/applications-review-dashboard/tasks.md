@@ -3,7 +3,7 @@
 **Feature Slug**: `applications-review-dashboard`  
 **Plan Reference**: [.specify/specs/applications-review-dashboard/plan.md](./plan.md)  
 **Spec Reference**: [.specify/specs/applications-review-dashboard/spec.md](./spec.md)  
-**Status**: In Progress  
+**Status**: Completed (2026-11-26)  
 
 Each task adds its own tests and leaves the suite green. Run `.venv/bin/python -m pytest tests/` after Python, SQL or test edits, and `npm run check` and `npm test` in `web/` after web edits. A new test must fail when its change is reverted. Use `.venv/bin/python -m ...` for Python commands; `.venv/bin/mypy` has a stale interpreter path.
 
@@ -63,9 +63,10 @@ Phase 3 done 2026-11-23: 458 Python tests (with the database guard) and 29 web t
   - Fixed: the drawer's platform badge was lowercase.
   - Finding, not fixed: until the page's JavaScript has loaded, the Apply, Applied and Not interested buttons do nothing (noticeable in dev mode).
   - Not covered: the Undo button (demo changes return no undo; the server side is unit-tested), real staging data in the browser, dark mode, and a screen reader.
-- [ ] Task 5.4 (**ask first: commit, push and PR**): Open the pull request. Its description says merging applies the schema to production, and gives the rollback notes from plan section 5.
+- [x] Task 5.4 (**ask first: commit, push and PR**): Open the pull request. Its description says merging applies the schema to production, and gives the rollback notes from plan section 5.
 
 **Release (ask first: production schema).** Merge only if 5.2 passed; `sync-db` applies the schema.
+  Done: PR #126, merged to `main` as 5d5a958.
 
 ## Follow-ups Outside This Feature
 - Open an issue: delete or archive the worker and the Greenhouse and Lever submitters (D4).

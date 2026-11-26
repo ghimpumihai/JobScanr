@@ -202,4 +202,4 @@ the drawer's iframe.
       decision and the recommendation between this hybrid and option A.
 - [ ] Task 8.2: `ruff check .`, `ruff format --check .`, `mypy models.py config.py scrapers/`.
 - [ ] Task 8.3: `python -m pytest tests/`, `cd web && npm test && npm run check && npm run build`.
-- [ ] Task 8.4: `graphify update .`.
+- [x] Task 8.4: dropped on 2026-11-26: graphify was removed from the project.
