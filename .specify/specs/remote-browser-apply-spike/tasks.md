@@ -189,8 +189,10 @@ the drawer's iframe.
 - [x] Task 7.3: Dropped 2026-11-26; the gate is read over the pilot's applications (Task 7.5). Was: **Gate check**: zero wrong submissions. Fail → report and stop.
 - [ ] Task 7.4 [LIVE][DB]: Amended 2026-11-26: one user (the owner), genuine applications they want to make on
       Greenhouse and Lever, through Fill it for me. For each of the first 10, record: values checked before Submit,
-      Applied recorded once on the right row (or the Mark as Applied fallback), and any wrong or missing value. Time one
-      or two applications done by hand for the time-to-submit baseline, which stage 2 did not measure. Original text:
+      Applied recorded once on the right row (or the Mark as Applied fallback), and any wrong or missing value.
+      Manual baseline (owner's estimate, 2026-11-26): about 2–3 minutes per application done by hand; an estimate,
+      not a timed measurement. The time-to-submit gate (at least 50% faster, Task 7.5) therefore needs a median of
+      about 1–1.5 minutes from opening Fill it for me to clicking Submit. Original text:
       Pilot on production: ≤ 5 opted-in users, cap 5 per day, 2 weeks, kill script tested once
       at the start. Collect time to submit and the employer-response comparison.
 - [ ] Task 7.5: **Gate check**: time to submit and parity (spec §5.2).
