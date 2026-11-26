@@ -145,8 +145,15 @@ def _render_web_portal_bridge(total_count: int, remaining_jobs: list[dict], port
     """
 
 
-def _render_heartbeat_digest(user_email: str, total_boards: int = 388) -> str:
+def _boards_phrase(boards: int | None) -> str:
+    """'3,616 company job boards', or no number when the caller did not count them."""
+    return f"{boards:,} company job boards" if boards else "company job boards"
+
+
+def _render_heartbeat_digest(user_email: str, boards: int | None = None) -> str:
     """Render positive telemetry heartbeat for zero-match days."""
+    phrase = _boards_phrase(boards)
+    online = f"{boards:,} / {boards:,}" if boards else "Online"
     from datetime import datetime, timezone
 
     today_str = datetime.now(timezone.utc).strftime("%b %d")
@@ -165,15 +172,15 @@ def _render_heartbeat_digest(user_email: str, total_boards: int = 388) -> str:
         </tr>
       </table>
       <h2 style="color:#0f172a;font-size:20px;font-weight:700;margin:0 0 8px 0;line-height:1.3;">
-        All systems healthy — {total_boards} boards checked
+        All systems healthy — {phrase} checked
       </h2>
       <p style="color:#475569;font-size:14px;line-height:1.5;margin:0 0 20px 0;">
-        We scanned all {total_boards} engineering career boards across Europe at 06:00 UTC today. No new software engineering roles matching your profile were posted in the last 24 hours.
+        We scanned {phrase} across Europe at 06:00 UTC today. No new software engineering roles matching your profile were posted in the last 24 hours.
       </p>
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px 20px;margin-bottom:20px;">
         <tr>
           <td align="center" style="padding:4px 12px;border-right:1px solid #e2e8f0;">
-            <div style="color:#0f172a;font-size:16px;font-weight:700;">{total_boards} / {total_boards}</div>
+            <div style="color:#0f172a;font-size:16px;font-weight:700;">{online}</div>
             <div style="color:#64748b;font-size:12px;">Feeds online</div>
           </td>
           <td align="center" style="padding:4px 12px;border-right:1px solid #e2e8f0;">
@@ -193,7 +200,9 @@ def _render_heartbeat_digest(user_email: str, total_boards: int = 388) -> str:
     """
 
 
-def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], activity: dict | None = None) -> str:
+def build_personalized_html_digest(
+    user: dict, unnotified_matches: list[dict], activity: dict | None = None, boards: int | None = None
+) -> str:
     """Render modern editorial daily digest: jobs stream, high-volume bridge, or positive heartbeat."""
     user_email = html.escape(str(user.get("email") or ""))
     activity = activity or {}
@@ -207,7 +216,7 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
 
     # 1. Zero-match state -> Render positive heartbeat telemetry
     if total_matches == 0 and not submitted and not needs_review and not manual_apply:
-        content_inner = _render_heartbeat_digest(user_email)
+        content_inner = _render_heartbeat_digest(user_email, boards)
         footer_html = """
         <div style="padding:20px 36px 24px 36px;border-top:1px solid #f1f5f9;text-align:center;color:#64748b;font-size:12px;">
           <p style="margin:0 0 4px 0;">JobScanr monitors Greenhouse, Lever, Ashby, Workday, SmartRecruiters, and Teamtailor.</p>
@@ -244,7 +253,7 @@ def build_personalized_html_digest(user: dict, unnotified_matches: list[dict], a
         {count_label}
       </h1>
       <div style="color:#475569;font-size:14px;">
-        Scanned 388 engineering boards across Europe for <strong style="color:#0f172a;">{user_email}</strong>
+        Scanned {_boards_phrase(boards)} across Europe for <strong style="color:#0f172a;">{user_email}</strong>
       </div>
     </div>
     """
@@ -373,6 +382,7 @@ def send_user_digest(
     unnotified_matches: list[dict],
     activity: dict | None = None,
     send_heartbeat: bool = False,
+    boards: int | None = None,
 ) -> str | None:
     """Send personalized daily digest to a user: matching jobs stream or positive heartbeat."""
     activity = activity or {}
@@ -389,10 +399,10 @@ def send_user_digest(
         return None
 
     if not has_content and send_heartbeat:
-        subject = "JobScanr: Radar Active (388 boards checked)"
+        subject = f"JobScanr: Radar Active ({boards:,} boards checked)" if boards else "JobScanr: Radar Active"
         text_content = (
             f"JobScanr Daily Radar for {to_email}\n"
-            "All systems healthy — 388 boards checked.\n"
+            f"All systems healthy — {_boards_phrase(boards)} checked.\n"
             "No new early-career software engineering roles matched your profile in the last 24 hours.\n"
             "Next scan runs tomorrow at 06:00 UTC.\n"
         )
@@ -405,7 +415,7 @@ def send_user_digest(
         if needs_review:
             text_content += f"- {len(needs_review)} actions required\n"
 
-    html_content = build_personalized_html_digest(user, unnotified_matches, activity)
+    html_content = build_personalized_html_digest(user, unnotified_matches, activity, boards)
     return _send_email(
         subject=subject,
         text_body=text_content,

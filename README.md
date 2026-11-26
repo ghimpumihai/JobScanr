@@ -2,7 +2,7 @@
 
 # 🔭 JobScanr
 
-**A personal radar that watches 380+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
+**A personal radar that watches 3,600+ tech companies across Europe and emails you the moment an internship, junior, or graduate software engineering role appears.**
 
 ![python](https://img.shields.io/badge/python-3.12-blue)
 ![platforms](https://img.shields.io/badge/ATS-Greenhouse%20%C2%B7%20Ashby%20%C2%B7%20Lever%20%C2%B7%20Workday%20%C2%B7%20SmartRecruiters%20%C2%B7%20Teamtailor-purple)
@@ -22,7 +22,7 @@ Once a day, a GitHub Actions cron wakes up and:
             ▼
 ┌───────────────────────┐      ┌──────────────────────────┐
 │ 1 · SCRAPE            │      │ 2 · ENRICH               │
-│ 388 career boards     │ ───► │ listings without         │
+│ 3,600+ career boards  │ ───► │ listings without         │
 │ across 7 ATS platforms│      │ descriptions get fetched │
 └───────────────────────┘      │ individually             │
                                └────────────┬─────────────┘

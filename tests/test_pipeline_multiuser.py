@@ -217,10 +217,15 @@ def test_build_personalized_html_digest_standard_and_high_volume(monkeypatch):
     assert "Monzo" in html_hv
 
     # 3. Zero-match day: Heartbeat telemetry
-    html_empty = notify.build_personalized_html_digest(user, [])
-    assert "All systems healthy — 388 boards checked" in html_empty
+    html_empty = notify.build_personalized_html_digest(user, [], boards=3616)
+    assert "All systems healthy — 3,616 company job boards checked" in html_empty
     assert "● Radar Active" in html_empty
-    assert "388 / 388" in html_empty
+    assert "3,616 / 3,616" in html_empty
+
+    # Without a count (preview script), the copy drops the number instead of inventing one
+    html_uncounted = notify.build_personalized_html_digest(user, [])
+    assert "All systems healthy — company job boards checked" in html_uncounted
+    assert "388" not in html_uncounted
     assert "0 errors" in html_empty
 
 
@@ -233,11 +238,11 @@ def test_send_user_digest_empty():
 def test_send_user_digest_heartbeat():
     user = {"email": "bob@example.com"}
     with patch("jobs.notify._send_email", return_value="MSG-HEARTBEAT") as mock_send:
-        res = notify.send_user_digest(user, [], send_heartbeat=True)
+        res = notify.send_user_digest(user, [], send_heartbeat=True, boards=3616)
         assert res == "MSG-HEARTBEAT"
         mock_send.assert_called_once()
         subject = mock_send.call_args[1]["subject"]
-        assert "Radar Active" in subject
+        assert subject == "JobScanr: Radar Active (3,616 boards checked)"
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +390,7 @@ async def test_run_pipeline_one_bad_user_does_not_stop_the_others():
     broken = {"id": 2, "email": "broken@example.com", "profile_filters": {"titles": [123]}}
     sends: list[str] = []
 
-    def fake_send(user, unnotified, activity=None):
+    def fake_send(user, unnotified, activity=None, boards=None):
         if user["id"] == 1:
             raise RuntimeError("SMTP rejected recipient")  # first user's address is bad
         sends.append(user["email"])
