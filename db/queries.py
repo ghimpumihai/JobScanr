@@ -81,7 +81,7 @@ def upsert_companies(companies: list[Company | dict]) -> int:
         return cur.rowcount
 
 
-def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
+def upsert_jobs(jobs: list[JobPosting]) -> list[JobPosting]:
     """Insert jobs for known company_ids.
 
     Descriptions are deliberately NOT persisted — they're used in memory
@@ -122,7 +122,7 @@ def upsert_jobs(jobs: list[JobPosting | dict]) -> list[JobPosting]:
         RETURNING jp.id, jp.external_id, jp.company_id, (jp.first_seen_at = jp.last_seen_at) AS is_new
     """
     job_map = {(j["external_id"], j["company_id"]): j for j in jobs}
-    out: list[dict] = []
+    out: list[JobPosting] = []
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, arrays)
         for job_id, external_id, company_id, is_new in cur.fetchall():
@@ -309,7 +309,9 @@ def delete_companies_batch(identifiers: list[tuple[str, str]]) -> int:
 def counts() -> dict:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT (SELECT COUNT(*) FROM companies), (SELECT COUNT(*) FROM job_postings)")
-        n_companies, n_jobs = cur.fetchone()
+        row = cur.fetchone()
+        assert row is not None  # two scalar subqueries always return exactly one row
+        n_companies, n_jobs = row
         return {"companies": n_companies, "job_postings": n_jobs}
 
 
@@ -323,7 +325,7 @@ def prune_obsolete_companies(valid_keys: set[tuple[str, str]]) -> list[Company]:
             "SELECT id, name, ats_platform, ats_identifier FROM companies WHERE NOT " + _COMPANY_HAS_APPLICATIONS
         )
         to_delete = []
-        deleted_records = []
+        deleted_records: list[Company] = []
         for row in cur.fetchall():
             if (row[2], row[3]) not in valid_keys:
                 to_delete.append(row[0])
