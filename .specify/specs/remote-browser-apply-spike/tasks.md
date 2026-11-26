@@ -107,12 +107,35 @@ offline.
 - [x] Task 6.1 (2026-11-24; postings and Greenhouse plans for the fake person come from `scripts/spike_postings.py`; the local baseline is a visible Chromium window): `web/scripts/fill-spike.mjs` (plan §3.4): fake persona and dummy CV, Browserbase then local headed
       Chromium per posting, one at a time, Ashby paced ≥ 0.5 s, never submits, refuses without `--confirm-live`, writes
       results JSON and screenshots to an uncommitted folder. Unit-test the argument guard and that no submit is called.
-- [ ] Task 6.2 [LIVE]: Run on 30 Greenhouse, 15 Lever and 15 Ashby postings. Record fill accuracy, visible-captcha
+- [x] Task 6.2 [LIVE]: Run on 30 Greenhouse, 15 Lever and 15 Ashby postings. Record fill accuracy, visible-captcha
       rate for both browsers, and time.
+  - Done 2026-11-26 (results in `web/.spike-results/2026-11-26T12-06-43-555Z` cloud and `...T12-43-52-555Z` local;
+    postings list of 2026-11-25: 30 Greenhouse, 9 Lever, 15 Ashby; nothing submitted, blocked-submit count 0):
+
+    | Platform | Browser | Forms | Captcha | CV | Filled / attempted | Excl. location | Fill s (median) |
+    |---|---|---|---|---|---|---|---|
+    | Greenhouse | Browserbase | 30/30 | 0 | 28/30 | 197/216 (91%) | 197/199 (99%) | 18.3 |
+    | Greenhouse | Cloudflare | 22/23 (quota) | 0 | 20/22 | 141/156 (90%) | 141/143 (99%) | 13.4 |
+    | Greenhouse | local | 30/30 | 0 | 28/30 | 197/216 (91%) | 197/199 (99%) | 6.4 |
+    | Lever | all three | 9/9 | 0 | 9/9 | 56/56 (100%) | — | 17.0 / 5.1 / 6.2 |
+    | Ashby | all three | 15/15 | 0 | 15/15 | 73/74 (99%) | — | 8.1 / 4.9 / 2.5 |
+
+  - The three browsers fill identical fields. Greenhouse misses are the location autocomplete (one per form) and the
+    CV upload on 2 postings. "Required filled" over every required control (15–65%) counts employer questions no
+    profile answers; "filled / attempted" is the usable measure. Cloudflare's free 10 min/day ran out at posting 23.
+    Values were checked for presence, not each one for correctness.
 - [ ] Task 6.3: Replace the placeholder confirmation patterns in `detect.ts` with ones from public documentation or
       employer-consented submissions (stage 3); never by submitting to a real employer.
-- [ ] Task 6.4: **Gate check** against spec §5.2 (fill accuracy, captcha rate and its gap to the baseline). Fail →
+  - Partly done 2026-11-26 from public sources (comment in `detect.ts`). Greenhouse: confirmation URL
+    `.../jobs/<id>/confirmation`, title "Thank you for applying" (indexed pages); its support article says the text is
+    editable per board, so the URL rule is the signal. Lever and Ashby: docs only say the success page or message is
+    customisable; Lever's help article was not reachable (401). Their patterns stay unverified until Task 7.2.
+- [x] Task 6.4: **Gate check** against spec §5.2 (fill accuracy, captcha rate and its gap to the baseline). Fail →
       write the report (Task 8.1) and stop.
+  - Passed 2026-11-26. Fill accuracy (spec §5.2 as amended): Greenhouse 99% in Browserbase, Cloudflare and the local
+    window (197/199, 141/143, 197/199); Lever 100%, Ashby 99%. Visible captcha: 0% in both providers and locally, so
+    0 points above the baseline. Presence was measured, not each value's correctness; correctness is checked in the
+    consented submissions (Task 7.2). Time to submit and response parity are pilot gates (Task 7.5).
 
 **Two providers (2026-11-24, at the user's request):** Cloudflare Browser Run was added next to Browserbase.
 `REMOTE_APPLY_PROVIDER` picks the provider for new sessions; each session is always checked and closed through the

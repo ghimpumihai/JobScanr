@@ -135,6 +135,9 @@ Never submit to boards the tester does not own or have permission for (for examp
 ### 5.2 Go / no-go gates (thresholds proposed; confirm before stage 2)
 - **Zero wrong submissions**: no submission to the wrong posting, no duplicate, no value the user did not see.
 - **Fill accuracy** ≥ 95% of required fields filled correctly on Greenhouse in stage 2, with Lever and Ashby reported.
+  Amended 2026-11-26 (user decision after stage 2): measured over the fields JobScanr is meant to fill (contact
+  fields, CV, planned answers), not every required control; questions left for the user, including Greenhouse's
+  location autocomplete, are not counted.
 - **Visible-captcha rate** from the provider browser ≤ 20%, and no more than 10 points above the home-connection baseline.
 - **Time to submit** (pilot median) at least 50% below the manual baseline measured in stage 2.
 - **Response parity** (pilot, reported only): employer responses to hybrid applications are not visibly lower than

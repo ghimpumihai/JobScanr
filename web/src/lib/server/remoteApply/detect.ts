@@ -18,8 +18,13 @@ export async function captchaVisible(page: Page): Promise<boolean> {
   return false;
 }
 
-// shortcut: placeholder patterns, not yet checked against real confirmation pages; replace them in Task 6.3
-// from public documentation or employer-consented submissions, never by submitting to a real employer.
+// Evidence (Task 6.3, 2026-11-26, public sources only; never by submitting to a real employer):
+// - Greenhouse: indexed confirmation pages live at .../jobs/<id>/confirmation, titled "Thank you for applying".
+//   Greenhouse's support article says the confirmation text is editable per board, so the URL is the signal and
+//   the text is only a fallback.
+// - Lever, Ashby: their docs say only that employers can customise the success page or message; no default URL or
+//   wording is documented. shortcut: these stay unverified guesses until consented submissions (Task 7.2); a miss
+//   only means the user marks the application Applied themselves.
 const CONFIRMATION: Record<string, { url?: RegExp; text?: RegExp }> = {
   greenhouse: { url: /\/confirmation\b/, text: /thank you for applying|application (has been )?(received|submitted)/i },
   lever: { url: /\/thanks\b/, text: /application submitted|thanks for applying/i },
