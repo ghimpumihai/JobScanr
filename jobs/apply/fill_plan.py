@@ -64,7 +64,10 @@ def build_plan(questions: list[ScreeningQuestion], user: User, posting_url: str 
             if q.required:
                 for_user.append({"name": name, "label": label, "reason": "file"})
             continue
-        if q.question_type == QuestionType.LONG_TEXT or len(label) > 100:
+        # By type first: a long label on a select or checkbox is still a fact question (#137).
+        if q.question_type == QuestionType.LONG_TEXT or (
+            q.question_type == QuestionType.SHORT_TEXT and len(label) > 100
+        ):
             for_user.append({"name": name, "label": label, "reason": "open_ended", "type": q.question_type.value})
             continue
         value, confident = map_screening_question(q, user)

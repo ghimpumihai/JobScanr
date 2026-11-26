@@ -225,7 +225,14 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
       if (similar === undefined) return [q.label];
       return similar ? [`${q.label} (saved answer to a similar question, please check)`] : []; // exact: answered
     });
-    return { sessionId: row.id, liveViewUrl, leftForUser: [...new Set([...forUser, ...result.unfilled])] };
+    const listed = [...new Set([...forUser, ...result.unfilled])];
+    // Required fields the plan never saw (#137); a question already listed above is not listed twice.
+    const keys = new Set(listed.map(normalizeQuestion));
+    const required = result.required.filter((label) => {
+      const key = normalizeQuestion(label);
+      return !keys.has(key) && keys.add(key);
+    });
+    return { sessionId: row.id, liveViewUrl, leftForUser: [...listed, ...required] };
   } catch (e) {
     if (e instanceof RemoteError) throw e;
     const quota = (e as { status?: number })?.status === 429; // a free plan's daily or monthly minutes are used up

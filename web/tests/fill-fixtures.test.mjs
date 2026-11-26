@@ -197,6 +197,46 @@ test('Ashby-shaped form: a combobox option is clicked, never a button', async ()
   await page.close();
 });
 
+test('a server-rendered form is filled only once its scripts have loaded (#137)', async () => {
+  // Like Greenhouse in a slow remote browser: the dropdown is in the page at once, but it opens only after the page's
+  // script (here a fetch held back for 1.5 s) has run.
+  const page = await browser.newPage();
+  await page.route('**', async (route) => {
+    if (!route.request().url().endsWith('/app.js')) return route.abort();
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.fulfill({ contentType: 'text/javascript', body: '' });
+  });
+  await page.setContent(
+    `<form><label for="q1">Authorized to work</label><input id="q1" name="question_1" role="combobox" aria-controls="m1">
+      <ul id="m1" hidden><li role="option" onclick="document.getElementById('q1').dataset.picked = this.textContent">Yes</li></ul></form>
+    <script>
+      fetch('https://form.test/app.js').then(() => {
+        document.getElementById('q1').addEventListener('click', () => { document.getElementById('m1').hidden = false; });
+      });
+    </script>${TRAP}`,
+    { waitUntil: 'domcontentloaded' }
+  );
+  const plan = { ...GH_PLAN, fields: [{ name: 'question_1', label: 'Authorized to work', type: 'single_select', value: 1, option_label: 'Yes' }], for_user: [] };
+  const result = await fillPage(page, plan, {}, null);
+  assert.equal(await page.$eval('#q1', (el) => el.dataset.picked), 'Yes');
+  assert.deepEqual(result.unfilled, []);
+  await page.close();
+});
+
+test('a dropdown that takes more than 2 s to click is still filled (#137, Browserbase)', async () => {
+  // A cover over the dropdown for 3 s stands in for a remote browser, where one click took ~2.5 s.
+  const page = await open(`<form><label for="q1">Authorized to work</label>
+    <input id="q1" name="question_1" role="combobox" aria-controls="m1" onclick="document.getElementById('m1').hidden = false">
+    <ul id="m1" hidden><li role="option" onclick="document.getElementById('q1').dataset.picked = this.textContent">Yes</li></ul>
+    <div id="cover" style="position:fixed;inset:0"></div></form>
+    <script>setTimeout(() => document.getElementById('cover').remove(), 3000);</script>`);
+  const plan = { ...GH_PLAN, fields: [{ name: 'question_1', label: 'Authorized to work', type: 'single_select', value: 1, option_label: 'Yes' }], for_user: [] };
+  const result = await fillPage(page, plan, {}, null);
+  assert.equal(await page.$eval('#q1', (el) => el.dataset.picked), 'Yes');
+  assert.deepEqual(result.unfilled, []);
+  await page.close();
+});
+
 // Labels from saved real forms that the first matcher got wrong (Task 3.4 audit, 2026-11-23).
 test('real-form labels: one field for first and last name, ethnicity is not a city, a different legal name and a major stay empty', async () => {
   const page = await open(`<form>
@@ -364,6 +404,53 @@ for (const file of existsSync(FIXTURES) ? readdirSync(FIXTURES).filter((f) => f.
     await page.close();
   });
 }
+
+test('saved Databricks form: required fields outside the question API are listed for the user, each once (#137)', async () => {
+  const page = await open(readFileSync(new URL('greenhouse-6.html', FIXTURES), 'utf8'));
+  const result = await fillPage(page, null, PROFILE, CV);
+  for (const label of ['Country', 'School', 'Degree', 'End date month', 'End date year', 'Are you legally authorized to work in the country in which you are applying?']) {
+    assert.ok(result.required.includes(label), `${label} not listed: ${result.required.join(' | ')}`);
+  }
+  assert.ok(result.required.some((l) => l.startsWith('Please confirm whether any of the below applies to you.'))); // checkbox group, by legend
+  for (const label of ['First Name', 'Last Name', 'Email', 'Phone']) assert.ok(!result.required.includes(label), `${label} was filled`);
+  assert.equal(new Set(result.required).size, result.required.length);
+  await page.close();
+});
+
+test('required-field check: chosen dropdowns, ticked groups and hidden inputs are not listed; empty ones are (#137)', async () => {
+  const page = await open(`<form>
+    <label for="a">Picked</label><input id="a" role="combobox" aria-required="true" aria-describedby="a-live">
+    <label for="b">Not picked</label><input id="b" role="combobox" aria-required="true" aria-describedby="b-placeholder"><div id="b-placeholder">Select...</div>
+    <input required aria-hidden="true" style="opacity:0">
+    <label for="c">Hidden</label><input id="c" required style="display:none">
+    <fieldset aria-required="true"><legend>Languages *</legend>
+      <input type="checkbox" id="l1" name="langs[]" value="1"><label for="l1">English</label>
+      <input type="checkbox" id="l2" name="langs[]" value="2"><label for="l2">French</label></fieldset>
+    <fieldset aria-required="true"><legend>Ticked</legend><input type="checkbox" name="t[]" checked></fieldset>
+    <label for="d">Optional</label><input id="d">
+  </form>`);
+  const result = await fillPage(page, null, {}, null);
+  assert.deepEqual(result.required, ['Not picked', 'Languages']);
+  await page.close();
+});
+
+test('a planned multi-select answer ticks its own box of the group and never unticks another (#137)', async () => {
+  const group = (checked) => `<form><fieldset><legend>Select all that apply</legend>
+    <input type="checkbox" id="o1" name="question_9[]" value="11" ${checked}><label for="o1">Citizen of Cuba</label>
+    <input type="checkbox" id="o2" name="question_9[]" value="22"><label for="o2">None of the above</label></fieldset></form>`;
+  const field = (value) => ({ ...GH_PLAN, fields: [{ name: 'question_9[]', label: 'Select all that apply', type: 'multi_select', value }], for_user: [] });
+  let page = await open(group(''));
+  let result = await fillPage(page, field(22), {}, null);
+  assert.deepEqual([await page.isChecked('#o1'), await page.isChecked('#o2')], [false, true]);
+  assert.equal(result.filled, 1);
+  await page.close();
+
+  page = await open(group('checked'));
+  result = await fillPage(page, field(99), {}, null); // not an option on the live form
+  assert.deepEqual([await page.isChecked('#o1'), await page.isChecked('#o2')], [true, false]);
+  assert.deepEqual(result.unfilled, ['Select all that apply']);
+  await page.close();
+});
 
 test('the submit trap itself catches a click on Submit', async () => {
   const page = await open(GREENHOUSE);
