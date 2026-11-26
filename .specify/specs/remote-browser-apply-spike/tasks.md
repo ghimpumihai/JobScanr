@@ -107,12 +107,38 @@ offline.
 - [x] Task 6.1 (2026-11-24; postings and Greenhouse plans for the fake person come from `scripts/spike_postings.py`; the local baseline is a visible Chromium window): `web/scripts/fill-spike.mjs` (plan §3.4): fake persona and dummy CV, Browserbase then local headed
       Chromium per posting, one at a time, Ashby paced ≥ 0.5 s, never submits, refuses without `--confirm-live`, writes
       results JSON and screenshots to an uncommitted folder. Unit-test the argument guard and that no submit is called.
-- [ ] Task 6.2 [LIVE]: Run on 30 Greenhouse, 15 Lever and 15 Ashby postings. Record fill accuracy, visible-captcha
+- [x] Task 6.2 [LIVE]: Run on 30 Greenhouse, 15 Lever and 15 Ashby postings. Record fill accuracy, visible-captcha
       rate for both browsers, and time.
-- [ ] Task 6.3: Replace the placeholder confirmation patterns in `detect.ts` with ones from public documentation or
+  - Done 2026-11-26 (results in `web/.spike-results/2026-11-26T12-06-43-555Z` cloud and `...T12-43-52-555Z` local;
+    postings list of 2026-11-25: 30 Greenhouse, 9 Lever, 15 Ashby; nothing submitted, blocked-submit count 0):
+
+    | Platform | Browser | Forms | Captcha | CV | Filled / attempted | Excl. location | Fill s (median) |
+    |---|---|---|---|---|---|---|---|
+    | Greenhouse | Browserbase | 30/30 | 0 | 28/30 | 197/216 (91%) | 197/199 (99%) | 18.3 |
+    | Greenhouse | Cloudflare | 22/23 (quota) | 0 | 20/22 | 141/156 (90%) | 141/143 (99%) | 13.4 |
+    | Greenhouse | local | 30/30 | 0 | 28/30 | 197/216 (91%) | 197/199 (99%) | 6.4 |
+    | Lever | all three | 9/9 | 0 | 9/9 | 56/56 (100%) | — | 17.0 / 5.1 / 6.2 |
+    | Ashby | all three | 15/15 | 0 | 15/15 | 73/74 (99%) | — | 8.1 / 4.9 / 2.5 |
+
+  - The three browsers fill identical fields. Greenhouse misses are the location autocomplete (one per form) and the
+    CV upload on 2 postings. "Required filled" over every required control (15–65%) counts employer questions no
+    profile answers; "filled / attempted" is the usable measure. Cloudflare's free 10 min/day ran out at posting 23.
+    Values were checked for presence, not each one for correctness.
+- [x] Task 6.3: Replace the placeholder confirmation patterns in `detect.ts` with ones from public documentation or
       employer-consented submissions (stage 3); never by submitting to a real employer.
-- [ ] Task 6.4: **Gate check** against spec §5.2 (fill accuracy, captcha rate and its gap to the baseline). Fail →
+  - Partly done 2026-11-26 from public sources (comment in `detect.ts`). Greenhouse: confirmation URL
+    `.../jobs/<id>/confirmation`, title "Thank you for applying" (indexed pages); its support article says the text is
+    editable per board, so the URL rule is the signal. Lever and Ashby: docs only say the success page or message is
+    customisable; Lever's help article was not reachable (401). Their patterns stay unverified until Task 7.2.
+  - Closed 2026-11-26 (user decision): Greenhouse relies on its URL rule; Lever and Ashby keep their unverified
+    patterns, and a miss falls back to Mark as Applied (a wrong match is unlikely, since text counts only once the form
+    is gone, and the user can move the row back). Real applications in the pilot (Task 7.4) show which ones work.
+- [x] Task 6.4: **Gate check** against spec §5.2 (fill accuracy, captcha rate and its gap to the baseline). Fail →
       write the report (Task 8.1) and stop.
+  - Passed 2026-11-26. Fill accuracy (spec §5.2 as amended): Greenhouse 99% in Browserbase, Cloudflare and the local
+    window (197/199, 141/143, 197/199); Lever 100%, Ashby 99%. Visible captcha: 0% in both providers and locally, so
+    0 points above the baseline. Presence was measured, not each value's correctness; correctness is checked in the
+    consented submissions (Task 7.2). Time to submit and response parity are pilot gates (Task 7.5).
 
 **Two providers (2026-11-24, at the user's request):** Cloudflare Browser Run was added next to Browserbase.
 `REMOTE_APPLY_PROVIDER` picks the provider for new sessions; each session is always checked and closed through the
@@ -155,12 +181,19 @@ the drawer's iframe.
   Ashby 6 / 5 / 3 s (includes the wait for the CV read). No captcha anywhere. No sessions left running.
 
 ## Phase 7: Stages 3 and 4
-- [ ] Task 7.1: Arrange consenting targets (a Greenhouse or Lever sandbox, or a cooperating employer); write down who
+- [x] Task 7.1: ~~Arrange consenting targets~~ Dropped 2026-11-26 (spec §5.1 amendment).
+      Was: Arrange consenting targets (a Greenhouse or Lever sandbox, or a cooperating employer); write down who
       agreed and to what.
-- [ ] Task 7.2 [LIVE][DB]: ≥ 10 full-flow submissions on those targets through the drawer on staging. Check each is
+- [x] Task 7.2 [LIVE][DB]: Dropped 2026-11-26; its checks move into Task 7.4. Was: ≥ 10 full-flow submissions on those targets through the drawer on staging. Check each is
       recorded once, on the right application, with the values the tester saw.
-- [ ] Task 7.3: **Gate check**: zero wrong submissions. Fail → report and stop.
-- [ ] Task 7.4 [LIVE][DB]: Pilot on production: ≤ 5 opted-in users, cap 5 per day, 2 weeks, kill script tested once
+- [x] Task 7.3: Dropped 2026-11-26; the gate is read over the pilot's applications (Task 7.5). Was: **Gate check**: zero wrong submissions. Fail → report and stop.
+- [ ] Task 7.4 [LIVE][DB]: Amended 2026-11-26: one user (the owner), genuine applications they want to make on
+      Greenhouse and Lever, through Fill it for me. For each of the first 10, record: values checked before Submit,
+      Applied recorded once on the right row (or the Mark as Applied fallback), and any wrong or missing value.
+      Manual baseline (owner's estimate, 2026-11-26): about 2–3 minutes per application done by hand; an estimate,
+      not a timed measurement. The time-to-submit gate (at least 50% faster, Task 7.5) therefore needs a median of
+      about 1–1.5 minutes from opening Fill it for me to clicking Submit. Original text:
+      Pilot on production: ≤ 5 opted-in users, cap 5 per day, 2 weeks, kill script tested once
       at the start. Collect time to submit and the employer-response comparison.
 - [ ] Task 7.5: **Gate check**: time to submit and parity (spec §5.2).
 
