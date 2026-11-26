@@ -20,5 +20,5 @@ export const GET: RequestHandler = async ({ url, locals, cookies }) => {
     }
   }
 
-  throw redirect(303, '/login?error=Could not authenticate with email link. Please try again or enter the 6-digit code.');
+  throw redirect(303, '/login?error=Google sign-in failed. Please try again.');
 };
