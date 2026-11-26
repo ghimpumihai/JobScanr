@@ -60,6 +60,8 @@ export interface FillResult {
   drafted: string[];
   /** Questions filled from the answer memory; similar ones are shown for checking. */
   remembered: { label: string; similar: boolean }[];
+  /** Labels of required fields still empty after the fill, whether planned or not (#137). */
+  required: string[];
   cvAttached: boolean;
 }
 
@@ -75,6 +77,8 @@ interface Control {
   /** What a person reads as the field's question: its label (label elements and aria-labelledby), aria-label and
    * placeholder, each trimmed. Checked one by one, so a short label with a short placeholder still counts as short. */
   prompts: string[];
+  /** A checkbox's value attribute (a multi-select option id); empty for other controls. */
+  value: string;
   visible: boolean;
 }
 
@@ -178,6 +182,7 @@ async function listControls(page: Page): Promise<Control[]> {
         id: e.id ?? '',
         text,
         prompts,
+        value: e.type === 'checkbox' ? e.value : '',
         // File inputs are usually hidden behind a styled button; they still accept files.
         visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0)
       };
@@ -186,6 +191,8 @@ async function listControls(page: Page): Promise<Control[]> {
 }
 
 const STEP_MS = 2000; // every wait is bounded: Playwright's own default is 30 s, which made each dropdown take 33 s
+const ACTION_MS = 10_000; // clicks and typing on a control that is there: each step is a round trip to a remote browser (~2.5 s per click in Browserbase, #137)
+const SETTLE_MS = 15_000; // a page that never goes quiet (polling, beacons) is filled after this anyway
 
 /** Refuses to click anything that could submit the form. */
 async function clickOption(option: Locator): Promise<void> {
@@ -199,13 +206,13 @@ async function clickOption(option: Locator): Promise<void> {
     { timeout: STEP_MS }
   );
   if (unsafe) throw new Error('refusing to click a control that is not a dropdown option');
-  await option.click({ timeout: STEP_MS });
+  await option.click({ timeout: ACTION_MS });
 }
 
 /** Opens the dropdown and picks the option whose text is exactly `label`; otherwise closes it and reports false. */
 async function pickOption(page: Page, el: Locator, label: string): Promise<boolean> {
   try {
-    await el.click({ timeout: STEP_MS }); // opens the list; a combobox input never submits
+    await el.click({ timeout: ACTION_MS }); // opens the list; a combobox input never submits
     // Search only the list this dropdown controls (react-select names it once open), and only ARIA options: native
     // <option>s of other <select>s also have the option role and would be found first.
     const listId = (await el.getAttribute('aria-controls', { timeout: STEP_MS })) ?? (await el.getAttribute('aria-owns', { timeout: STEP_MS }));
@@ -215,7 +222,7 @@ async function pickOption(page: Page, el: Locator, label: string): Promise<boole
     const option = scope.getByRole('option', { name }).and(page.locator('[role="option"]')).first();
     // The list renders a moment after the click; only type when it still shows no such option (search-style lists).
     const shown = await option.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false);
-    if (!shown) await el.pressSequentially(label, { timeout: STEP_MS });
+    if (!shown) await el.pressSequentially(label, { timeout: ACTION_MS });
     await option.waitFor({ state: 'visible', timeout: STEP_MS });
     await clickOption(option);
     return true;
@@ -225,6 +232,63 @@ async function pickOption(page: Page, el: Locator, label: string): Promise<boole
     await el.fill('', { timeout: STEP_MS }).catch(() => {});
     return false;
   }
+}
+
+const boolish = (v: string | number | boolean) => typeof v === 'boolean' || v === 'true' || v === 'false';
+
+/**
+ * Labels of required fields that are still empty (#137). Greenhouse's question API leaves out built-in fields
+ * (Country, Phone, Education), so the plan cannot list them; the live form can. A checkbox or radio group counts
+ * once, under its legend.
+ */
+async function requiredEmpty(page: Page): Promise<string[]> {
+  return page.locator(CONTROLS).evaluateAll((els) => {
+    const text = (s: string | null | undefined) => (s ?? '').replace(/[*✱]/g, '').replace(/\s+/g, ' ').trim();
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const e of els as HTMLInputElement[]) {
+      const box = e.type === 'checkbox' || e.type === 'radio';
+      const group = box ? e.closest('fieldset') : null;
+      const required = e.required || e.getAttribute('aria-required') === 'true' || group?.getAttribute('aria-required') === 'true';
+      // aria-hidden: react-select's own stand-in input that carries `required` for the browser.
+      if (!required || e.disabled || e.type === 'hidden' || e.getAttribute('aria-hidden') === 'true') continue;
+      const rect = e.getBoundingClientRect();
+      const style = getComputedStyle(e);
+      if (e.type !== 'file' && (style.visibility === 'hidden' || style.display === 'none' || !rect.width || !rect.height)) continue;
+      let empty: boolean;
+      if (box) {
+        if (e.name && seen.has(e.name)) continue;
+        if (e.name) seen.add(e.name);
+        empty = !(e.name ? els.filter((p) => (p as HTMLInputElement).name === e.name) : [e]).some((p) => (p as HTMLInputElement).checked);
+      } else if (e.type === 'file') {
+        empty = !e.files?.length;
+      } else if (e.getAttribute('role') === 'combobox') {
+        // react-select keeps its input empty once an option is chosen; it points aria-describedby at its placeholder
+        // only while nothing is chosen.
+        const described = (e.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+        empty = e.value === '' && (!described.length || described.some((id) => id.includes('placeholder') && document.getElementById(id)));
+      } else {
+        empty = e.value.trim() === '';
+      }
+      if (!empty) continue;
+      // Greenhouse names its label twice (for= and aria-labelledby): each element once.
+      const named = new Set<Element | null>([
+        ...Array.from(e.labels ?? []),
+        ...(e.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => (id ? document.getElementById(id) : null))
+      ]);
+      const label =
+        text(group?.querySelector('legend')?.textContent) ||
+        // Lever: the question sits beside its controls; a box's own label is just the option ("Yes").
+        text(e.closest('.application-question')?.querySelector('.application-label')?.textContent) ||
+        text([...named].map((l) => l?.textContent ?? '').join(' ')) ||
+        text(e.getAttribute('aria-label')) ||
+        text(e.getAttribute('placeholder')) ||
+        e.name ||
+        e.id;
+      if (label) out.push(label);
+    }
+    return out;
+  });
 }
 
 async function setValue(
@@ -246,12 +310,14 @@ async function setValue(
       return picked.length > 0;
     }
     if (control.type === 'checkbox') {
-      await el.setChecked(field.value === true || field.value === 'true', { timeout: STEP_MS });
+      // A multi-select answer names one box of a group by its value: tick that box, never untick another (#137).
+      if (!boolish(field.value) && control.value !== String(field.value)) return false;
+      await el.setChecked(boolish(field.value) ? field.value === true || field.value === 'true' : true, { timeout: ACTION_MS });
       return true;
     }
     if (control.type === 'radio') return false; // radio groups: left for the user in the spike
     if (control.role === 'combobox') return await pickOption(page, el, label);
-    await el.fill(label, { timeout: STEP_MS });
+    await el.fill(label, { timeout: ACTION_MS });
     return true;
   } catch {
     return false;
@@ -259,10 +325,13 @@ async function setValue(
 }
 
 export async function fillPage(page: Page, plan: FillPlan | null, profile: FillProfile, cv: Cv | null): Promise<FillResult> {
+  // Greenhouse renders its inputs on the server: they exist before its scripts arrive, and until then dropdowns
+  // cannot open and typed values and the CV never reach the form's own state (#137, a slow remote browser).
+  await page.waitForLoadState('networkidle', { timeout: SETTLE_MS }).catch(() => {});
   const shown = async () => (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
   let controls = await shown();
   const used = new Set<number>();
-  const result: FillResult = { planned: 0, filled: 0, unfilled: [], drafted: [], remembered: [], cvAttached: false };
+  const result: FillResult = { planned: 0, filled: 0, unfilled: [], drafted: [], remembered: [], required: [], cvAttached: false };
   const typed: { control: Control; value: string; label: string }[] = [];
 
   // CV first: Lever and Greenhouse read an uploaded CV and reset fields from it, which cleared a name typed before
@@ -290,7 +359,12 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
   // Planned answers (Greenhouse) by field name or id, before the standard matcher can claim the control.
   for (const field of plan?.fields ?? []) {
     result.planned += 1;
-    const control = controls.find((c) => !used.has(c.index) && (c.name === field.name || c.id === field.name));
+    const control = controls.find(
+      (c) =>
+        !used.has(c.index) &&
+        (c.name === field.name || c.id === field.name) &&
+        (c.type !== 'checkbox' || boolish(field.value) || c.value === String(field.value))
+    );
     if (control && (await setValue(page, control, field))) {
       used.add(control.index);
       result.filled += 1;
@@ -359,5 +433,6 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
       result.unfilled.push(t.label);
     }
   }
+  result.required = await requiredEmpty(page).catch(() => []);
   return result;
 }

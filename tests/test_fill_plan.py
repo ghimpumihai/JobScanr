@@ -82,6 +82,36 @@ def test_build_plan_splits_confident_answers_from_questions_for_the_user():
     assert next(i for i in plan["for_user"] if i["name"] == "question_4")["type"] == "long_text"  # for drafting (#59)
 
 
+def test_build_plan_classifies_long_labels_by_question_type():
+    """#137: only free text counts as open-ended; long selects and checkboxes are fact questions."""
+    yes_no = [QuestionOption(id=1, label="Yes"), QuestionOption(id=0, label="No")]
+    sponsorship = (
+        "Do you now or will you in the future need sponsorship for employment visa status in the country "
+        "in which you are applying?"
+    )
+    sanctions = "Please confirm whether any of the below applies to you. Select all that apply. " * 2
+    essay = (
+        "Tell us about a time you disagreed with a colleague and how you resolved it, in as much detail as you like."
+    )
+    plan = fill_plan.build_plan(
+        [
+            q(1, sponsorship, QuestionType.SINGLE_SELECT, options=yes_no),
+            q(2, sanctions, QuestionType.MULTI_SELECT, options=[QuestionOption(id=9, label="Citizen of Cuba")]),
+            q(3, essay),
+        ],
+        USER,
+        POSTING["url"],
+    )
+    assert all(len(x) > 100 for x in (sponsorship, sanctions, essay))
+    assert plan["fields"] == [
+        {"name": "question_1", "label": sponsorship, "type": "single_select", "value": 0, "option_label": "No"}
+    ]
+    assert [(i["name"], i["reason"]) for i in plan["for_user"]] == [
+        ("question_2", "no_confident_answer"),  # reaches answer memory now
+        ("question_3", "open_ended"),
+    ]
+
+
 def test_allowlist_parsing():
     assert fill_plan.allowlisted_user_ids("") == set()
     assert fill_plan.allowlisted_user_ids(" 3, 7,,x") == {3, 7}

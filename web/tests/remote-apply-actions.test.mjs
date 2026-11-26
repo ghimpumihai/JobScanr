@@ -152,7 +152,7 @@ function fakeWorld({ gotoStatus = 200, pageUrl = 'https://job-boards.greenhouse.
     w.filled = { plan, profile, cv };
     const drafted = (plan?.for_user ?? []).filter((q) => q.draft_status === 'generated' && q.draft).map((q) => q.label);
     const remembered = (plan?.for_user ?? []).filter((q) => q.memory_answer).map((q) => ({ label: q.label, similar: q.memory_match === 'similar' }));
-    return { planned: 6, filled: 5, unfilled: ['location'], drafted, remembered, cvAttached: true };
+    return { planned: 6, filled: 5, unfilled: ['location'], drafted, remembered, required: w.required ?? [], cvAttached: true };
   };
   deps.captchaVisible = async () => captcha;
   deps.now = () => new Date(NOW);
@@ -222,9 +222,15 @@ test('start: after opting out, stored drafts are not typed', async () => {
 });
 
 test('start: a question both left for the user and unfilled is listed once', async () => {
-  deps.fill = async () => ({ planned: 1, filled: 0, unfilled: ['Why Acme?'], drafted: [], remembered: [], cvAttached: true });
+  deps.fill = async () => ({ planned: 1, filled: 0, unfilled: ['Why Acme?'], drafted: [], remembered: [], required: [], cvAttached: true });
   const result = await startSession(fakeSb({ user: { ...USER, llm_drafts_enabled: true }, plan: draftPlan() }), 'uid-1', 55);
   assert.deepEqual(result.leftForUser, ['Why Acme?', 'Salary?']);
+});
+
+test('start: required fields the plan never saw are left for the user, each once (#137)', async () => {
+  world.required = ['Why Acme?', 'Location', 'Country', 'School', 'country'];
+  const result = await startSession(fakeSb(), 'uid-1', 55);
+  assert.deepEqual(result.leftForUser, ['Why Acme?', 'location', 'Country', 'School']);
 });
 
 // Answer memory: a fresh plan per test, because the session edits the plan it reads.
