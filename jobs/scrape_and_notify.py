@@ -406,7 +406,7 @@ async def run_pipeline(args) -> int:
             try:
                 unnotified = queries.get_user_unnotified_matches(uid)
                 activity = queries.get_user_recent_application_activity(uid)
-                msg_id = send_user_digest(u, unnotified, activity)
+                msg_id = send_user_digest(u, unnotified, activity, boards=attempted)
             except Exception:  # e.g. SMTP rejects one address; the remaining users must still get theirs
                 logger.exception("Digest failed for user %s; matches stay unnotified for the next run.", uid)
                 continue

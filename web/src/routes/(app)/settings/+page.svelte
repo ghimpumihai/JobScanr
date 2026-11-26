@@ -264,7 +264,7 @@
         Job Search &amp; Matching Filters
       </h2>
       <p class="mt-1 text-xs text-content-muted">
-        Controls daily scraping and pre-filtering across 388 company feeds.
+        Controls daily scraping and pre-filtering across 3,600+ company job boards.
       </p>
     </div>
 
