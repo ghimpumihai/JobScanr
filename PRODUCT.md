@@ -13,7 +13,7 @@ SvelteKit, Tailwind CSS, TypeScript, @supabase/ssr, Supabase PostgreSQL
 Early-career and mid-level software engineers across Europe (UK, EU, Remote EU) actively searching for verified engineering roles without aggregator spam or ghost jobs.
 
 ## Product Purpose
-JobScanr automates the discovery, matching, screening question drafting, and application submission for engineering roles from 380+ direct company ATS boards (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Teamtailor), providing candidates with daily curated digests and a high-control application audit dashboard.
+JobScanr automates the discovery, matching, screening question drafting, and application submission for engineering roles from 3,600+ direct company ATS boards (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Teamtailor), providing candidates with daily curated digests and a high-control application audit dashboard.
 
 ## Positioning
 Unlike broad aggregators (LinkedIn, Indeed) that surface stale, duplicate, or ghost postings, JobScanr scans verified first-party career feeds directly at 06:00 UTC daily, parses ATS-specific question schemas, pre-drafts CV-grounded answers without hallucinations, and gives users transparent human-in-the-loop control with zero autonomous blind submits.
