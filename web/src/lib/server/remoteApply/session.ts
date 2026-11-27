@@ -42,6 +42,10 @@ export interface StartResult {
   liveViewUrl: string;
   /** Labels the user must answer: open-ended and unanswered questions, plus fields that could not be filled. */
   leftForUser: string[];
+  /** Labels of the fields filled for the user; labels only, so never an equal-opportunity answer. */
+  filled: string[];
+  /** Drafted answers typed into the form, for review and Redraft. */
+  drafts: { label: string; text: string }[];
 }
 
 export type SessionState = 'open' | 'submitted' | 'abandoned' | 'expired' | 'error' | 'posting_gone';
@@ -82,7 +86,7 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-async function firstPage(browser: Browser): Promise<Page> {
+export async function firstPage(browser: Browser): Promise<Page> {
   const context = browser.contexts()[0];
   if (!context) throw new Error('no browser context');
   return context.pages().at(-1) ?? (await context.newPage());
@@ -149,6 +153,7 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
   if (!url) throw new RemoteError(422, 'This posting has no form page JobScanr can open.');
 
   const urls = user.resume_data?.urls ?? {};
+  const education = user.screening_defaults?.education ?? {};
   const profile: FillProfile = {
     full_name: text(user.screening_defaults?.full_name),
     email: text(user.email),
@@ -156,7 +161,14 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
     location: text(user.resume_data?.location),
     linkedin: text(urls.linkedin),
     github: text(urls.github),
-    portfolio: text(urls.portfolio)
+    portfolio: text(urls.portfolio),
+    education: {
+      school: text(education.school),
+      degree: text(education.degree),
+      field_of_study: text(education.field_of_study),
+      graduation_year: education.graduation_year ? String(education.graduation_year) : undefined
+    },
+    eeo: user.screening_defaults?.eeo ?? {}
   };
 
   const provider = deps.provider();
@@ -232,7 +244,8 @@ export async function startSession(sb: SupabaseClient, authUserId: string, appli
       const key = normalizeQuestion(label);
       return !keys.has(key) && keys.add(key);
     });
-    return { sessionId: row.id, liveViewUrl, leftForUser: [...listed, ...required] };
+    const drafts = (plan?.for_user ?? []).flatMap((q) => (q.draft && result.drafted.includes(q.label) ? [{ label: q.label, text: q.draft }] : []));
+    return { sessionId: row.id, liveViewUrl, leftForUser: [...listed, ...required], filled: result.labels, drafts };
   } catch (e) {
     if (e instanceof RemoteError) throw e;
     const quota = (e as { status?: number })?.status === 429; // a free plan's daily or monthly minutes are used up

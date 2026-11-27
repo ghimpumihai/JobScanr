@@ -2,6 +2,9 @@
 // Never submits: the only clicks are on dropdown options (role=option), and each is checked not to be a submit
 // control. Works on the page's main frame only, so captcha widgets (always in iframes) are never touched.
 import type { Locator, Page } from 'playwright-core';
+import { DEGREES, PREFER_NOT, type EeoAnswers } from '$lib/eeo';
+// Shared with jobs/apply/base.py, so the pipeline and the fill pick the same equal-opportunity option.
+import EEO from '../../../../../jobs/apply/eeo_patterns.json';
 
 export interface PlanField {
   name: string;
@@ -43,6 +46,10 @@ export interface FillProfile {
   linkedin?: string;
   github?: string;
   portfolio?: string;
+  /** degree is a value from DEGREES in $lib/eeo. */
+  education?: { school?: string; degree?: string; field_of_study?: string; graduation_year?: string };
+  /** Special-category data (GDPR Art. 9): never logged, never sent to Groq, never listed by value. */
+  eeo?: EeoAnswers;
 }
 
 export interface Cv {
@@ -63,6 +70,8 @@ export interface FillResult {
   /** Labels of required fields still empty after the fill, whether planned or not (#137). */
   required: string[];
   cvAttached: boolean;
+  /** Labels of the fields filled for the user (planned, saved answers, profile, CV), never drafts; labels only. */
+  labels: string[];
 }
 
 interface Control {
@@ -104,7 +113,20 @@ function freeText(c: Control): boolean {
   return c.tag === 'textarea' || (c.tag === 'input' && c.role !== 'combobox' && !['checkbox', 'radio', 'file'].includes(c.type));
 }
 
-type StandardKey = 'first_name' | 'last_name' | 'full_name' | 'email' | 'phone' | 'location' | 'linkedin' | 'github' | 'portfolio';
+type StandardKey =
+  | 'first_name'
+  | 'last_name'
+  | 'full_name'
+  | 'email'
+  | 'phone'
+  | 'location'
+  | 'linkedin'
+  | 'github'
+  | 'portfolio'
+  | 'school'
+  | 'degree'
+  | 'field_of_study'
+  | 'graduation_year';
 
 // "First and Last Name" (Ashby) is one field for the whole name.
 const BOTH_NAMES = /first\s*(and|&|\/)\s*last/;
@@ -124,6 +146,11 @@ const STANDARD: [StandardKey, (c: Control) => boolean][] = [
   ['linkedin', (c) => /linkedin/.test(c.text)],
   ['github', (c) => /github/.test(c.text)],
   ['portfolio', (c) => /portfolio|personal (web)?site|\bwebsite\b/.test(c.text)],
+  // Greenhouse's education block: School, Degree and Discipline typeaheads, and End date year.
+  ['school', (c) => /\bschool\b|\buniversity\b/.test(c.text)],
+  ['degree', (c) => /\bdegree\b/.test(c.text)],
+  ['field_of_study', (c) => /\bdiscipline\b|field[\s_-]*of[\s_-]*study|\bmajor\b/.test(c.text)],
+  ['graduation_year', (c) => /end[\s_-]*date[\s_-]*year|end-year|graduation[\s_-]*year/.test(c.text)],
   ['location', (c) => /\blocation\b|\bcity\b/.test(c.text)],
   ['full_name', (c) => /\bname\b/.test(c.text) && !/first|last/.test(c.text) && !OTHER_NAME.test(c.text)]
 ];
@@ -139,8 +166,66 @@ function standardValues(profile: FillProfile): Record<StandardKey, string | unde
     location: profile.location,
     linkedin: profile.linkedin,
     github: profile.github,
-    portfolio: profile.portfolio
+    portfolio: profile.portfolio,
+    school: profile.education?.school,
+    degree: DEGREES.find((d) => d.value === profile.education?.degree)?.label,
+    field_of_study: profile.education?.field_of_study,
+    graduation_year: profile.education?.graduation_year
   };
+}
+
+/** Other names an ATS list uses for a degree, tried after its label. */
+const DEGREE_ALIASES: Record<string, string[]> = { PhD: ['Doctor of Philosophy', 'Doctorate'] };
+
+/**
+ * Index of the option that names `wanted`, or -1: the same text (case and punctuation aside), else the one option
+ * containing it as whole words ("Bachelor's" in "Bachelor's Degree"). "Other" is picked only when asked for.
+ */
+export function educationChoice(labels: string[], wanted: string[]): number {
+  for (const w of wanted.map(normalizeQuestion).filter(Boolean)) {
+    const exact = labels.findIndex((l) => normalizeQuestion(l) === w);
+    if (exact >= 0) return exact;
+    const partial = labels.flatMap((l, i) => {
+      const n = normalizeQuestion(l);
+      return !/^other\b/.test(n) && ` ${n} `.includes(` ${w} `) ? [i] : [];
+    });
+    if (partial.length === 1) return partial[0];
+  }
+  return -1;
+}
+
+const DECLINE = new RegExp(EEO.decline, 'i');
+const EEO_LABELS: Record<string, string> = { gender: 'Gender', hispanic: 'Hispanic or Latino', race: 'Race', veteran: 'Veteran status', disability: 'Disability' };
+const NOT_EEO = new RegExp(EEO.not_eeo, 'i');
+
+/** gender, hispanic, race, veteran or disability for an equal-opportunity dropdown, else undefined. */
+function eeoCategory(c: Control): string | undefined {
+  if (c.tag !== 'select' && c.role !== 'combobox') return undefined; // free text mentioning veterans is not EEO
+  const names: Record<string, string> = EEO.names;
+  const byName = names[c.name] ?? names[c.id];
+  if (byName) return byName;
+  const label = c.prompts.join(' ');
+  if (NOT_EEO.test(label)) return undefined;
+  return EEO.labels.find(([, pattern]) => new RegExp(pattern, 'i').test(label))?.[0];
+}
+
+/**
+ * Index of the option to pick, or -1 to leave it to the user. Mirrors map_eeo_answer in jobs/apply/base.py: no stored
+ * answer (or prefer_not) picks the decline option; a stored one picks the one option it matches, never a guess.
+ */
+export function eeoChoice(category: string, labels: string[], eeo: EeoAnswers = {}): number {
+  const answers = eeo as Record<string, string | undefined>;
+  let pattern: string | undefined;
+  if (category === 'hispanic') {
+    const race = answers.race;
+    pattern = !race || race === PREFER_NOT ? undefined : EEO.hispanic[race === 'hispanic_latino' ? 'yes' : 'no'];
+  } else {
+    pattern = (EEO.answers as Record<string, Record<string, string>>)[category]?.[answers[category] ?? ''];
+  }
+  if (!pattern) return labels.findIndex((l) => DECLINE.test(l));
+  const re = new RegExp(pattern, 'i');
+  const hits = labels.flatMap((l, i) => (!DECLINE.test(l) && re.test(l) ? [i] : []));
+  return hits.length === 1 ? hits[0] : -1;
 }
 
 // Each control is tagged once and found again by its tag: dropdowns insert inputs while the form is being filled,
@@ -228,6 +313,49 @@ async function pickOption(page: Page, el: Locator, label: string): Promise<boole
     return true;
   } catch {
     // No exact option (for example a city search with longer names): close the list, leave it for the user.
+    await el.press('Escape', { timeout: STEP_MS }).catch(() => {});
+    await el.fill('', { timeout: STEP_MS }).catch(() => {});
+    return false;
+  }
+}
+
+/**
+ * Picks the option `choose` names among a dropdown's options, typing `typed` first for search lists (Greenhouse
+ * School). A list that loads after typing is read again until the option shows, for a bounded time. Nothing chosen:
+ * the list is closed and the field left empty.
+ */
+async function pickBy(page: Page, control: Control, choose: (labels: string[]) => number, typed?: string): Promise<boolean> {
+  const el = byTag(page, control.index);
+  if (control.tag === 'select') {
+    try {
+      const labels = await el.evaluate((s) => Array.from((s as HTMLSelectElement).options).map((o) => o.label), undefined, { timeout: STEP_MS });
+      const index = choose(labels);
+      return index >= 0 && (await el.selectOption({ index }, { timeout: STEP_MS })).length > 0;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    await el.click({ timeout: ACTION_MS });
+    const listId = (await el.getAttribute('aria-controls', { timeout: STEP_MS })) ?? (await el.getAttribute('aria-owns', { timeout: STEP_MS }));
+    const scope = listId ? page.locator(`[id="${listId.replace(/["\\]/g, '\\$&')}"]`) : page;
+    const options = scope.getByRole('option').and(page.locator('[role="option"]'));
+    if (typed) await el.pressSequentially(typed, { timeout: ACTION_MS });
+    const deadline = Date.now() + STEP_MS;
+    let labels: string[] = [];
+    let index = -1;
+    for (;;) {
+      labels = (await options.allInnerTexts()).map((t) => t.trim());
+      index = choose(labels);
+      if (index >= 0 || Date.now() > deadline) break;
+      await page.waitForTimeout(250);
+    }
+    if (index < 0) throw new Error('no matching option');
+    // By its text, not its position: the list may have re-rendered since it was read.
+    const wanted = labels[index].replace(/\s+/g, ' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await clickOption(scope.getByRole('option', { name: new RegExp(`^${wanted}$`, 'i') }).and(page.locator('[role="option"]')).first());
+    return true;
+  } catch {
     await el.press('Escape', { timeout: STEP_MS }).catch(() => {});
     await el.fill('', { timeout: STEP_MS }).catch(() => {});
     return false;
@@ -331,7 +459,7 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
   const shown = async () => (await listControls(page)).filter((c) => c.visible && c.type !== 'hidden' && c.type !== 'submit');
   let controls = await shown();
   const used = new Set<number>();
-  const result: FillResult = { planned: 0, filled: 0, unfilled: [], drafted: [], remembered: [], required: [], cvAttached: false };
+  const result: FillResult = { planned: 0, filled: 0, unfilled: [], drafted: [], remembered: [], required: [], cvAttached: false, labels: [] };
   const typed: { control: Control; value: string; label: string }[] = [];
 
   // CV first: Lever and Greenhouse read an uploaded CV and reset fields from it, which cleared a name typed before
@@ -345,6 +473,7 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
         await byTag(page, target.index).setInputFiles(cv, { timeout: 5000 });
         result.cvAttached = true;
         result.filled += 1;
+        result.labels.push(target.prompts[0] || 'Resume/CV');
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
       } catch {
         result.unfilled.push('resume');
@@ -368,6 +497,7 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     if (control && (await setValue(page, control, field))) {
       used.add(control.index);
       result.filled += 1;
+      result.labels.push(field.label);
     } else {
       result.unfilled.push(field.label);
     }
@@ -400,8 +530,25 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
       used.add(control.index);
       result.filled += 1;
       result.remembered.push({ label: q.label, similar: q.memory_match === 'similar' });
+      result.labels.push(q.label);
     } else {
       result.unfilled.push(q.label);
+    }
+  }
+
+  // Equal-opportunity dropdowns (#142), before the standard matcher can claim them. Only labels are reported.
+  for (const control of controls) {
+    const category = used.has(control.index) ? undefined : eeoCategory(control);
+    if (!category) continue;
+    used.add(control.index);
+    result.planned += 1;
+    // By category: a Lever label wraps its select, so the control's own label text lists every option.
+    const label = EEO_LABELS[category] ?? category;
+    if (await pickBy(page, control, (labels) => eeoChoice(category, labels, profile.eeo))) {
+      result.filled += 1;
+      result.labels.push(label);
+    } else {
+      result.unfilled.push(label);
     }
   }
 
@@ -415,9 +562,16 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     result.planned += 1;
     used.add(control.index);
     done.add(key);
-    if (await setValue(page, control, { value })) {
+    const dropdown = control.role === 'combobox' || control.tag === 'select';
+    // Education lists (Greenhouse's own) take the best option or none; School and Discipline search as you type.
+    const ok =
+      dropdown && ['school', 'degree', 'field_of_study', 'graduation_year'].includes(key)
+        ? await pickBy(page, control, (labels) => educationChoice(labels, [value, ...(DEGREE_ALIASES[value] ?? [])]), key === 'degree' ? undefined : value)
+        : await setValue(page, control, { value });
+    if (ok) {
       result.filled += 1;
-      if (control.role !== 'combobox' && control.tag !== 'select') typed.push({ control, value, label: key });
+      result.labels.push(control.prompts.find(Boolean) || key);
+      if (!dropdown) typed.push({ control, value, label: key });
     } else {
       result.unfilled.push(key);
     }
@@ -431,8 +585,19 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     if (!(await setValue(page, t.control, { value: t.value }))) {
       result.filled -= 1;
       result.unfilled.push(t.label);
+      result.labels = result.labels.filter((l) => l !== (t.control.prompts.find(Boolean) || t.label));
     }
   }
   result.required = await requiredEmpty(page).catch(() => []);
   return result;
+}
+
+/**
+ * Types `text` into the free-text field of the question named `name` (a redraft, #142), then returns the labels of
+ * required fields still empty, or null when the field is not on the page.
+ */
+export async function typeAnswer(page: Page, name: string, text: string): Promise<string[] | null> {
+  const control = (await listControls(page)).find((c) => (c.name === name || c.id === name) && freeText(c));
+  if (!control || !(await setValue(page, control, { value: text }))) return null;
+  return requiredEmpty(page).catch(() => []);
 }

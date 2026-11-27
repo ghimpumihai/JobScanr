@@ -112,6 +112,22 @@ def test_build_plan_classifies_long_labels_by_question_type():
     ]
 
 
+def test_build_plan_keeps_equal_opportunity_questions_out_of_the_plan():
+    """#142: filled from the profile at fill time; answers never stored, questions never sent to Groq or memory."""
+    options = [QuestionOption(id=1, label="Female"), QuestionOption(id=3, label="Decline To Self Identify")]
+    user = {**USER, "screening_defaults": {"eeo": {"gender": "woman"}}}
+    plan = fill_plan.build_plan(
+        [
+            q(1, "Gender", QuestionType.SINGLE_SELECT, required=True, options=options, name="gender"),
+            q(2, "Are you a protected veteran?", QuestionType.SINGLE_SELECT, required=True, options=[]),
+        ],
+        user,
+        POSTING["url"],
+    )
+    assert plan["fields"] == [] and plan["for_user"] == []
+    assert "Female" not in json.dumps(plan)
+
+
 def test_allowlist_parsing():
     assert fill_plan.allowlisted_user_ids("") == set()
     assert fill_plan.allowlisted_user_ids(" 3, 7,,x") == {3, 7}

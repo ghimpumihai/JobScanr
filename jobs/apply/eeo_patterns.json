@@ -1,0 +1,38 @@
+{
+  "_about": "Equal-opportunity question matching (#142), read by jobs/apply/base.py and web/src/lib/server/remoteApply/fill.ts. Answer keys are the values in web/src/lib/eeo.ts. Patterns are case-insensitive and tested against option labels.",
+  "decline": "decline|(don'?t|do not) (wish|want)|prefer not|not to (say|answer|disclose)|rather not",
+  "names": {
+    "gender": "gender",
+    "eeo[gender]": "gender",
+    "hispanic_ethnicity": "hispanic",
+    "race": "race",
+    "eeo[race]": "race",
+    "veteran_status": "veteran",
+    "eeo[veteran]": "veteran",
+    "disability_status": "disability",
+    "eeo[disability]": "disability"
+  },
+  "labels": [
+    ["hispanic", "hispanic|latin[oax]"],
+    ["race", "\\brace\\b|racial|\\bethnic"],
+    ["gender", "\\bgender\\b"],
+    ["veteran", "veteran"],
+    ["disability", "disabilit"]
+  ],
+  "not_eeo": "accommodat|adjustment",
+  "answers": {
+    "gender": { "woman": "\\b(female|woman)\\b", "man": "\\b(male|man)\\b", "non_binary": "non[- ]?binary" },
+    "race": {
+      "asian": "\\basian\\b",
+      "black": "\\bblack\\b",
+      "hispanic_latino": "^(hispanic|latin)",
+      "native_american": "american indian|alaska native|native american",
+      "pacific_islander": "hawaiian|pacific islander",
+      "white": "\\bwhite\\b",
+      "two_or_more": "two or more"
+    },
+    "veteran": { "not_veteran": "^no\\b|\\bnot a (protected )?veteran", "protected_veteran": "^(yes\\b|i identify|i am a\\b)" },
+    "disability": { "no": "^no\\b", "yes": "^yes\\b" }
+  },
+  "hispanic": { "yes": "^yes\\b", "no": "^no\\b" }
+}

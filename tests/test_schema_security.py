@@ -110,6 +110,11 @@ def test_users_may_change_only_the_status_of_an_application():
     assert "RAISE EXCEPTION 'This status change is not allowed'" in fn.split("ELSE", 1)[1]
     assert "SECURITY DEFINER" not in fn  # runs as the caller, so current_user identifies a web user
     assert re.search(r"CREATE TRIGGER trg_protect_application_queue_fields\s+BEFORE UPDATE ON applications", SCHEMA)
+    # Opening a role changes only opened_at, stamped by the database and never cleared (#141).
+    opened = "NEW.status = OLD.status AND (to_jsonb(NEW) - 'opened_at') = (to_jsonb(OLD) - 'opened_at')"
+    assert opened in fn and "NEW.opened_at := COALESCE(OLD.opened_at, NOW())" in fn
+    assert fn.index(opened) < fn.index("(to_jsonb(NEW) - 'status' - 'applied_at')")
+    assert "ALTER TABLE applications ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ" in SCHEMA
 
 
 def test_a_users_status_change_is_logged_by_a_definer_trigger():

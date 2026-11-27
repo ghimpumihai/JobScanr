@@ -405,3 +405,61 @@ test('load returns the saved values, or an error instead of mock data', async ()
   assert.equal(profile.github, 'https://g.example');
   assert.deepEqual(await load(world({}, { read: true })), { profile: null, loadError: true });
 });
+
+test('education saves into screening_defaults.education, merging and clearing like the other fields (#142)', async () => {
+  const w = world(STORED);
+  ok(await run(w, 'saveEducation', { school: ' UCL ', degree: 'masters', fieldOfStudy: 'Computer Science', graduationYear: '2024' }));
+  assert.deepEqual(w.row.screening_defaults.education, { school: 'UCL', degree: 'masters', field_of_study: 'Computer Science', graduation_year: 2024 });
+  assert.equal(w.row.screening_defaults.custom, 1); // other keys untouched
+  ok(await run(w, 'saveEducation', { degree: '', graduationYear: '' }));
+  assert.deepEqual(w.row.screening_defaults.education, { school: 'UCL', field_of_study: 'Computer Science' });
+  ok(await run(w, 'saveEducation', { school: '', fieldOfStudy: '' }));
+  assert.ok(!('education' in w.row.screening_defaults)); // nothing left: the key goes
+  assert.deepEqual((await load(world({ screening_defaults: { education: { school: 'UCL' } } }))).profile.education, { school: 'UCL' });
+});
+
+test('invalid education writes nothing', async () => {
+  for (const fields of [{ degree: 'bsc' }, { school: 'x'.repeat(121) }, { graduationYear: '24' }, { graduationYear: '1900' }, { graduationYear: '2024.5' }]) {
+    const w = world(STORED);
+    refused(await run(w, 'saveEducation', fields), 400);
+    assert.deepEqual(w.calls, []);
+  }
+});
+
+test('equal-opportunity answers: listed values only, prefer_not is not stored, one action clears them all (#142)', async () => {
+  const w = world(STORED);
+  ok(await run(w, 'saveEeo', { gender: 'woman', race: 'prefer_not', veteran: 'not_veteran', disability: 'prefer_not' }));
+  assert.deepEqual(w.row.screening_defaults.eeo, { gender: 'woman', veteran: 'not_veteran' });
+  ok(await run(w, 'saveEeo', { gender: 'prefer_not' }));
+  assert.deepEqual(w.row.screening_defaults.eeo, { veteran: 'not_veteran' });
+  assert.deepEqual((await load(w)).profile.eeo, { veteran: 'not_veteran' });
+  ok(await run(w, 'clearEeo'));
+  assert.ok(!('eeo' in w.row.screening_defaults));
+  assert.equal(w.row.screening_defaults.custom, 1);
+  assert.deepEqual((await load(w)).profile.eeo, {});
+  for (const fields of [{ gender: 'female' }, { race: 'Asian' }, { disability: 'maybe' }, { veteran: '' }]) {
+    const bad = world(STORED);
+    refused(await run(bad, 'saveEeo', fields), 400);
+    assert.deepEqual(bad.calls, []);
+  }
+});
+
+test('education and equal-opportunity actions store nothing in demo mode', async () => {
+  for (const [action, fields] of [['saveEducation', { school: 'UCL' }], ['saveEeo', { gender: 'man' }], ['clearEeo', {}]]) {
+    const w = world(STORED);
+    w.locals.user.id = 'demo-user-id';
+    ok(await run(w, action, fields));
+    assert.deepEqual(w.calls, []);
+  }
+});
+
+test('the Settings option lists match the patterns remote fill and the pipeline use', async () => {
+  const { EEO_FIELDS, DEGREES } = await vite.ssrLoadModule('/src/lib/eeo.ts');
+  const { readFileSync } = await import('node:fs');
+  const patterns = JSON.parse(readFileSync(new URL('../../jobs/apply/eeo_patterns.json', import.meta.url), 'utf8'));
+  for (const [field, options] of Object.entries(EEO_FIELDS)) {
+    assert.deepEqual(options[0], { value: 'prefer_not', label: 'Prefer not to say' });
+    assert.deepEqual(options.slice(1).map((o) => o.value).sort(), Object.keys(patterns.answers[field]).sort(), field);
+  }
+  assert.ok(DEGREES.some((d) => d.value === 'bachelors'));
+});

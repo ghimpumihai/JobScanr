@@ -19,7 +19,7 @@ import httpx
 
 from db import queries
 from jobs.apply import llm_answers
-from jobs.apply.base import QuestionType, ScreeningQuestion, map_screening_question
+from jobs.apply.base import QuestionType, ScreeningQuestion, eeo_category, map_screening_question
 from jobs.apply.cv_security import validate_cv
 from jobs.apply.cv_storage import download_resume_stream
 from jobs.apply.greenhouse import GreenhouseSubmitter, extract_greenhouse_identifiers
@@ -69,6 +69,10 @@ def build_plan(questions: list[ScreeningQuestion], user: User, posting_url: str 
             q.question_type == QuestionType.SHORT_TEXT and len(label) > 100
         ):
             for_user.append({"name": name, "label": label, "reason": "open_ended", "type": q.question_type.value})
+            continue
+        if eeo_category(q):
+            # Filled from the profile at fill time (fill.ts), so equal-opportunity answers are never stored in a plan,
+            # clearing them takes effect at once, and their questions never reach Groq or the answer memory.
             continue
         value, confident = map_screening_question(q, user)
         if confident and value is not None:

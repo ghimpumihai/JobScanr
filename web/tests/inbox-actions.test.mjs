@@ -1,4 +1,4 @@
-// Runs the real /applications load and setStatus action against a fake Supabase client that records every query.
+// Runs the real /inbox load and setStatus action against a fake Supabase client that records every query.
 // The fake does not filter rows, so these tests prove which filters are sent; staging proves PostgREST applies them.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
@@ -10,24 +10,27 @@ console.error = () => {}; // the module logs every failure these tests provoke
 
 const vite = await createServer({ server: { middlewareMode: true, ws: false }, logLevel: 'error' });
 after(() => vite.close());
-const { actions, load } = await vite.ssrLoadModule('/src/routes/(app)/applications/+page.server.ts');
+const { actions, load } = await vite.ssrLoadModule('/src/routes/(app)/inbox/+page.server.ts');
 
 const UID = '11111111-1111-1111-1111-111111111111';
 const PROFILE_ROW = {
   email: 'jane@example.com',
   resume_filename: 'Jane CV.pdf',
   screening_defaults: { full_name: 'Jane Doe' },
-  resume_data: { phone: '+44 1', location: 'London', urls: { linkedin: 'https://linkedin.com/in/j' } }
+  resume_data: { phone: '+44 1', location: 'London', urls: { linkedin: 'https://linkedin.com/in/j' } },
+  profile_filters: { levels: ['junior', 'senior'], titles: ['Backend'], locations: ['london', 'Paris'] }
 };
 const ROW = {
   id: 7,
   status: 'manual_apply',
   created_at: '2026-11-20T08:00:00Z',
   applied_at: null,
+  opened_at: null,
   job_postings: {
     title: 'Junior Engineer',
     location: 'London',
     url: 'https://boards.greenhouse.io/acme/jobs/1',
+    compensation: '€50k',
     last_seen_at: '2026-11-22T06:00:00Z',
     companies: { name: 'Acme', ats_platform: 'greenhouse' }
   }
@@ -58,7 +61,7 @@ function world({ rows = [ROW], counts = {}, profile = PROFILE_ROW, status = 'man
       return fail.rows ? { data: null, error: fail.rows } : { data: rows, error: null };
     };
     const builder = {};
-    for (const name of ['select', 'eq', 'ilike', 'gte', 'lt', 'order', 'range', 'update', 'single']) {
+    for (const name of ['select', 'eq', 'ilike', 'gte', 'lt', 'is', 'order', 'range', 'update', 'single']) {
       builder[name] = (...args) => (ops.push([name, ...args]), builder);
     }
     builder.then = (resolve, reject) => Promise.resolve(respond()).then(resolve, reject);
@@ -70,7 +73,7 @@ function world({ rows = [ROW], counts = {}, profile = PROFILE_ROW, status = 'man
   return w;
 }
 
-const loadPage = (w, query = '') => load({ locals: w.locals, url: new URL(`http://localhost/applications${query}`) });
+const loadPage = (w, query = '') => load({ locals: w.locals, url: new URL(`http://localhost/inbox${query}`) });
 const filters = (q) => q.ops.filter((op) => ['eq', 'ilike', 'gte', 'lt'].includes(op[0]));
 
 function act(w, fields) {
@@ -83,65 +86,30 @@ const refused = (result, status, message = /./) => {
   assert.match(result.data.error, message);
 };
 
-test('load sends the tab, every filter and the page to the database', async () => {
-  const w = world();
-  const company = encodeURIComponent('50%_off*\\');
-  await loadPage(w, `?tab=applied&platform=lever&company=${company}&from=2026-11-01&to=2026-11-30&page=2`);
+test('load asks for one tab, newest first, and counts every tab', async () => {
+  const w = world({ counts: { manual_apply: 3, submitted: 2, dismissed: 1, stale_closed: 75 } });
+  const page = await loadPage(w, '?tab=applied&platform=lever&company=x');
   const rows = w.rowQuery();
-  assert.deepEqual(filters(rows), [
-    ['eq', 'status', 'submitted'],
-    ['eq', 'job_postings.companies.ats_platform', 'lever'],
-    ['ilike', 'job_postings.companies.name', '%50\\%\\_off\\\\%'], // LIKE wildcards escaped, PostgREST's * removed
-    ['gte', 'applied_at', '2026-11-01T00:00:00.000Z'], // Applied filters on the day the user marked it
-    ['lt', 'applied_at', '2026-12-01T00:00:00.000Z'] // "to" includes its whole day
-  ]);
+  assert.deepEqual(filters(rows), [['eq', 'status', 'submitted']]); // search and platform run in the browser
   assert.deepEqual(
     rows.ops.filter((op) => op[0] === 'order' || op[0] === 'range'),
     [
       ['order', 'created_at', { ascending: false }],
       ['order', 'id', { ascending: false }],
-      ['range', 50, 99]
+      ['range', 0, 499]
     ]
   );
-  assert.match(rows.ops[0][1], /job_postings!inner\(.*companies!inner\(/s); // filters on joined columns need inner joins
+  assert.deepEqual(page.counts, { inbox: 3, applied: 2, not_interested: 1, closed: 75 });
+  for (const q of w.countQueries()) assert.deepEqual(q.ops.find((op) => op[0] === 'select')[2], { count: 'exact', head: true });
+  assert.deepEqual(w.countQueries().map((q) => filters(q)[0][2]).sort(), ['dismissed', 'manual_apply', 'stale_closed', 'submitted']);
 });
 
-test('every tab is counted with the same filters', async () => {
-  const w = world({ counts: { manual_apply: 3, submitted: 2, dismissed: 1, stale_closed: 75 } });
-  const page = await loadPage(w, '?platform=workday');
-  assert.deepEqual(page.counts, { to_apply: 3, applied: 2, not_interested: 1, closed: 75 });
-  for (const q of w.countQueries()) {
-    assert.deepEqual(q.ops.find((op) => op[0] === 'select')[2], { count: 'exact', head: true });
-    assert.deepEqual(filters(q)[1], ['eq', 'job_postings.companies.ats_platform', 'workday']);
-  }
-  assert.deepEqual(w.countQueries().map((q) => filters(q)[0][2]).sort(), [
-    'dismissed',
-    'manual_apply',
-    'stale_closed',
-    'submitted'
-  ]);
-});
-
-test('other tabs filter dates on when the application was added', async () => {
-  const w = world();
-  await loadPage(w, '?tab=closed&from=2026-11-01');
-  assert.deepEqual(filters(w.rowQuery()), [
-    ['eq', 'status', 'stale_closed'],
-    ['gte', 'created_at', '2026-11-01T00:00:00.000Z']
-  ]);
-});
-
-test('invalid parameters are ignored', async () => {
-  for (const query of [
-    '?tab=queued&platform=evil&page=0',
-    `?company=${'x'.repeat(101)}&from=2026-02-30&to=yesterday&page=-1`,
-    '?from=2026-13-01&to=2026-1-1&page=abc',
-    '?company=%20%20&page=1.5'
-  ]) {
+test('an unknown tab shows the Inbox', async () => {
+  for (const query of ['?tab=queued', '?tab=to_apply', '?tab=']) {
     const w = world();
-    await loadPage(w, query);
+    const page = await loadPage(w, query);
+    assert.equal(page.tab, 'inbox', query);
     assert.deepEqual(filters(w.rowQuery()), [['eq', 'status', 'manual_apply']], query);
-    assert.deepEqual(w.rowQuery().ops.at(-1), ['range', 0, 49], query);
   }
 });
 
@@ -157,12 +125,15 @@ test('rows are mapped for the page and unsafe posting URLs are not linked', asyn
     location: 'London',
     ats_platform: 'greenhouse',
     url: 'https://boards.greenhouse.io/acme/jobs/1',
+    compensation: '€50k',
     added_at: '2026-11-20T08:00:00Z',
     applied_at: null,
-    last_seen_at: '2026-11-22T06:00:00Z'
+    opened_at: null,
+    last_seen_at: '2026-11-22T06:00:00Z',
+    matched: ['Junior', 'London'] // the user's own filter words found in the title and location
   });
   assert.equal(page.applications[1].url, '#');
-  assert.equal(page.tab, 'to_apply');
+  assert.equal(page.tab, 'inbox');
 });
 
 test('the drawer gets the saved details, with no invented values', async () => {
@@ -257,4 +228,22 @@ test('demo sessions change nothing', async () => {
   assert.equal(result.success, true);
   assert.match(result.message, /Demo/);
   assert.deepEqual(w.queries, []);
+});
+
+test('opening a role stamps it once and never clears another user\'s row', async () => {
+  const w = world();
+  const body = new FormData();
+  body.set('id', '7');
+  const result = await actions.markOpened({ locals: w.locals, request: new Request('http://localhost/', { method: 'POST', body }) });
+  assert.equal(result.success, true);
+  const ops = w.queries[0].ops;
+  assert.equal(ops[0][0], 'update');
+  assert.deepEqual(Object.keys(ops[0][1]), ['opened_at']); // the database trigger stamps the real time
+  assert.deepEqual(ops.slice(1), [['eq', 'id', 7], ['is', 'opened_at', null]]);
+
+  const bad = new FormData();
+  bad.set('id', 'x');
+  const w2 = world();
+  refused(await actions.markOpened({ locals: w2.locals, request: new Request('http://localhost/', { method: 'POST', body: bad }) }), 400);
+  assert.deepEqual(w2.queries, []);
 });

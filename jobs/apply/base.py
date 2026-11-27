@@ -7,11 +7,13 @@ and unauthenticated submission lifecycle.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -146,6 +148,47 @@ def _match_select_option(options: list[QuestionOption], desired_text: str | bool
     return None
 
 
+# Shared with web/src/lib/server/remoteApply/fill.ts, so both pick the same option.
+EEO = json.loads(Path(__file__).with_name("eeo_patterns.json").read_text(encoding="utf-8"))
+_DECLINE = re.compile(EEO["decline"], re.I)
+_SELECTS = (QuestionType.SINGLE_SELECT, QuestionType.MULTI_SELECT)
+
+
+def eeo_category(question: ScreeningQuestion) -> str | None:
+    """gender, hispanic, race, veteran or disability for an equal-opportunity select, else None.
+
+    Selects only: a free-text question that mentions veterans is an employer's own question, not self-identification.
+    """
+    if question.question_type not in _SELECTS:
+        return None
+    by_name = EEO["names"].get(question.raw_field_name or "")
+    if by_name:
+        return str(by_name)
+    label = question.label.lower()
+    if re.search(EEO["not_eeo"], label):
+        return None
+    return next((cat for cat, pattern in EEO["labels"] if re.search(pattern, label)), None)
+
+
+def map_eeo_answer(question: ScreeningQuestion, category: str, stored: Any) -> Any | None:
+    """The option id to pick, or None to leave it to the user. Special-category data: never log it.
+
+    No stored answer (or "prefer_not") picks the form's decline option. A stored answer picks the one option it
+    matches; none or several matching leaves the question alone, so nothing is ever guessed.
+    """
+    answers = stored if isinstance(stored, dict) else {}
+    if category == "hispanic":  # Greenhouse asks Hispanic/Latino yes-no before race
+        race = answers.get("race")
+        want = None if race in (None, "prefer_not") else ("yes" if race == "hispanic_latino" else "no")
+        pattern = EEO["hispanic"].get(want or "")
+    else:
+        pattern = EEO["answers"][category].get(answers.get(category) or "")
+    if pattern is None:
+        return next((o.id for o in question.options if _DECLINE.search(o.label)), None)
+    hits = [o for o in question.options if not _DECLINE.search(o.label) and re.search(pattern, o.label, re.I)]
+    return hits[0].id if len(hits) == 1 else None
+
+
 def _as_bool(value: Any) -> bool | None:
     """Strict yes/no parsing. Free text like "No" or "Authorized in the EU" must not become True."""
     if isinstance(value, bool):
@@ -169,6 +212,12 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
     defaults = user.get("screening_defaults") or {}
     raw_label = question.label or ""
     clean_label = re.sub(r"[^\w\s]", "", raw_label).lower().strip()
+
+    # 0. Equal opportunity: answered here or not at all, never by the keyword rules below.
+    category = eeo_category(question)
+    if category:
+        option_id = map_eeo_answer(question, category, defaults.get("eeo"))
+        return option_id, option_id is not None
 
     # 1. Work Authorization
     if any(
@@ -280,6 +329,8 @@ def map_screening_question(question: ScreeningQuestion, user: User) -> tuple[Any
 
     # 7. Exact key match in screening_defaults
     for key, val in defaults.items():
+        if isinstance(val, (dict, list)):  # eeo, education: structured, never an answer to a matched keyword
+            continue
         clean_key = re.sub(r"[^\w\s]", "", key).lower().strip()
         if clean_key and clean_key in clean_label and "hear about" not in clean_label:
             if question.question_type in (QuestionType.SINGLE_SELECT, QuestionType.MULTI_SELECT):
