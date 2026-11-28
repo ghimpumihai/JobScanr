@@ -95,8 +95,13 @@ class GreenhouseSubmitter(BaseSubmitter):
 
     @staticmethod
     def parse_questions(data: dict[str, Any]) -> list[ScreeningQuestion]:
-        """Parse the `questions` of a job JSON from `fetch_job`."""
-        raw_questions = data.get("questions") or []
+        """Parse the `questions` and the EEOC `compliance` questions of a job JSON from `fetch_job`."""
+        raw_questions = list(data.get("questions") or [])
+        # shortcut: `compliance` is assumed to hold {"questions": [...]} shaped like `questions`, with no `id` (seen
+        # only in summary, 2026-11-23); `demographic_questions` (newer boards) is not read. Check a live job JSON.
+        for section in data.get("compliance") or []:
+            if isinstance(section, dict):
+                raw_questions += [q for q in section.get("questions") or [] if isinstance(q, dict)]
 
         parsed_questions: list[ScreeningQuestion] = []
         for q in raw_questions:

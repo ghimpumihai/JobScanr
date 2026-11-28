@@ -26,7 +26,7 @@ export const actions: Actions = {
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7
     });
-    throw redirect(303, '/matches');
+    throw redirect(303, '/inbox');
   },
 
   google: async ({ locals, cookies, url }) => {
@@ -38,7 +38,7 @@ export const actions: Actions = {
     // PKCE: the code verifier is stored in a cookie here and used by /auth/callback's exchangeCodeForSession.
     const { data, error } = await locals.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${url.origin}/auth/callback?next=/matches` }
+      options: { redirectTo: `${url.origin}/auth/callback?next=/inbox` }
     });
     if (error || !data.url) {
       return fail(500, { error: `Google sign-in could not start: ${error?.message ?? 'no redirect URL'}` });

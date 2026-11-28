@@ -5,7 +5,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies }) => {
   const code = url.searchParams.get('code');
   // Only same-site paths: an absolute or protocol-relative `next` would be an open redirect.
   const rawNext = url.searchParams.get('next') ?? '';
-  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('\\') ? rawNext : '/matches';
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('\\') ? rawNext : '/inbox';
 
   if (code && locals.supabase) {
     try {

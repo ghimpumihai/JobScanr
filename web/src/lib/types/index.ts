@@ -43,7 +43,13 @@ export interface ApplicationRecord {
   status: ApplicationStatus;
   /** Posting link, already passed through safeHttpUrl ('#' when unsafe). */
   url: string;
+  /** Pay as the posting states it, or null ("Salary not listed"). */
+  compensation: string | null;
   added_at: string;
+  /** When the user first opened the role; null shows the unread dot. */
+  opened_at: string | null;
+  /** The user's filter words found in the title or location. */
+  matched: string[];
   /** Set by the database when the user marks it applied. */
   applied_at: string | null;
   last_seen_at: string | null;
@@ -87,6 +93,10 @@ export interface UserProfile {
   max_apps_per_company: number;
   /** Opt-in to Groq drafts of open-ended answers in remote fill (#59). */
   llm_drafts_enabled: boolean;
+  /** degree is a value from DEGREES in $lib/eeo. */
+  education?: { school?: string; degree?: string; field_of_study?: string; graduation_year?: number };
+  /** Values from EEO_FIELDS in $lib/eeo; missing = prefer_not (remote fill picks the form's decline option). */
+  eeo?: { gender?: string; race?: string; veteran?: string; disability?: string };
 }
 
 export interface TelemetrySummary {

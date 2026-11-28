@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true, ws: false }, logLevel: 'error' });
-const { fillPage } = await vite.ssrLoadModule('/src/lib/server/remoteApply/fill.ts');
+const { fillPage, eeoChoice, educationChoice, typeAnswer } = await vite.ssrLoadModule('/src/lib/server/remoteApply/fill.ts');
 const { captchaVisible, isConfirmation } = await vite.ssrLoadModule('/src/lib/server/remoteApply/detect.ts');
 
 let browser;
@@ -283,7 +283,7 @@ test('inputs inserted mid-fill never shift values into the wrong fields', async 
   assert.equal(await page.inputValue('#first'), 'Jane');
   assert.equal(await page.inputValue('#phone'), '+44 7000 000000'); // not the city
   assert.equal(await page.inputValue('#loc'), ''); // no exact option: cleared and left for the user
-  assert.ok(result.unfilled.includes('location'));
+  assert.ok(result.unfilled.includes('Location (City)'));
   assert.ok(Date.now() - started < 15_000, `took ${Date.now() - started} ms`); // bounded waits, not 30 s each
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
@@ -315,7 +315,7 @@ test('a page with no recognisable fields fills nothing and reports the CV as unf
   const page = await open('<form><input name="q1"><button type="submit">Go</button></form>');
   const result = await fillPage(page, null, PROFILE, CV);
   assert.equal(result.filled, 0);
-  assert.deepEqual(result.unfilled, ['resume']);
+  assert.deepEqual(result.unfilled, ['CV']);
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
 });
@@ -449,6 +449,125 @@ test('a planned multi-select answer ticks its own box of the group and never unt
   result = await fillPage(page, field(99), {}, null); // not an option on the live form
   assert.deepEqual([await page.isChecked('#o1'), await page.isChecked('#o2')], [true, false]);
   assert.deepEqual(result.unfilled, ['Select all that apply']);
+  await page.close();
+});
+
+// Greenhouse's education typeaheads (#142): a list that loads after typing, like School, and fixed lists.
+const TYPEAHEAD = `<script>
+  // A react-select stand-in: clicking opens the list; typing replaces it 300 ms later with the matches from data-all.
+  for (const input of document.querySelectorAll('[role=combobox]')) {
+    const list = document.getElementById(input.getAttribute('aria-controls'));
+    const show = (items) => (list.innerHTML = items.map((t) => '<div role="option">' + t + '</div>').join(''));
+    const all = JSON.parse(input.dataset.all);
+    input.addEventListener('click', () => show(input.dataset.search ? [] : all));
+    // Any input, clearing too, reopens the menu; with no matches it shows "No options" over the fields below.
+    input.addEventListener('input', () => setTimeout(() => {
+      const found = all.filter((t) => t.toLowerCase().includes(input.value.toLowerCase()));
+      if (found.length) show(found);
+      else list.innerHTML = '<div style="height: 300px">No options</div>';
+    }, 300));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') setTimeout(() => (list.innerHTML = ''), 350); });
+    list.addEventListener('click', (e) => { input.dataset.picked = e.target.textContent; list.innerHTML = ''; input.value = ''; });
+  }
+</script>`;
+const combo = (id, label, options, search = false) =>
+  `<div style="position: relative"><label for="${id}">${label}</label><input id="${id}" role="combobox" aria-controls="${id}-list" ${search ? 'data-search="1"' : ''} data-all='${JSON.stringify(options).replaceAll("'", '&#39;')}'><div id="${id}-list" style="position: absolute; top: 100%; left: 0; width: 600px; background: #fff; z-index: 5"></div></div>`;
+
+test('education typeaheads pick the best option or stay empty, never "Other" (#142)', async () => {
+  const page = await open(`<form>
+    ${combo('school--0', 'School', ['University College London', 'University of London', 'Other'], true)}
+    ${combo('degree--0', 'Degree', ["Associate's Degree", "Bachelor's Degree", "Master's Degree", 'Other'])}
+    ${combo('discipline--0', 'Discipline', ['Computer Engineering', 'Mathematics', 'Other'])}
+    <label for="end-year--0">End date year</label><input id="end-year--0" type="number">
+    <label for="q">Where did you study?</label><textarea id="q" name="question_5"></textarea>
+    <button type="submit">Submit</button></form>${TYPEAHEAD}`);
+  const profile = { education: { school: 'University College London', degree: 'masters', field_of_study: 'Computer Science', graduation_year: '2024' } };
+  const result = await fillPage(page, null, profile, null);
+  const picked = (id) => page.$eval(`[id="${id}"]`, (el) => el.dataset.picked ?? '');
+  assert.equal(await picked('school--0'), 'University College London'); // typed, then the list that loaded
+  assert.equal(await picked('degree--0'), "Master's Degree"); // the stored value is "masters", shown as Master’s
+  assert.equal(await picked('discipline--0'), ''); // no Computer Science: left empty, not "Other"
+  assert.equal(await page.inputValue('[id="discipline--0"]'), '');
+  assert.equal(await page.inputValue('[id="end-year--0"]'), '2024');
+  assert.equal(await page.inputValue('#q'), ''); // never in an employer's own question
+  assert.ok(result.unfilled.includes('Discipline'));
+  assert.ok(result.labels.includes('School') && !result.labels.includes('Discipline'));
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('a school with no match is cleared and closed, so the Degree list below it still fills (#142, live Greenhouse)', async () => {
+  const page = await open(`<form>
+    ${combo('school--0', 'School', ['Babes-Bolyai University', 'University of Bucharest'], true)}
+    ${combo('degree--0', 'Degree', ["Associate's Degree", "Bachelor's Degree", 'Other'])}
+    <button type="submit">Submit</button></form>${TYPEAHEAD}`);
+  const result = await fillPage(page, null, { education: { school: 'ubb', degree: 'bachelors' } }, null);
+  const picked = (id) => page.$eval(`[id="${id}"]`, (el) => el.dataset.picked ?? '');
+  assert.equal(await picked('school--0'), ''); // "ubb" names no option: never guessed
+  assert.equal(await page.inputValue('[id="school--0"]'), '');
+  assert.equal(await picked('degree--0'), "Bachelor's Degree");
+  assert.deepEqual(result.unfilled, ['School']);
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('equal-opportunity selects: decline unless an answer is saved, the saved one by its label, labels only reported (#142)', async () => {
+  const page = await open(readFileSync(new URL('lever-4.html', FIXTURES), 'utf8'));
+  const result = await fillPage(page, null, { eeo: { gender: 'woman', disability: 'prefer_not' } }, null);
+  const shown = (name) => page.$eval(`select[name="${name}"]`, (s) => s.selectedOptions[0]?.textContent.trim());
+  assert.equal(await shown('eeo[gender]'), 'Female');
+  assert.equal(await shown('eeo[race]'), 'Decline to self-identify');
+  assert.equal(await shown('eeo[veteran]'), 'I decline to self-identify for protected veteran status');
+  assert.equal(await shown('eeo[disability]'), 'I do not want to answer');
+  assert.ok(!JSON.stringify(result).includes('Female')); // the answer itself is never reported
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('Ashby equal-opportunity radio groups: the saved answer or the decline option, never a guess (#142, live Talos form)', async () => {
+  // Ashby's markup: a fieldset whose first label is the question, one hidden-styled radio + label per option.
+  const group = (q, id, options) =>
+    `<fieldset><label for="${id}">${q}</label>` +
+    options.map((o, i) => `<div><span><input type="radio" id="${id}-${i}" name="${id}" style="opacity:0;position:absolute"></span><label for="${id}-${i}">${o}</label></div>`).join('') +
+    '</fieldset>';
+  const page = await open(`<form>
+    ${group('Gender', 'g', ['Male', 'Female', 'Prefer not to say'])}
+    ${group('Ethnicity', 'e', ['White (English, Welsh, Scottish)', 'Asian or Asian British', 'Prefer not to say'])}
+    ${group('Do you consider yourself to have a disability?', 'd', ['Yes', 'No'])}
+    ${group('Do you need any adjustments for your interview?', 'a', ['Yes', 'No'])}
+    ${group('Are you willing to relocate?', 'r', ['Yes', 'No'])}
+    <button type="submit">Submit</button></form>`);
+  const result = await fillPage(page, null, { eeo: { gender: 'woman' } }, null);
+  const checked = (name) => page.$$eval(`input[name="${name}"]`, (els) => els.findIndex((e) => e.checked));
+  assert.equal(await checked('g'), 1); // saved answer: Female
+  assert.equal(await checked('e'), 2); // nothing saved: the decline option
+  assert.equal(await checked('d'), -1); // nothing saved and no decline option: left for the user
+  assert.equal(await checked('a'), -1); // an accommodation question is not equal-opportunity
+  assert.equal(await checked('r'), -1); // an employer's own question is never touched
+  assert.deepEqual(result.labels, ['Gender', 'Race']); // labels only, never the answer
+  assert.deepEqual(result.unfilled, ['Disability']);
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('eeoChoice and educationChoice never guess', () => {
+  assert.equal(eeoChoice('gender', ['Male', 'Female'], {}), -1); // no decline option
+  assert.equal(eeoChoice('gender', ['Male', 'Female', 'Decline'], { gender: 'non_binary' }), -1); // not an option
+  assert.equal(eeoChoice('race', ['East Asian', 'South Asian', 'Decline'], { race: 'asian' }), -1); // ambiguous
+  assert.equal(eeoChoice('hispanic', ['Yes', 'No', 'Decline To Self Identify'], { race: 'white' }), 1);
+  assert.equal(educationChoice(['Computer Science and Engineering', 'Computer Science Education'], ['Computer Science']), -1);
+  assert.equal(educationChoice(['Other'], ['Other']), 0); // asked for
+});
+
+test('typeAnswer types into its own free-text field and re-runs the required check (redraft, #142)', async () => {
+  const page = await open(`<form>
+    <label for="question_4">Why Acme?</label><textarea id="question_4" name="question_4" required>Old draft</textarea>
+    <label for="question_5">Pick</label><select id="question_5" name="question_5" required><option value=""></option><option>A</option></select>
+    <button type="submit">Submit</button></form>`);
+  assert.deepEqual(await typeAnswer(page, 'question_4', 'New draft.'), ['Pick']);
+  assert.equal(await page.inputValue('#question_4'), 'New draft.');
+  assert.equal(await typeAnswer(page, 'question_5', 'x'), null); // not free text
+  assert.equal(await typeAnswer(page, 'question_9', 'x'), null); // not on the page
   await page.close();
 });
 

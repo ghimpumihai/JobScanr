@@ -244,6 +244,127 @@ def test_map_unmapped_question_fails_confidence(sample_user: User):
     assert val is None
 
 
+# Equal-opportunity questions (#142): option labels from saved Lever and Greenhouse forms.
+LEVER_GENDER = ["Select ...", "Male", "Female", "Decline to self-identify"]
+LEVER_VETERAN = [
+    "I identify as one or more of the classifications of protected veteran listed above",
+    "I am not a protected veteran",
+    "I decline to self-identify for protected veteran status",
+]
+LEVER_DISABILITY = [
+    "Yes, I have a disability, or have had one in the past",
+    "No, I do not have a disability and have not had one in the past",
+    "I do not want to answer",
+]
+LEVER_RACE = [
+    "Hispanic or Latino",
+    "White (Not Hispanic or Latino)",
+    "Black or African American (Not Hispanic or Latino)",
+    "Asian (Not Hispanic or Latino)",
+    "Two or More Races (Not Hispanic or Latino)",
+    "Decline to self-identify",
+]
+
+
+def _eeo_question(label, options, name=None, qtype=QuestionType.SINGLE_SELECT):
+    opts = [QuestionOption(id=i, label=text) for i, text in enumerate(options)]
+    return ScreeningQuestion(id=1, label=label, question_type=qtype, required=False, options=opts, raw_field_name=name)
+
+
+def _picked(question, eeo):
+    value, confident = map_screening_question(question, {"screening_defaults": {"eeo": eeo} if eeo is not None else {}})
+    return question.options[value].label if confident else None
+
+
+@pytest.mark.parametrize(
+    "eeo", [None, {}, {"gender": "prefer_not", "veteran": "prefer_not", "disability": "prefer_not"}]
+)
+def test_eeo_missing_or_prefer_not_picks_the_decline_option(eeo):
+    assert _picked(_eeo_question("Gender", LEVER_GENDER, "eeo[gender]"), eeo) == "Decline to self-identify"
+    assert _picked(_eeo_question("Veteran status", LEVER_VETERAN), eeo) == LEVER_VETERAN[2]
+    assert _picked(_eeo_question("Disability", LEVER_DISABILITY), eeo) == "I do not want to answer"
+    # Greenhouse-style wording
+    assert (
+        _picked(_eeo_question("Gender", ["Male", "Female", "I don't wish to answer"]), eeo) == "I don't wish to answer"
+    )
+    assert _picked(_eeo_question("Gender", ["Man", "Woman", "Prefer not to say"]), eeo) == "Prefer not to say"
+
+
+def test_eeo_stored_answers_pick_their_option_label():
+    eeo = {"gender": "woman", "race": "asian", "veteran": "not_veteran", "disability": "no"}
+    assert _picked(_eeo_question("Gender", LEVER_GENDER, "eeo[gender]"), eeo) == "Female"  # not "Male"
+    assert _picked(_eeo_question("Race", LEVER_RACE, "eeo[race]"), eeo) == "Asian (Not Hispanic or Latino)"
+    assert (
+        _picked(_eeo_question("Veteran Status", LEVER_VETERAN, "veteran_status"), eeo) == "I am not a protected veteran"
+    )
+    assert _picked(_eeo_question("Disability Status", LEVER_DISABILITY), eeo) == LEVER_DISABILITY[1]
+    yes_no = ["Yes", "No", "Decline To Self Identify"]
+    hispanic = _eeo_question("Are you Hispanic/Latino?", yes_no, "hispanic_ethnicity")
+    assert _picked(hispanic, eeo) == "No"
+    assert _picked(hispanic, {"race": "hispanic_latino"}) == "Yes"
+    assert _picked(_eeo_question("Race", LEVER_RACE), {"race": "hispanic_latino"}) == "Hispanic or Latino"
+    assert _picked(_eeo_question("Veteran", LEVER_VETERAN), {"veteran": "protected_veteran"}) == LEVER_VETERAN[0]
+
+
+def test_eeo_never_guesses_a_non_decline_option():
+    # The stored answer is not an option, or no decline option exists: left for the user.
+    assert _picked(_eeo_question("Gender", ["Male", "Female", "Decline"]), {"gender": "non_binary"}) is None
+    assert _picked(_eeo_question("Gender", ["Male", "Female"]), {}) is None
+    assert (
+        _picked(_eeo_question("Race", ["East Asian", "South Asian", "Decline"]), {"race": "asian"}) is None
+    )  # ambiguous
+    assert _picked(_eeo_question("Gender", LEVER_GENDER), {"gender": "something else"}) == "Decline to self-identify"
+
+
+def test_eeo_rules_leave_other_questions_alone(sample_user: User):
+    user = {**sample_user, "screening_defaults": {"eeo": {"disability": "no"}, "education": {"school": "UCL"}}}
+    accommodation = _eeo_question("Do you need a disability accommodation for the interview?", ["Yes", "No"])
+    assert map_screening_question(accommodation, user) == (None, False)
+    # Free text that mentions veterans is the employer's own question.
+    essay = _eeo_question("Tell us about your work with veterans", [], qtype=QuestionType.LONG_TEXT)
+    assert map_screening_question(essay, user) == (None, False)
+    # Structured defaults never answer a question by keyword ("education" is in the label).
+    education = _eeo_question("Highest level of education", ["Bachelor's", "Master's"], qtype=QuestionType.SHORT_TEXT)
+    assert map_screening_question(education, user) == (None, False)
+
+
+def test_greenhouse_parses_the_compliance_questions():
+    data = {
+        "questions": [
+            {"label": "First Name", "required": True, "fields": [{"name": "first_name", "type": "input_text"}]}
+        ],
+        "compliance": [
+            {
+                "type": "eeoc",
+                "questions": [
+                    {
+                        "label": "Gender",
+                        "required": False,
+                        "fields": [
+                            {
+                                "name": "gender",
+                                "type": "multi_value_single_select",
+                                "values": [
+                                    {"label": "Male", "value": 1},
+                                    {"label": "Decline To Self Identify", "value": 3},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+            "not a section",
+        ],
+    }
+    gender = GreenhouseSubmitter.parse_questions(data)[1]
+    assert (gender.raw_field_name, gender.question_type, gender.required) == (
+        "gender",
+        QuestionType.SINGLE_SELECT,
+        False,
+    )
+    assert map_screening_question(gender, {"screening_defaults": {}}) == (3, True)
+
+
 # ============================================================================
 # 2. Factory & Fallback Submitter Tests
 # ============================================================================

@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from '$lib/supabase/server';
 import { checkCvFile } from '$lib/cvFile';
 import { safeHttpUrl } from '$lib/safeUrl';
 import { isAllowlisted, isEnabled } from '$lib/server/remoteApply/session';
+import { DEGREES, EEO_FIELDS, PREFER_NOT } from '$lib/eeo';
 
 const MOCK_PROFILE: UserProfile = {
   id: 1,
@@ -29,7 +30,9 @@ const MOCK_PROFILE: UserProfile = {
   auto_apply_mode: 'approval_required',
   max_daily_applications: 10,
   max_apps_per_company: 2,
-  llm_drafts_enabled: false
+  llm_drafts_enabled: false,
+  education: { school: 'University of Bucharest', degree: 'bachelors', field_of_study: 'Computer Science', graduation_year: 2025 },
+  eeo: {}
 };
 
 // UI labels -> title words the Python matcher (jobs/match.py `levels`) looks for in a job title.
@@ -94,6 +97,36 @@ function writeFailure(error: { code?: string; message: string }, fallback: strin
   return error.code === 'P0001' ? fail(400, { error: error.message }) : fail(500, { error: fallback });
 }
 
+/** Replaces screening_defaults[key] with `change(stored value)`, removing it when empty; other keys are untouched. */
+async function saveNested(
+  locals: App.Locals,
+  key: 'education' | 'eeo',
+  change: (stored: Record<string, unknown> | undefined) => Record<string, unknown>,
+  message: string
+) {
+  const { data, error } = await locals.supabase
+    .from('users')
+    .select('screening_defaults')
+    .eq('auth_user_id', locals.user!.id)
+    .single();
+  if (error || !data) {
+    console.error('Failed to read user preferences:', error?.message);
+    return fail(500, { error: 'Could not load your current preferences. Nothing was saved.' });
+  }
+  const screening_defaults = { ...(data.screening_defaults ?? {}) };
+  const value = change(screening_defaults[key]);
+  if (Object.keys(value).length) screening_defaults[key] = value;
+  else delete screening_defaults[key];
+  const { error: writeError } = await locals.supabase
+    .from('users')
+    .update({ screening_defaults })
+    .eq('auth_user_id', locals.user!.id)
+    .select('id')
+    .single();
+  if (writeError) return writeFailure(writeError, 'Could not save. Please try again.');
+  return { success: true, message };
+}
+
 const boolLabel = (value: unknown) => (value === true ? 'yes' : value === false ? 'no' : '');
 
 /** undefined = field absent (leave stored value alone), null = present but invalid. */
@@ -140,7 +173,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       resume_filename: data.resume_filename ?? undefined,
       resume_storage_path: data.resume_storage_path,
       resume_content_type: data.resume_content_type,
-      resume_uploaded_at: data.resume_uploaded_at ? new Date(data.resume_uploaded_at).toLocaleDateString() : undefined,
+      resume_uploaded_at: data.resume_uploaded_at ? new Date(data.resume_uploaded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : undefined,
       resume_uploaded_at_raw: data.resume_uploaded_at ?? undefined,
       resume_confirmed_at: data.resume_confirmed_at ?? undefined,
       seniority_levels: Object.keys(LEVEL_TOKENS).filter((label) =>
@@ -157,7 +190,9 @@ export const load: PageServerLoad = async ({ locals }) => {
       auto_apply_mode: data.auto_apply_mode || 'approval_required',
       max_daily_applications: data.max_daily_applications ?? 10,
       max_apps_per_company: data.max_apps_per_company ?? 2,
-      llm_drafts_enabled: data.llm_drafts_enabled ?? false
+      llm_drafts_enabled: data.llm_drafts_enabled ?? false,
+      education: data.screening_defaults?.education ?? {},
+      eeo: data.screening_defaults?.eeo ?? {}
     };
     // Answer memory: pending questions first. A failed read only hides the card's rows; the page still loads.
     const { data: rows, error: answersError } = await locals.supabase
@@ -384,6 +419,47 @@ export const actions: Actions = {
     if (writeError) return writeFailure(writeError, 'Could not save the answer. Please try again.');
     if (!rows?.length) return fail(404, { error: 'That question no longer exists.' });
     return { success: true, message: 'Answer saved.' };
+  },
+
+  // Not top-level screening_defaults keys: the worker matches those inside question text (see savePreferences).
+  saveEducation: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const school = parseText(formData, 'school');
+    const degree = parseText(formData, 'degree');
+    const field_of_study = parseText(formData, 'fieldOfStudy');
+    const year = parseText(formData, 'graduationYear');
+    if ([school, field_of_study].some((v) => v && v.length > MAX_TEXT_LENGTH)) {
+      return fail(400, { error: `School and field of study can have at most ${MAX_TEXT_LENGTH} characters each.` });
+    }
+    if (degree && !DEGREES.some((d) => d.value === degree)) return fail(400, { error: 'Choose a degree from the list.' });
+    const maxYear = new Date().getUTCFullYear() + 10;
+    if (year && !(/^\d{4}$/.test(year) && +year >= 1950 && +year <= maxYear)) {
+      return fail(400, { error: `Graduation year must be a year from 1950 to ${maxYear}.` });
+    }
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+    const changes = { school, degree, field_of_study, graduation_year: year ? Number(year) : year };
+    return saveNested(locals, 'education', (stored) => merge(stored, changes), 'Education saved.');
+  },
+
+  // Special-category data (GDPR Art. 9): validated against fixed lists, never logged. "Prefer not to say" is not
+  // stored: no value already means "pick the form's decline option".
+  saveEeo: async ({ request, locals }) => {
+    const formData = await request.formData();
+    const changes: Record<string, string | undefined> = {};
+    for (const [field, options] of Object.entries(EEO_FIELDS)) {
+      const value = parseText(formData, field);
+      if (value !== undefined && !options.some((o) => o.value === value)) {
+        return fail(400, { error: 'Choose an answer from the list.' });
+      }
+      changes[field] = value === PREFER_NOT ? '' : value;
+    }
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+    return saveNested(locals, 'eeo', (stored) => merge(stored, changes), 'Equal opportunity answers saved.');
+  },
+
+  clearEeo: async ({ locals }) => {
+    if (!isLiveUser(locals)) return DEMO_RESULT;
+    return saveNested(locals, 'eeo', () => ({}), 'Equal opportunity answers cleared.');
   },
 
   deleteAnswer: async ({ request, locals }) => {

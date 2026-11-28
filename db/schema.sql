@@ -125,6 +125,8 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+-- Inbox unread dot (#141): when the user first opened the role. Set only through the trigger below.
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
 -- PostgreSQL named the inline CHECK above applications_status_check. Replaced so existing databases accept
 -- 'dismissed'; the worker's statuses stay allowed while its code is kept (#48, D4).
 ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_status_check;
@@ -329,6 +331,11 @@ CREATE OR REPLACE FUNCTION protect_application_queue_fields()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (current_user = 'authenticated' OR auth.role() = 'authenticated') THEN
+        -- Marking a role opened (#141): only opened_at changes, it is stamped here and never cleared or backdated.
+        IF NEW.status = OLD.status AND (to_jsonb(NEW) - 'opened_at') = (to_jsonb(OLD) - 'opened_at') THEN
+            NEW.opened_at := COALESCE(OLD.opened_at, NOW());
+            RETURN NEW;
+        END IF;
         IF (to_jsonb(NEW) - 'status' - 'applied_at') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'applied_at') THEN
             RAISE EXCEPTION 'Only the application status can be changed';
         END IF;

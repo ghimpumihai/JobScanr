@@ -52,8 +52,8 @@ def test_no_emojis_in_web_components():
         assert not emoji_pattern.search(text), f"Emoji found in {svelte_file.name}"
 
 
-def test_matches_loader_only_emits_http_urls():
-    loader = (WEB_ROOT / "src/routes/(app)/matches/+page.server.ts").read_text(encoding="utf-8")
+def test_inbox_loader_only_emits_http_urls():
+    loader = (WEB_ROOT / "src/routes/(app)/inbox/+page.server.ts").read_text(encoding="utf-8")
     assert "safeHttpUrl(row.job_postings?.url)" in loader
     helper = (WEB_ROOT / "src/lib/safeUrl.ts").read_text(encoding="utf-8")
     assert "'http:'" in helper and "'https:'" in helper
@@ -77,7 +77,7 @@ def test_auth_callback_rejects_offsite_next():
 
 
 def test_real_users_never_get_mock_data_fallbacks():
-    for page in ("applications", "matches", "settings"):
+    for page in ("inbox", "settings"):
         text = (WEB_ROOT / "src" / "routes" / "(app)" / page / "+page.server.ts").read_text(encoding="utf-8")
         assert "loadError" in text, f"{page} must report load errors instead of silently showing mock data"
 
@@ -106,13 +106,12 @@ def test_settings_actions_keep_cv_and_screening_guards():
     assert "location" not in defaults and "contact" not in defaults
 
 
-def test_matches_page_links_every_platform_to_the_posting_and_queues_nothing():
-    """Nothing can be submitted without the employer's API key (#48), so every match is applied to by hand."""
-    page = (WEB_ROOT / "src/routes/(app)/matches/+page.svelte").read_text(encoding="utf-8")
-    server = (WEB_ROOT / "src/routes/(app)/matches/+page.server.ts").read_text(encoding="utf-8")
-    assert "Queue" not in page and "queue" not in server.lower()
-    assert "ats_platform === 'workday'" not in page  # the Apply link is no longer limited to Workday
-    assert re.search(r"<a\s+href=\{match\.url\}[^>]*>\s*Apply\b", page)
+def test_inbox_links_every_platform_to_the_posting_and_queues_nothing():
+    """Nothing can be submitted without the employer's API key (#48), so every role is applied to by hand."""
+    page = (WEB_ROOT / "src/routes/(app)/inbox/+page.svelte").read_text(encoding="utf-8")
+    server = (WEB_ROOT / "src/routes/(app)/inbox/+page.server.ts").read_text(encoding="utf-8")
+    assert "queue" not in server.lower().replace("protect_application_queue_fields", "")
+    assert re.search(r'<a class="btn btn-white" href=\{sel\.url\}[^>]*>\s*Apply on', page)
 
 
 # Claims that JobScanr submits, queues or verifies applications. Nothing is sent: employers accept applications

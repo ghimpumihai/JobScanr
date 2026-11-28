@@ -24,7 +24,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.session = null;
   }
 
-  // Support query param transitions with clean URL redirect (e.g. /matches?demo=true -> /matches)
+  // Support query param transitions with clean URL redirect (e.g. /inbox?demo=true -> /inbox)
   if (event.url.searchParams.get('demo') === 'true') {
     event.cookies.delete('jobscanr_logged_out', { path: '/' });
     event.cookies.set('jobscanr_demo_session', 'true', {
@@ -71,9 +71,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   const pathname = event.url.pathname;
+  // Today (/matches) and Applications merged into one Inbox (#141); old links and bookmarks still work.
+  if (pathname === '/matches' || pathname === '/applications') {
+    throw redirect(301, '/inbox');
+  }
   const isProtected =
-    pathname.startsWith('/matches') ||
-    pathname.startsWith('/applications') ||
+    pathname.startsWith('/inbox') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/profile');
 
@@ -81,10 +84,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     throw redirect(303, '/login');
   }
 
-  // Redirect root to /matches if authenticated, otherwise to /login
+  // Redirect root to /inbox if authenticated, otherwise to /login
   if (pathname === '/') {
     if (event.locals.user || mockAuth) {
-      throw redirect(303, '/matches');
+      throw redirect(303, '/inbox');
     } else {
       throw redirect(303, '/login');
     }
