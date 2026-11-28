@@ -3,6 +3,7 @@
 // it is typed into that one field. The note is fenced as data and never stored; equal-opportunity answers and the
 // profile are never sent. The user still reviews the answer and clicks Submit (constitution 1.5).
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { extractText, getDocumentProxy } from 'unpdf';
 import { fetchDescription } from '../description';
 import PROMPT from '../../../../../jobs/apply/draft_prompt.json';
 import { typeAnswer, type FillPlan } from './fill';
@@ -34,11 +35,7 @@ const counts = new Map<number, { total: number; byQuestion: Map<string, number>;
 /** Plain text of a PDF CV, as llm_answers.extract_cv_text gives it, or null. */
 async function cvText(cv: { name: string; buffer: Buffer }): Promise<string | null> {
   if (!cv.name.toLowerCase().endsWith('.pdf')) return null; // shortcut: DOCX CVs are not read here yet
-  // shortcut: needs `npm install unpdf` in web/ (no PDF reader is installed, and installing needs the network). Until
-  // then this returns null and Redraft says it cannot read the CV. Make it a static import once installed.
-  const lib = 'unpdf';
   try {
-    const { extractText, getDocumentProxy } = await import(/* @vite-ignore */ lib);
     const pdf = await getDocumentProxy(new Uint8Array(cv.buffer));
     const { text } = await extractText(pdf, { mergePages: false });
     const lines = (text as string[]).slice(0, 5).join('\n').split('\n').map((l) => l.split(/\s+/).filter(Boolean).join(' '));
