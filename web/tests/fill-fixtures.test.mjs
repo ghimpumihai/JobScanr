@@ -315,7 +315,7 @@ test('a page with no recognisable fields fills nothing and reports the CV as unf
   const page = await open('<form><input name="q1"><button type="submit">Go</button></form>');
   const result = await fillPage(page, null, PROFILE, CV);
   assert.equal(result.filled, 0);
-  assert.deepEqual(result.unfilled, ['resume']);
+  assert.deepEqual(result.unfilled, ['CV']);
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
 });
@@ -520,6 +520,32 @@ test('equal-opportunity selects: decline unless an answer is saved, the saved on
   assert.equal(await shown('eeo[veteran]'), 'I decline to self-identify for protected veteran status');
   assert.equal(await shown('eeo[disability]'), 'I do not want to answer');
   assert.ok(!JSON.stringify(result).includes('Female')); // the answer itself is never reported
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('Ashby equal-opportunity radio groups: the saved answer or the decline option, never a guess (#142, live Talos form)', async () => {
+  // Ashby's markup: a fieldset whose first label is the question, one hidden-styled radio + label per option.
+  const group = (q, id, options) =>
+    `<fieldset><label for="${id}">${q}</label>` +
+    options.map((o, i) => `<div><span><input type="radio" id="${id}-${i}" name="${id}" style="opacity:0;position:absolute"></span><label for="${id}-${i}">${o}</label></div>`).join('') +
+    '</fieldset>';
+  const page = await open(`<form>
+    ${group('Gender', 'g', ['Male', 'Female', 'Prefer not to say'])}
+    ${group('Ethnicity', 'e', ['White (English, Welsh, Scottish)', 'Asian or Asian British', 'Prefer not to say'])}
+    ${group('Do you consider yourself to have a disability?', 'd', ['Yes', 'No'])}
+    ${group('Do you need any adjustments for your interview?', 'a', ['Yes', 'No'])}
+    ${group('Are you willing to relocate?', 'r', ['Yes', 'No'])}
+    <button type="submit">Submit</button></form>`);
+  const result = await fillPage(page, null, { eeo: { gender: 'woman' } }, null);
+  const checked = (name) => page.$$eval(`input[name="${name}"]`, (els) => els.findIndex((e) => e.checked));
+  assert.equal(await checked('g'), 1); // saved answer: Female
+  assert.equal(await checked('e'), 2); // nothing saved: the decline option
+  assert.equal(await checked('d'), -1); // nothing saved and no decline option: left for the user
+  assert.equal(await checked('a'), -1); // an accommodation question is not equal-opportunity
+  assert.equal(await checked('r'), -1); // an employer's own question is never touched
+  assert.deepEqual(result.labels, ['Gender', 'Race']); // labels only, never the answer
+  assert.deepEqual(result.unfilled, ['Disability']);
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
 });

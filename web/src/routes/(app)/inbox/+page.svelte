@@ -288,7 +288,8 @@
     <div class="filters">
       <label class="search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-        <input class="input" type="search" bind:value={query} aria-label="Search your roles by company, job title or city" placeholder="Company, job title or city" />
+        <!-- Text typed before the page finished loading would be dropped by hydration: start from what is there. -->
+        <input class="input" type="search" bind:value={query} {@attach (n) => { if (n.value) query = n.value; }} aria-label="Search your roles by company, job title or city" placeholder="Company, job title or city" />
       </label>
       <div class="ms">
         <button class="input picker" type="button" aria-haspopup="true" aria-expanded={msOpen} aria-label="Filter by job board platform: {msLabel}" onclick={() => (msOpen = !msOpen)}>

@@ -89,6 +89,8 @@ interface Control {
   /** A checkbox's value attribute (a multi-select option id); empty for other controls. */
   value: string;
   visible: boolean;
+  /** A radio's question: its fieldset's legend, or the fieldset's own label (Ashby). Empty for other controls. */
+  group: string;
 }
 
 /**
@@ -204,7 +206,10 @@ function eeoCategory(c: Control): string | undefined {
   const names: Record<string, string> = EEO.names;
   const byName = names[c.name] ?? names[c.id];
   if (byName) return byName;
-  const label = c.prompts.join(' ');
+  return eeoCategoryOf(c.prompts.join(' '));
+}
+
+function eeoCategoryOf(label: string): string | undefined {
   if (NOT_EEO.test(label)) return undefined;
   return EEO.labels.find(([, pattern]) => new RegExp(pattern, 'i').test(label))?.[0];
 }
@@ -258,6 +263,10 @@ async function listControls(page: Page): Promise<Control[]> {
         .toLowerCase();
       const style = getComputedStyle(e);
       const rect = e.getBoundingClientRect();
+      const fieldset = e.type === 'radio' ? e.closest('fieldset') : null;
+      const question =
+        fieldset?.querySelector('legend') ??
+        Array.from(fieldset?.querySelectorAll('label') ?? []).find((l) => !(l as HTMLLabelElement).control?.matches('input[type=radio], input[type=checkbox]'));
       return {
         index,
         tag: e.tagName.toLowerCase(),
@@ -269,7 +278,8 @@ async function listControls(page: Page): Promise<Control[]> {
         prompts,
         value: e.type === 'checkbox' ? e.value : '',
         // File inputs are usually hidden behind a styled button; they still accept files.
-        visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0)
+        visible: e.type === 'file' || (style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0),
+        group: clean(question?.textContent ?? null)
       };
     }), TAG
   );
@@ -474,13 +484,13 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
         await byTag(page, target.index).setInputFiles(cv, { timeout: 5000 });
         result.cvAttached = true;
         result.filled += 1;
-        result.labels.push(target.prompts[0] || 'Resume/CV');
+        result.labels.push('CV'); // not the form's label: Lever's wraps its whole upload widget, status text included
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
       } catch {
-        result.unfilled.push('resume');
+        result.unfilled.push('CV');
       }
     } else {
-      result.unfilled.push('resume');
+      result.unfilled.push('CV');
     }
     // Reading the CV can re-render the form with new elements; tag and list them again.
     controls = await shown();
@@ -546,6 +556,31 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
     // By category: a Lever label wraps its select, so the control's own label text lists every option.
     const label = EEO_LABELS[category] ?? category;
     if (await pickBy(page, control, (labels) => eeoChoice(category, labels, profile.eeo))) {
+      result.filled += 1;
+      result.labels.push(label);
+    } else {
+      result.unfilled.push(label);
+    }
+  }
+
+  // Equal-opportunity radio groups (Ashby), one question per group: the same choice as a dropdown, by option label.
+  const radioGroups = new Map<string, Control[]>();
+  for (const c of controls) {
+    if (c.type !== 'radio' || !c.group || used.has(c.index)) continue;
+    const key = c.name || c.group;
+    radioGroups.set(key, [...(radioGroups.get(key) ?? []), c]);
+  }
+  for (const radios of radioGroups.values()) {
+    const category = eeoCategoryOf(radios[0].group);
+    if (!category) continue;
+    for (const r of radios) used.add(r.index);
+    result.planned += 1;
+    const label = EEO_LABELS[category] ?? category;
+    const pick = radios[eeoChoice(category, radios.map((r) => r.prompts[0]), profile.eeo)];
+    // By its label: Ashby styles the input itself away, so clicking it directly can miss.
+    const target = pick && (pick.id ? page.locator(`label[for="${pick.id.replace(/["\\]/g, '\\$&')}"]`) : byTag(page, pick.index));
+    const ok = target ? await target.click({ timeout: ACTION_MS }).then(() => byTag(page, pick.index).isChecked({ timeout: STEP_MS }), () => false) : false;
+    if (ok) {
       result.filled += 1;
       result.labels.push(label);
     } else {
