@@ -356,8 +356,9 @@ async function pickBy(page: Page, control: Control, choose: (labels: string[]) =
     await clickOption(scope.getByRole('option', { name: new RegExp(`^${wanted}$`, 'i') }).and(page.locator('[role="option"]')).first());
     return true;
   } catch {
-    await el.press('Escape', { timeout: STEP_MS }).catch(() => {});
+    // Clear first: clearing reopens a typeahead's menu, which would then cover the next field (#142, live Greenhouse).
     await el.fill('', { timeout: STEP_MS }).catch(() => {});
+    await el.press('Escape', { timeout: STEP_MS }).catch(() => {});
     return false;
   }
 }
@@ -568,12 +569,14 @@ export async function fillPage(page: Page, plan: FillPlan | null, profile: FillP
       dropdown && ['school', 'degree', 'field_of_study', 'graduation_year'].includes(key)
         ? await pickBy(page, control, (labels) => educationChoice(labels, [value, ...(DEGREE_ALIASES[value] ?? [])]), key === 'degree' ? undefined : value)
         : await setValue(page, control, { value });
+    // Greenhouse's typeaheads repeat their label in a placeholder ("Degree Degree"): report it once.
+    const label = (control.prompts.find(Boolean) || key).replace(/^(.+) \1$/, '$1');
     if (ok) {
       result.filled += 1;
-      result.labels.push(control.prompts.find(Boolean) || key);
+      result.labels.push(label);
       if (!dropdown) typed.push({ control, value, label: key });
     } else {
-      result.unfilled.push(key);
+      result.unfilled.push(label);
     }
   }
 

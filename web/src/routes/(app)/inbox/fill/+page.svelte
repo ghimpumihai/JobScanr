@@ -135,12 +135,20 @@
     return () => window.removeEventListener('message', onMessage);
   });
 
-  // Leaving the page mid-session ends it; keepalive lets the request finish as the page goes away.
-  $effect(() => () => {
+  // Leaving the page mid-session ends it; keepalive lets the request finish as the page goes away. A reload or a
+  // closed tab never unmounts the page, so pagehide ends it too (ending twice changes nothing).
+  function endOnLeave() {
     if (ui.step !== 'open') return;
     const body = new FormData();
     body.set('id', String(ui.sessionId));
     void fetch('/inbox?/remoteEnd', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' }, keepalive: true }).catch(() => {});
+  }
+  $effect(() => {
+    window.addEventListener('pagehide', endOnLeave);
+    return () => {
+      window.removeEventListener('pagehide', endOnLeave);
+      endOnLeave();
+    };
   });
 
   const total = $derived(ui.step === 'open' ? ui.filled.length + ui.leftForUser.length : 0);

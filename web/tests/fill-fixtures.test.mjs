@@ -283,7 +283,7 @@ test('inputs inserted mid-fill never shift values into the wrong fields', async 
   assert.equal(await page.inputValue('#first'), 'Jane');
   assert.equal(await page.inputValue('#phone'), '+44 7000 000000'); // not the city
   assert.equal(await page.inputValue('#loc'), ''); // no exact option: cleared and left for the user
-  assert.ok(result.unfilled.includes('location'));
+  assert.ok(result.unfilled.includes('Location (City)'));
   assert.ok(Date.now() - started < 15_000, `took ${Date.now() - started} ms`); // bounded waits, not 30 s each
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
@@ -460,12 +460,18 @@ const TYPEAHEAD = `<script>
     const show = (items) => (list.innerHTML = items.map((t) => '<div role="option">' + t + '</div>').join(''));
     const all = JSON.parse(input.dataset.all);
     input.addEventListener('click', () => show(input.dataset.search ? [] : all));
-    input.addEventListener('input', () => setTimeout(() => show(all.filter((t) => t.toLowerCase().includes(input.value.toLowerCase()))), 300));
+    // Any input, clearing too, reopens the menu; with no matches it shows "No options" over the fields below.
+    input.addEventListener('input', () => setTimeout(() => {
+      const found = all.filter((t) => t.toLowerCase().includes(input.value.toLowerCase()));
+      if (found.length) show(found);
+      else list.innerHTML = '<div style="height: 300px">No options</div>';
+    }, 300));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') setTimeout(() => (list.innerHTML = ''), 350); });
     list.addEventListener('click', (e) => { input.dataset.picked = e.target.textContent; list.innerHTML = ''; input.value = ''; });
   }
 </script>`;
 const combo = (id, label, options, search = false) =>
-  `<label for="${id}">${label}</label><input id="${id}" role="combobox" aria-controls="${id}-list" ${search ? 'data-search="1"' : ''} data-all='${JSON.stringify(options).replaceAll("'", '&#39;')}'><div id="${id}-list"></div>`;
+  `<div style="position: relative"><label for="${id}">${label}</label><input id="${id}" role="combobox" aria-controls="${id}-list" ${search ? 'data-search="1"' : ''} data-all='${JSON.stringify(options).replaceAll("'", '&#39;')}'><div id="${id}-list" style="position: absolute; top: 100%; left: 0; width: 600px; background: #fff; z-index: 5"></div></div>`;
 
 test('education typeaheads pick the best option or stay empty, never "Other" (#142)', async () => {
   const page = await open(`<form>
@@ -484,8 +490,23 @@ test('education typeaheads pick the best option or stay empty, never "Other" (#1
   assert.equal(await page.inputValue('[id="discipline--0"]'), '');
   assert.equal(await page.inputValue('[id="end-year--0"]'), '2024');
   assert.equal(await page.inputValue('#q'), ''); // never in an employer's own question
-  assert.ok(result.unfilled.includes('field_of_study'));
+  assert.ok(result.unfilled.includes('Discipline'));
   assert.ok(result.labels.includes('School') && !result.labels.includes('Discipline'));
+  assert.equal(await page.evaluate(() => window.__submitted), false);
+  await page.close();
+});
+
+test('a school with no match is cleared and closed, so the Degree list below it still fills (#142, live Greenhouse)', async () => {
+  const page = await open(`<form>
+    ${combo('school--0', 'School', ['Babes-Bolyai University', 'University of Bucharest'], true)}
+    ${combo('degree--0', 'Degree', ["Associate's Degree", "Bachelor's Degree", 'Other'])}
+    <button type="submit">Submit</button></form>${TYPEAHEAD}`);
+  const result = await fillPage(page, null, { education: { school: 'ubb', degree: 'bachelors' } }, null);
+  const picked = (id) => page.$eval(`[id="${id}"]`, (el) => el.dataset.picked ?? '');
+  assert.equal(await picked('school--0'), ''); // "ubb" names no option: never guessed
+  assert.equal(await page.inputValue('[id="school--0"]'), '');
+  assert.equal(await picked('degree--0'), "Bachelor's Degree");
+  assert.deepEqual(result.unfilled, ['School']);
   assert.equal(await page.evaluate(() => window.__submitted), false);
   await page.close();
 });
